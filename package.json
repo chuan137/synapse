@@ -1,0 +1,31 @@
+{
+  "name": "synapse-bus",
+  "version": "2.0.0",
+  "description": "Synapse human-in-the-loop observation layer — MCP server + S-Deck dashboard",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "synapse": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "mcp": "node dist/mcp-server.js",
+    "dashboard": "node dist/dashboard.js",
+    "dev:mcp": "tsx src/mcp-server.ts",
+    "dev:dashboard": "tsx src/dashboard.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "better-sqlite3": "^11.10.0",
+    "commander": "^15.0.0",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.21",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}
