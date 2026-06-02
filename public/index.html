@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>S-Deck — Synapse</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161920;
+      --border: #252830;
+      --text: #e2e4ea;
+      --muted: #6b7080;
+      --accent: #4f7ef8;
+
+      --idle:    #4ade80;
+      --working: #facc15;
+      --blocked: #fb923c;
+      --error:   #f87171;
+
+      --p0: #ef4444;
+      --p0-bg: #2a1212;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }
+
+    .logo span { color: var(--muted); font-weight: 400; }
+
+    .project-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      padding: 2px 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--idle);
+      box-shadow: 0 0 6px var(--idle);
+      animation: pulse 2s infinite;
+      margin-left: auto;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .dot-label { color: var(--muted); font-size: 11px; }
+
+    /* ── Layout ── */
+    main {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      grid-template-rows: 1fr auto;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Agents panel ── */
+    #agents-panel {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 12px 16px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    #agents-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .agent-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      transition: border-color 0.2s, opacity 0.2s;
+      cursor: default;
+    }
+
+    .agent-card:hover { border-color: var(--accent); cursor: pointer; }
+    .agent-card.stale { opacity: 0.4; }
+    .agent-card.selected { border-color: var(--accent); background: #151a2e; }
+
+    .agent-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+
+    .agent-session {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: inherit;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .empty-state {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      padding: 32px 16px;
+    }
+
+    /* ── Messages panel ── */
+    #messages-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #messages-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .message-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      border-left: 3px solid var(--border);
+    }
+
+    .message-row.p0 {
+      border-left-color: var(--p0);
+      background: var(--p0-bg);
+    }
+
+    .message-row.from-human {
+      border-left-color: var(--accent);
+    }
+
+    .message-row.from-agent {
+      border-left-color: var(--idle);
+    }
+
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .message-priority {
+      font-weight: 700;
+      color: var(--p0);
+    }
+
+    .message-priority.p5 { color: var(--muted); }
+
+    .message-route {
+      flex: 1;
+    }
+
+    .message-time { margin-left: auto; }
+
+    .message-content {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ── Send message form ── */
+    #compose {
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 14px 16px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .compose-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .compose-field label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    input, select, textarea {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      border-radius: 4px;
+      padding: 6px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+
+    select option { background: var(--bg); }
+
+    #to-input   { width: 140px; }
+    #pri-select { width: 100px; }
+    #msg-input  { width: 400px; resize: none; height: 38px; }
+
+    .compose-field.grow { flex: 1; }
+    .compose-field.grow #msg-input { width: 100%; }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 7px 18px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      align-self: flex-end;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:active { opacity: 0.7; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">S-Deck <span>/ Synapse</span></div>
+  <div class="project-name" id="project-name">—</div>
+  <div class="dot-label" id="conn-label">connecting…</div>
+  <div class="dot" id="conn-dot" style="background: var(--muted); box-shadow: none;"></div>
+</header>
+
+<main>
+  <!-- Agents -->
+  <section id="agents-panel">
+    <div class="panel-header">Agents</div>
+    <div id="agents-list">
+      <div class="empty-state">No agents connected yet.</div>
+    </div>
+  </section>
+
+  <!-- Messages -->
+  <section id="messages-panel">
+    <div class="panel-header" id="messages-header">Messages</div>
+    <div id="messages-list">
+      <div class="empty-state" id="empty-msgs">No messages yet.</div>
+    </div>
+  </section>
+
+  <!-- Compose -->
+  <div id="compose">
+    <div class="compose-field">
+      <label>To</label>
+      <input id="to-input" type="text" placeholder="agent-id" value="" list="agent-ids" />
+      <datalist id="agent-ids"></datalist>
+    </div>
+    <div class="compose-field">
+      <label>Priority</label>
+      <select id="pri-select">
+        <option value="5">P5 — Normal</option>
+        <option value="0">P0 — Urgent</option>
+      </select>
+    </div>
+    <div class="compose-field grow">
+      <label>Message</label>
+      <textarea id="msg-input" placeholder="Type a message to an agent…"></textarea>
+    </div>
+    <button id="send-btn">Send</button>
+  </div>
+</main>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  let agentStatuses    = [];
+  let allMessages      = [];
+  let selectedAgentId  = null;
+
+  // ── Project info ──────────────────────────────────────────────────────────
+  fetch('/api/info').then(r => r.json()).then(({ project }) => {
+    document.getElementById('project-name').textContent = project;
+    document.title = `S-Deck — ${project}`;
+  });
+
+  // ── SSE ──────────────────────────────────────────────────────────────────
+  const dot   = document.getElementById('conn-dot');
+  const label = document.getElementById('conn-label');
+
+  function connect() {
+    const es = new EventSource('/events');
+
+    es.onopen = () => {
+      dot.style.background = 'var(--idle)';
+      dot.style.boxShadow  = '0 0 6px var(--idle)';
+      label.textContent    = 'live';
+    };
+
+    es.onmessage = (e) => {
+      const { statuses, messages } = JSON.parse(e.data);
+      agentStatuses = statuses;
+      allMessages   = messages;
+      renderAgents();
+      renderMessages();
+    };
+
+    es.onerror = () => {
+      dot.style.background = 'var(--error)';
+      dot.style.boxShadow  = 'none';
+      label.textContent    = 'disconnected — retrying…';
+      es.close();
+      setTimeout(connect, 3000);
+    };
+  }
+
+  connect();
+
+  // ── Render agents ─────────────────────────────────────────────────────────
+  const agentsList = document.getElementById('agents-list');
+  const agentIds   = document.getElementById('agent-ids');
+
+  function timeAgo(ts) {
+    const secs = Math.floor((Date.now() - ts) / 1000);
+    if (secs < 5)   return 'just now';
+    if (secs < 60)  return `${secs}s ago`;
+    if (secs < 3600) return `${Math.floor(secs/60)}m ago`;
+    return `${Math.floor(secs/3600)}h ago`;
+  }
+
+  const STALE_MS = 5 * 60_000; // 5 minutes without update = stale
+
+  function renderAgents() {
+    // Update datalist for compose — show slot labels
+    agentIds.innerHTML = agentStatuses
+      .map(a => `<option value=":${a.slot}">`)
+      .join('');
+
+    if (agentStatuses.length === 0) {
+      agentsList.innerHTML = '<div class="empty-state">No agents connected yet.</div>';
+      return;
+    }
+
+    // Auto-select first agent if none selected
+    if (!selectedAgentId && agentStatuses.length > 0) {
+      selectedAgentId = agentStatuses[0].agent_id;
+      document.getElementById('to-input').value = `:${agentStatuses[0].slot}`;
+    }
+
+    agentsList.innerHTML = agentStatuses.map(a => {
+      const stale = (Date.now() - a.updated_at) > STALE_MS;
+      const selected = a.agent_id === selectedAgentId;
+      const cardClass = ['agent-card', stale ? 'stale' : '', selected ? 'selected' : ''].filter(Boolean).join(' ');
+      const slot = `:${a.slot}`;
+      const humanName = a.name && a.name !== a.agent_id ? esc(a.name) : '';
+      return `
+        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}">
+          <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
+          <div class="agent-session">${esc(a.agent_id)}</div>
+        </div>
+      `;
+    }).join('');
+
+    // Wire click handlers
+    agentsList.querySelectorAll('.agent-card').forEach(card => {
+      card.addEventListener('click', () => {
+        selectedAgentId = card.dataset.agentId;
+        const agent = agentStatuses.find(a => a.agent_id === selectedAgentId);
+        document.getElementById('to-input').value = agent ? `:${agent.slot}` : selectedAgentId;
+        renderAgents();
+        renderMessages();
+      });
+    });
+  }
+
+  // Re-render agents every 5s so timeAgo and stale state stay current
+  setInterval(renderAgents, 5_000);
+
+  // ── Render messages ───────────────────────────────────────────────────────
+  const messagesList   = document.getElementById('messages-list');
+  const messagesHeader = document.getElementById('messages-header');
+
+  function renderMessages() {
+    const selectedAgent = agentStatuses.find(a => a.agent_id === selectedAgentId);
+    const slotLabel = selectedAgent != null ? `:${selectedAgent.slot}` : selectedAgentId;
+    messagesHeader.textContent = slotLabel ? `Messages — ${slotLabel}` : 'Messages';
+
+    const msgs = [...allMessages]
+      .filter(m => !selectedAgentId || m.from_id === selectedAgentId || m.to_id === selectedAgentId)
+      .sort((a, b) => a.created_at - b.created_at);
+
+    if (msgs.length === 0) {
+      messagesList.innerHTML = '<div class="empty-state">No messages for this agent yet.</div>';
+      return;
+    }
+
+    messagesList.innerHTML = msgs.map(m => {
+      const isP0      = m.priority === 0;
+      const fromHuman = m.from_id === 'human';
+      const cls = [
+        isP0      ? 'p0'         : '',
+        fromHuman ? 'from-human' : 'from-agent',
+      ].filter(Boolean).join(' ');
+      const t = new Date(m.created_at).toLocaleTimeString();
+      const sender = fromHuman
+        ? `<span style="color:var(--accent);font-weight:700;">you</span>`
+        : `<span style="color:var(--idle);font-weight:700;">${esc(m.from_id)}</span>`;
+      const recipient = fromHuman
+        ? `<span style="color:var(--muted);">→ ${esc(m.to_id)}</span>`
+        : `<span style="color:var(--muted);">→ ${esc(m.to_id)}</span>`;
+      const priorityBadge = isP0
+        ? `<span style="color:var(--p0);font-weight:700;font-size:10px;">P0</span>`
+        : '';
+      return `
+        <div class="message-row ${cls}">
+          <div class="message-meta">
+            ${sender} ${recipient}
+            ${priorityBadge}
+            <span class="message-time">${t}</span>
+          </div>
+          <div class="message-content">${esc(m.content)}</div>
+        </div>
+      `;
+    }).join('');
+
+    // Scroll to bottom (newest)
+    messagesList.scrollTop = messagesList.scrollHeight;
+  }
+
+  // ── Send message ──────────────────────────────────────────────────────────
+  document.getElementById('send-btn').addEventListener('click', send);
+  document.getElementById('msg-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send();
+  });
+
+  async function send() {
+    const toRaw   = document.getElementById('to-input').value.trim();
+    const content = document.getElementById('msg-input').value.trim();
+    const priority = parseInt(document.getElementById('pri-select').value, 10);
+
+    if (!toRaw || !content) return;
+
+    // Resolve :0, :1 slot labels to real agent_id
+    let to_id = toRaw;
+    const slotMatch = toRaw.match(/^:(\d+)$/);
+    if (slotMatch) {
+      const slot = parseInt(slotMatch[1], 10);
+      const agent = agentStatuses.find(a => a.slot === slot);
+      if (agent) to_id = agent.agent_id;
+    }
+
+    await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to_id, content, priority }),
+    });
+
+    document.getElementById('msg-input').value = '';
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────────────────
+  function esc(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>

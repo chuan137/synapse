@@ -27,6 +27,7 @@ export function openDb(dbPath: string): Database.Database {
 
     CREATE TABLE IF NOT EXISTS agent_status (
       agent_id    TEXT    PRIMARY KEY,
+      slot        INTEGER UNIQUE,
       name        TEXT,
       session_id  TEXT,
       state       TEXT    NOT NULL CHECK(state IN ('idle', 'working', 'blocked', 'error')),
@@ -39,6 +40,7 @@ export function openDb(dbPath: string): Database.Database {
   for (const sql of [
     `ALTER TABLE agent_status ADD COLUMN name TEXT`,
     `ALTER TABLE agent_status ADD COLUMN session_id TEXT`,
+    `ALTER TABLE agent_status ADD COLUMN slot INTEGER`,
   ]) {
     try { database.exec(sql); } catch { /* column already exists */ }
   }
@@ -64,6 +66,7 @@ export interface Message {
 
 export interface AgentStatus {
   agent_id: string;
+  slot: number;
   name: string | null;
   session_id: string | null;
   state: 'idle' | 'working' | 'blocked' | 'error';
@@ -89,9 +92,13 @@ const stmts = {
     VALUES (?, ?, ?, ?, ?)
   `),
 
+  nextSlot: db.prepare<[], { n: number }>(`
+    SELECT COALESCE(MAX(slot) + 1, 0) AS n FROM agent_status
+  `),
+
   upsertStatus: db.prepare<[string, string | null, string | null, string, string | null, number]>(`
-    INSERT INTO agent_status (agent_id, name, session_id, state, current_task, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO agent_status (agent_id, slot, name, session_id, state, current_task, updated_at)
+    VALUES (?, (SELECT COALESCE(MAX(slot) + 1, 0) FROM agent_status), ?, ?, ?, ?, ?)
     ON CONFLICT(agent_id) DO UPDATE SET
       name         = COALESCE(excluded.name, name),
       session_id   = COALESCE(excluded.session_id, session_id),
@@ -101,7 +108,7 @@ const stmts = {
   `),
 
   allStatuses: db.prepare<[], AgentStatus>(`
-    SELECT * FROM agent_status ORDER BY updated_at DESC
+    SELECT * FROM agent_status ORDER BY slot ASC
   `),
 
   recentMessages: db.prepare<[number], Message>(`

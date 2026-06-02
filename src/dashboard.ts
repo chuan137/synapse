@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import {
   getAllStatuses,
@@ -11,6 +11,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
+const PROJECT_NAME = basename(process.cwd());
 
 const app = express();
 app.use(express.json());
@@ -46,6 +47,10 @@ setInterval(() => {
 }, 500);
 
 // ── Routes ─────────────────────────────────────────────────────────────────
+
+app.get('/api/info', (_req: Request, res: Response) => {
+  res.json({ project: PROJECT_NAME });
+});
 
 // Initial state snapshot
 app.get('/api/state', (_req: Request, res: Response) => {

@@ -4,7 +4,41 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { randomBytes } from 'crypto';
 import { readMessages, sendMessage, updateStatus } from './db.js';
+
+// ── Agent identity ─────────────────────────────────────────────────────────
+
+interface AgentConfig {
+  name: string; // mutable — persisted in settings.json, agent can update
+}
+
+function loadAgentConfig(): AgentConfig {
+  const dir = join(process.cwd(), '.synapse');
+  const configPath = join(dir, 'settings.json');
+  if (existsSync(configPath)) {
+    const raw = JSON.parse(readFileSync(configPath, 'utf8'));
+    if (raw.name) return { name: raw.name };
+  }
+  return { name: '' };
+}
+
+function saveAgentName(name: string): void {
+  const dir = join(process.cwd(), '.synapse');
+  mkdirSync(dir, { recursive: true });
+  const configPath = join(dir, 'settings.json');
+  const existing = existsSync(configPath)
+    ? JSON.parse(readFileSync(configPath, 'utf8'))
+    : {};
+  writeFileSync(configPath, JSON.stringify({ ...existing, name }, null, 2), 'utf8');
+}
+
+// Fresh ID every process start — multiple Claude instances in the same project
+// each get their own identity and DB slot.
+const AGENT_ID = `agent-${randomBytes(3).toString('hex')}`;
+const agentConfig = loadAgentConfig();
 
 const server = new Server(
   { name: 'synapse-bus', version: '1.0.0' },
@@ -18,36 +52,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'read_messages',
       description:
-        'Check for instructions from the human operator. ' +
+        `Check for instructions from the human operator. Your agent ID is "${AGENT_ID}". ` +
         'Call this at the START of every turn before doing anything else. ' +
         'Returns unread messages addressed to you, ordered by priority (0 = urgent).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          agent_id: {
-            type: 'string',
-            description: 'Your unique agent identifier (e.g. "agent-1", "researcher")',
-          },
-        },
-        required: ['agent_id'],
-      },
+      inputSchema: { type: 'object', properties: {}, required: [] },
     },
     {
       name: 'send_message',
       description:
         'Send a message to the human operator or another agent. ' +
-        'Use to_id = "human" to reach the operator. ' +
+        'To reach the human operator, set to_id = "human" (this is the correct value, not "synapse" or anything else). ' +
+        'To message another agent, use their agent_id. ' +
         'Keep messages short — the operator is watching multiple agents.',
       inputSchema: {
         type: 'object',
         properties: {
-          agent_id: {
-            type: 'string',
-            description: 'Your agent identifier (sender)',
-          },
           to_id: {
             type: 'string',
-            description: 'Recipient ID. Use "human" for the operator.',
+            description: 'Recipient ID. Use "human" to reach the operator. Use another agent\'s agent_id to message them directly.',
+            default: 'human',
           },
           content: {
             type: 'string',
@@ -59,7 +82,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: '0 = urgent (P0), 5 = normal (P5). Default: 5.',
           },
         },
-        required: ['agent_id', 'to_id', 'content'],
+        required: ['to_id', 'content'],
       },
     },
     {
@@ -71,10 +94,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          agent_id: {
-            type: 'string',
-            description: 'Your agent identifier',
-          },
           state: {
             type: 'string',
             enum: ['idle', 'working', 'blocked', 'error'],
@@ -86,14 +105,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           name: {
             type: 'string',
-            description: 'Human-readable name for this agent, e.g. "Research Assistant" or derived from the project summary',
-          },
-          session_id: {
-            type: 'string',
-            description: 'Unique identifier for this session, e.g. a UUID or timestamp-based ID',
+            description: 'Human-readable name for this agent (updates settings.json). Only send when your name changes.',
           },
         },
-        required: ['agent_id', 'state'],
+        required: ['state'],
       },
     },
   ],
@@ -105,8 +120,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   if (name === 'read_messages') {
-    const { agent_id } = args as { agent_id: string };
-    const msgs = readMessages(agent_id);
+    updateStatus(AGENT_ID, 'idle', null, agentConfig.name || null, null);
+    const msgs = readMessages(AGENT_ID);
 
     const reminder = '\n\n[Synapse] Now call update_status to report your current state.';
 
@@ -133,14 +148,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'send_message') {
-    const { agent_id, to_id, content, priority = 5 } = args as {
-      agent_id: string;
+    updateStatus(AGENT_ID, 'idle', null, agentConfig.name || null, null);
+    const { to_id, content, priority = 5 } = args as {
       to_id: string;
       content: string;
       priority?: number;
     };
 
-    sendMessage(agent_id, to_id, content, priority);
+    sendMessage(AGENT_ID, to_id, content, priority);
 
     return {
       content: [
@@ -150,15 +165,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'update_status') {
-    const { agent_id, state, current_task, name: agentName, session_id } = args as {
-      agent_id: string;
+    const { state, current_task, name: agentName } = args as {
       state: 'idle' | 'working' | 'blocked' | 'error';
       current_task?: string;
       name?: string;
-      session_id?: string;
     };
 
-    updateStatus(agent_id, state, current_task ?? null, agentName ?? null, session_id ?? null);
+    if (agentName && agentName !== agentConfig.name) {
+      agentConfig.name = agentName;
+      saveAgentName(agentName);
+    }
+
+    updateStatus(AGENT_ID, state, current_task ?? null, agentConfig.name || null, null);
 
     return {
       content: [
