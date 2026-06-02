@@ -42,6 +42,9 @@ const TMUX_PANE  = process.env.TMUX_PANE ?? null;
 const { agentId: AGENT_ID } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE);
 let agentName = settings.name ?? '';
 
+// Write agent ID so the PostToolUse hook can look up unread messages.
+writeFileSync(join(SYNAPSE_DIR, 'agent.env'), `SYNAPSE_AGENT_ID=${AGENT_ID}\n`, 'utf8');
+
 const server = new Server(
   { name: 'synapse-bus', version: '1.0.0' },
   { capabilities: { tools: {} } }

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .synapse/synapse-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

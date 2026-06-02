@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { copyFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -28,6 +28,32 @@ program
     const synapseDoc = join(projectRoot, 'SYNAPSE.md');
     if (!existsSync(synapseDoc)) {
       copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'SYNAPSE.md'), synapseDoc);
+    }
+
+    const hookDest = join(projectRoot, '.synapse', 'synapse-hook.sh');
+    if (!existsSync(hookDest)) {
+      copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'scripts', 'synapse-hook.sh'), hookDest);
+      chmodSync(hookDest, 0o755);
+    }
+
+    // Register PostToolUse hook in .claude/settings.json
+    const claudeDir = join(projectRoot, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const claudeSettings = join(claudeDir, 'settings.json');
+    const existing = existsSync(claudeSettings)
+      ? JSON.parse(readFileSync(claudeSettings, 'utf8'))
+      : {};
+    const hookCommand = 'bash .synapse/synapse-hook.sh';
+    const hooks = existing.hooks ?? {};
+    const postToolUse: { matcher: string; hooks: { type: string; command: string }[] }[] =
+      hooks.PostToolUse ?? [];
+    const alreadyRegistered = postToolUse.some(h =>
+      h.hooks?.some(hh => hh.command === hookCommand)
+    );
+    if (!alreadyRegistered) {
+      postToolUse.push({ matcher: '', hooks: [{ type: 'command', command: hookCommand }] });
+      existing.hooks = { ...hooks, PostToolUse: postToolUse };
+      writeFileSync(claudeSettings, JSON.stringify(existing, null, 2), 'utf8');
     }
 
     process.stdout.write(isNew
