@@ -7,38 +7,38 @@ import {
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
-import { readMessages, sendMessage, updateStatus } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot } from './db.js';
 
 // ── Agent identity ─────────────────────────────────────────────────────────
 
-interface AgentConfig {
-  name: string; // mutable — persisted in settings.json, agent can update
+interface Settings {
+  projectId: string; // stable per-project, written once
+  name?: string;     // human-readable agent name, mutable
 }
 
-function loadAgentConfig(): AgentConfig {
-  const dir = join(process.cwd(), '.synapse');
-  const configPath = join(dir, 'settings.json');
-  if (existsSync(configPath)) {
-    const raw = JSON.parse(readFileSync(configPath, 'utf8'));
-    if (raw.name) return { name: raw.name };
+const SYNAPSE_DIR = join(process.cwd(), '.synapse');
+const SETTINGS_PATH = join(SYNAPSE_DIR, 'settings.json');
+
+function loadSettings(): Settings {
+  mkdirSync(SYNAPSE_DIR, { recursive: true });
+  if (existsSync(SETTINGS_PATH)) {
+    const raw = JSON.parse(readFileSync(SETTINGS_PATH, 'utf8'));
+    if (raw.projectId) return raw as Settings;
   }
-  return { name: '' };
+  const settings: Settings = { projectId: randomBytes(4).toString('hex') };
+  writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf8');
+  return settings;
 }
 
-function saveAgentName(name: string): void {
-  const dir = join(process.cwd(), '.synapse');
-  mkdirSync(dir, { recursive: true });
-  const configPath = join(dir, 'settings.json');
-  const existing = existsSync(configPath)
-    ? JSON.parse(readFileSync(configPath, 'utf8'))
-    : {};
-  writeFileSync(configPath, JSON.stringify({ ...existing, name }, null, 2), 'utf8');
+function saveSettings(patch: Partial<Settings>): void {
+  const current = loadSettings();
+  writeFileSync(SETTINGS_PATH, JSON.stringify({ ...current, ...patch }, null, 2), 'utf8');
 }
 
-// Fresh ID every process start — multiple Claude instances in the same project
-// each get their own identity and DB slot.
-const AGENT_ID = `agent-${randomBytes(3).toString('hex')}`;
-const agentConfig = loadAgentConfig();
+const settings = loadSettings();
+// Claim a slot atomically on startup — AGENT_ID is stable for this process lifetime.
+const { agentId: AGENT_ID } = claimAgentSlot(settings.projectId);
+let agentName = settings.name ?? '';
 
 const server = new Server(
   { name: 'synapse-bus', version: '1.0.0' },
@@ -120,7 +120,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   if (name === 'read_messages') {
-    updateStatus(AGENT_ID, 'idle', null, agentConfig.name || null, null);
+    updateStatus(AGENT_ID, 'idle', null, agentName || null, null);
     const msgs = readMessages(AGENT_ID);
 
     const reminder = '\n\n[Synapse] Now call update_status to report your current state.';
@@ -148,7 +148,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'send_message') {
-    updateStatus(AGENT_ID, 'idle', null, agentConfig.name || null, null);
+    updateStatus(AGENT_ID, 'idle', null, agentName || null, null);
     const { to_id, content, priority = 5 } = args as {
       to_id: string;
       content: string;
@@ -165,18 +165,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'update_status') {
-    const { state, current_task, name: agentName } = args as {
+    const { state, current_task, name: newName } = args as {
       state: 'idle' | 'working' | 'blocked' | 'error';
       current_task?: string;
       name?: string;
     };
 
-    if (agentName && agentName !== agentConfig.name) {
-      agentConfig.name = agentName;
-      saveAgentName(agentName);
+    if (newName && newName !== agentName) {
+      agentName = newName;
+      saveSettings({ name: newName });
     }
 
-    updateStatus(AGENT_ID, state, current_task ?? null, agentConfig.name || null, null);
+    updateStatus(AGENT_ID, state, current_task ?? null, agentName || null, null);
 
     return {
       content: [

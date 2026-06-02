@@ -92,8 +92,9 @@ const stmts = {
     VALUES (?, ?, ?, ?, ?)
   `),
 
-  nextSlot: db.prepare<[], { n: number }>(`
-    SELECT COALESCE(MAX(slot) + 1, 0) AS n FROM agent_status
+  insertAgent: db.prepare<[string, number, number], void>(`
+    INSERT INTO agent_status (agent_id, slot, state, updated_at)
+    VALUES (?, ?, 'idle', ?)
   `),
 
   upsertStatus: db.prepare<[string, string | null, string | null, string, string | null, number]>(`
@@ -115,6 +116,19 @@ const stmts = {
     SELECT * FROM messages ORDER BY created_at DESC LIMIT ?
   `),
 };
+
+// Atomically claim the next slot and insert a placeholder row.
+// Returns [agentId, slot] where agentId = `${projectId}:${slot}`.
+export function claimAgentSlot(projectId: string): { agentId: string; slot: number } {
+  return db.transaction(() => {
+    const next = (db.prepare<[], { n: number }>(
+      `SELECT COALESCE(MAX(slot) + 1, 0) AS n FROM agent_status`
+    ).get()!).n;
+    const agentId = `${projectId}:${next}`;
+    stmts.insertAgent.run(agentId, next, Date.now());
+    return { agentId, slot: next };
+  })();
+}
 
 export function readMessages(agentId: string): Message[] {
   const msgs = stmts.getUnread.all(agentId);

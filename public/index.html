@@ -290,6 +290,7 @@
 
     button:hover { opacity: 0.85; }
     button:active { opacity: 0.7; }
+    button:disabled { opacity: 0.3; cursor: not-allowed; }
 
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; }
@@ -326,11 +327,6 @@
   <!-- Compose -->
   <div id="compose">
     <div class="compose-field">
-      <label>To</label>
-      <input id="to-input" type="text" placeholder="agent-id" value="" list="agent-ids" />
-      <datalist id="agent-ids"></datalist>
-    </div>
-    <div class="compose-field">
       <label>Priority</label>
       <select id="pri-select">
         <option value="5">P5 — Normal</option>
@@ -339,9 +335,9 @@
     </div>
     <div class="compose-field grow">
       <label>Message</label>
-      <textarea id="msg-input" placeholder="Type a message to an agent…"></textarea>
+      <textarea id="msg-input" placeholder="Select an agent, then type a message…"></textarea>
     </div>
-    <button id="send-btn">Send</button>
+    <button id="send-btn" disabled>Send</button>
   </div>
 </main>
 
@@ -391,7 +387,6 @@
 
   // ── Render agents ─────────────────────────────────────────────────────────
   const agentsList = document.getElementById('agents-list');
-  const agentIds   = document.getElementById('agent-ids');
 
   function timeAgo(ts) {
     const secs = Math.floor((Date.now() - ts) / 1000);
@@ -404,11 +399,6 @@
   const STALE_MS = 5 * 60_000; // 5 minutes without update = stale
 
   function renderAgents() {
-    // Update datalist for compose — show slot labels
-    agentIds.innerHTML = agentStatuses
-      .map(a => `<option value=":${a.slot}">`)
-      .join('');
-
     if (agentStatuses.length === 0) {
       agentsList.innerHTML = '<div class="empty-state">No agents connected yet.</div>';
       return;
@@ -417,7 +407,6 @@
     // Auto-select first agent if none selected
     if (!selectedAgentId && agentStatuses.length > 0) {
       selectedAgentId = agentStatuses[0].agent_id;
-      document.getElementById('to-input').value = `:${agentStatuses[0].slot}`;
     }
 
     agentsList.innerHTML = agentStatuses.map(a => {
@@ -438,12 +427,21 @@
     agentsList.querySelectorAll('.agent-card').forEach(card => {
       card.addEventListener('click', () => {
         selectedAgentId = card.dataset.agentId;
-        const agent = agentStatuses.find(a => a.agent_id === selectedAgentId);
-        document.getElementById('to-input').value = agent ? `:${agent.slot}` : selectedAgentId;
         renderAgents();
         renderMessages();
       });
     });
+
+    updateComposePlaceholder();
+  }
+
+  function updateComposePlaceholder() {
+    const agent = agentStatuses.find(a => a.agent_id === selectedAgentId);
+    const label = agent ? `:${agent.slot}` : null;
+    document.getElementById('msg-input').placeholder = label
+      ? `Message to ${label}…`
+      : 'Select an agent to send a message…';
+    document.getElementById('send-btn').disabled = !selectedAgentId;
   }
 
   // Re-render agents every 5s so timeAgo and stale state stay current
@@ -507,25 +505,16 @@
   });
 
   async function send() {
-    const toRaw   = document.getElementById('to-input').value.trim();
-    const content = document.getElementById('msg-input').value.trim();
+    if (!selectedAgentId) return;
+    const content  = document.getElementById('msg-input').value.trim();
     const priority = parseInt(document.getElementById('pri-select').value, 10);
 
-    if (!toRaw || !content) return;
-
-    // Resolve :0, :1 slot labels to real agent_id
-    let to_id = toRaw;
-    const slotMatch = toRaw.match(/^:(\d+)$/);
-    if (slotMatch) {
-      const slot = parseInt(slotMatch[1], 10);
-      const agent = agentStatuses.find(a => a.slot === slot);
-      if (agent) to_id = agent.agent_id;
-    }
+    if (!content) return;
 
     await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to_id, content, priority }),
+      body: JSON.stringify({ to_id: selectedAgentId, content, priority }),
     });
 
     document.getElementById('msg-input').value = '';
