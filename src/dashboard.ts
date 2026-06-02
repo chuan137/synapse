@@ -1,10 +1,13 @@
 import express, { Request, Response } from 'express';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync, readFileSync } from 'fs';
+import { execSync } from 'child_process';
 import {
   getAllStatuses,
   getRecentMessages,
   sendMessage,
+  getTmuxPane,
   AgentStatus,
   Message,
 } from './db.js';
@@ -12,6 +15,12 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
 const PROJECT_NAME = basename(process.cwd());
+
+function readProjectId(): string | null {
+  const p = join(process.cwd(), '.synapse', 'settings.json');
+  if (!existsSync(p)) return null;
+  try { return JSON.parse(readFileSync(p, 'utf8')).projectId ?? null; } catch { return null; }
+}
 
 const app = express();
 app.use(express.json());
@@ -49,7 +58,22 @@ setInterval(() => {
 // ── Routes ─────────────────────────────────────────────────────────────────
 
 app.get('/api/info', (_req: Request, res: Response) => {
-  res.json({ project: PROJECT_NAME });
+  res.json({ project: PROJECT_NAME, projectId: readProjectId() });
+});
+
+app.post('/api/ping/:agentId', (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId);
+  const pane = getTmuxPane(agentId);
+  if (!pane) {
+    res.status(404).json({ error: 'No tmux pane for this agent' });
+    return;
+  }
+  try {
+    execSync(`tmux send-keys -t ${pane} '[synapse] you have unread messages, call read_messages' Enter`);
+    res.json({ ok: true, pane });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 // Initial state snapshot

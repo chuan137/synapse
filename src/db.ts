@@ -30,6 +30,7 @@ export function openDb(dbPath: string): Database.Database {
       slot        INTEGER UNIQUE,
       name        TEXT,
       session_id  TEXT,
+      tmux_pane   TEXT,
       state       TEXT    NOT NULL CHECK(state IN ('idle', 'working', 'blocked', 'error')),
       current_task TEXT,
       updated_at  INTEGER NOT NULL
@@ -41,6 +42,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE agent_status ADD COLUMN name TEXT`,
     `ALTER TABLE agent_status ADD COLUMN session_id TEXT`,
     `ALTER TABLE agent_status ADD COLUMN slot INTEGER`,
+    `ALTER TABLE agent_status ADD COLUMN tmux_pane TEXT`,
   ]) {
     try { database.exec(sql); } catch { /* column already exists */ }
   }
@@ -69,6 +71,7 @@ export interface AgentStatus {
   slot: number;
   name: string | null;
   session_id: string | null;
+  tmux_pane: string | null;
   state: 'idle' | 'working' | 'blocked' | 'error';
   current_task: string | null;
   updated_at: number;
@@ -117,17 +120,40 @@ const stmts = {
   `),
 };
 
-// Atomically claim the next slot and insert a placeholder row.
-// Returns [agentId, slot] where agentId = `${projectId}:${slot}`.
-export function claimAgentSlot(projectId: string): { agentId: string; slot: number } {
+// Claim a slot for this process. If a row with this sessionId already exists,
+// reuse it (MCP restart within the same Claude session). Otherwise insert new.
+export function claimAgentSlot(
+  projectId: string,
+  sessionId: string | null,
+  tmuxPane: string | null,
+): { agentId: string; slot: number } {
   return db.transaction(() => {
+    if (sessionId) {
+      const existing = db.prepare<[string], { agent_id: string; slot: number }>(
+        `SELECT agent_id, slot FROM agent_status WHERE session_id = ?`
+      ).get(sessionId);
+      if (existing) {
+        // Update tmux_pane in case pane changed after reconnect
+        db.prepare(`UPDATE agent_status SET tmux_pane = ?, updated_at = ? WHERE agent_id = ?`)
+          .run(tmuxPane, Date.now(), existing.agent_id);
+        return { agentId: existing.agent_id, slot: existing.slot };
+      }
+    }
     const next = (db.prepare<[], { n: number }>(
       `SELECT COALESCE(MAX(slot) + 1, 0) AS n FROM agent_status`
     ).get()!).n;
     const agentId = `${projectId}:${next}`;
-    stmts.insertAgent.run(agentId, next, Date.now());
+    db.prepare(`INSERT INTO agent_status (agent_id, slot, session_id, tmux_pane, state, updated_at) VALUES (?, ?, ?, ?, 'idle', ?)`)
+      .run(agentId, next, sessionId, tmuxPane, Date.now());
     return { agentId, slot: next };
   })();
+}
+
+export function getTmuxPane(agentId: string): string | null {
+  const row = db.prepare<[string], { tmux_pane: string | null }>(
+    `SELECT tmux_pane FROM agent_status WHERE agent_id = ?`
+  ).get(agentId);
+  return row?.tmux_pane ?? null;
 }
 
 export function readMessages(agentId: string): Message[] {

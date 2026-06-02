@@ -36,8 +36,10 @@ function saveSettings(patch: Partial<Settings>): void {
 }
 
 const settings = loadSettings();
-// Claim a slot atomically on startup — AGENT_ID is stable for this process lifetime.
-const { agentId: AGENT_ID } = claimAgentSlot(settings.projectId);
+const SESSION_ID = process.env.CLAUDE_CODE_SESSION_ID ?? null;
+const TMUX_PANE  = process.env.TMUX_PANE ?? null;
+// Reuse existing slot if same Claude session restarts MCP; otherwise claim new.
+const { agentId: AGENT_ID } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE);
 let agentName = settings.name ?? '';
 
 const server = new Server(

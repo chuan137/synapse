@@ -129,6 +129,29 @@
     .agent-card.stale { opacity: 0.4; }
     .agent-card.selected { border-color: var(--accent); background: #151a2e; }
 
+    .agent-card-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .ping-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      align-self: auto;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .ping-btn:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    .ping-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
     .agent-name {
       font-size: 13px;
       font-weight: 700;
@@ -348,8 +371,9 @@
   let selectedAgentId  = null;
 
   // ── Project info ──────────────────────────────────────────────────────────
-  fetch('/api/info').then(r => r.json()).then(({ project }) => {
-    document.getElementById('project-name').textContent = project;
+  fetch('/api/info').then(r => r.json()).then(({ project, projectId }) => {
+    const label = projectId ? `${project}  ·  ${projectId}` : project;
+    document.getElementById('project-name').textContent = label;
     document.title = `S-Deck — ${project}`;
   });
 
@@ -415,20 +439,35 @@
       const cardClass = ['agent-card', stale ? 'stale' : '', selected ? 'selected' : ''].filter(Boolean).join(' ');
       const slot = `:${a.slot}`;
       const humanName = a.name && a.name !== a.agent_id ? esc(a.name) : '';
+      const hasTmux = !!a.tmux_pane;
       return `
         <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}">
-          <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
-          <div class="agent-session">${esc(a.agent_id)}</div>
+          <div class="agent-card-row">
+            <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
+            <button class="ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
+          </div>
         </div>
       `;
     }).join('');
 
     // Wire click handlers
     agentsList.querySelectorAll('.agent-card').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.ping-btn')) return;
         selectedAgentId = card.dataset.agentId;
         renderAgents();
         renderMessages();
+      });
+    });
+
+    agentsList.querySelectorAll('.ping-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const agentId = btn.dataset.pingId;
+        btn.disabled = true;
+        btn.textContent = '…';
+        await fetch(`/api/ping/${encodeURIComponent(agentId)}`, { method: 'POST' });
+        setTimeout(() => { btn.disabled = false; btn.textContent = 'ping'; }, 1500);
       });
     });
 
