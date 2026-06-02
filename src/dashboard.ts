@@ -61,19 +61,20 @@ app.get('/api/info', (_req: Request, res: Response) => {
   res.json({ project: PROJECT_NAME, projectId: readProjectId() });
 });
 
-app.post('/api/ping/:agentId', (req: Request, res: Response) => {
-  const agentId = String(req.params.agentId);
+function pingAgent(agentId: string): boolean {
   const pane = getTmuxPane(agentId);
-  if (!pane) {
-    res.status(404).json({ error: 'No tmux pane for this agent' });
-    return;
-  }
+  if (!pane) return false;
   try {
     execSync(`tmux send-keys -t ${pane} '[synapse] you have unread messages, call read_messages' Enter`);
-    res.json({ ok: true, pane });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
+    return true;
+  } catch { return false; }
+}
+
+app.post('/api/ping/:agentId', (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId);
+  const ok = pingAgent(agentId);
+  if (!ok) { res.status(404).json({ error: 'No tmux pane for this agent' }); return; }
+  res.json({ ok: true });
 });
 
 // Initial state snapshot
@@ -97,7 +98,9 @@ app.post('/api/messages', (req: Request, res: Response) => {
     return;
   }
 
-  sendMessage('human', to_id, content, priority ?? 5);
+  const p = priority ?? 5;
+  sendMessage('human', to_id, content, p);
+  if (p === 0) pingAgent(to_id);
   res.json({ ok: true });
 });
 

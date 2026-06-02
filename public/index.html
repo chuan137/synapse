@@ -83,7 +83,6 @@
     main {
       display: grid;
       grid-template-columns: 320px 1fr;
-      grid-template-rows: 1fr auto;
       gap: 0;
       flex: 1;
       min-height: 0;
@@ -194,6 +193,13 @@
       gap: 6px;
     }
 
+    /* ── Compose (inside messages panel) ── */
+    #compose {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 12px 16px;
+    }
+
     .message-row {
       display: flex;
       flex-direction: column;
@@ -247,31 +253,7 @@
       word-break: break-word;
     }
 
-    /* ── Send message form ── */
-    #compose {
-      grid-column: 1 / -1;
-      border-top: 1px solid var(--border);
-      background: var(--surface);
-      padding: 14px 16px;
-      display: flex;
-      gap: 10px;
-      align-items: flex-end;
-    }
-
-    .compose-field {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .compose-field label {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--muted);
-    }
-
-    input, select, textarea {
+input, select, textarea {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
@@ -289,12 +271,8 @@
 
     select option { background: var(--bg); }
 
-    #to-input   { width: 140px; }
-    #pri-select { width: 100px; }
-    #msg-input  { width: 400px; resize: none; height: 38px; }
-
-    .compose-field.grow { flex: 1; }
-    .compose-field.grow #msg-input { width: 100%; }
+    #msg-input  { width: 100%; resize: none; height: 38px; max-height: 180px; overflow-y: auto; }
+    #msg-input:disabled { opacity: 0.4; cursor: not-allowed; }
 
     button {
       background: var(--accent);
@@ -345,23 +323,10 @@
     <div id="messages-list">
       <div class="empty-state" id="empty-msgs">No messages yet.</div>
     </div>
+    <div id="compose">
+      <textarea id="msg-input" placeholder="Select an agent… ⌘↵ send · ⌘⇧↵ urgent" disabled></textarea>
+    </div>
   </section>
-
-  <!-- Compose -->
-  <div id="compose">
-    <div class="compose-field">
-      <label>Priority</label>
-      <select id="pri-select">
-        <option value="5">P5 — Normal</option>
-        <option value="0">P0 — Urgent</option>
-      </select>
-    </div>
-    <div class="compose-field grow">
-      <label>Message</label>
-      <textarea id="msg-input" placeholder="Select an agent, then type a message…"></textarea>
-    </div>
-    <button id="send-btn" disabled>Send</button>
-  </div>
 </main>
 
 <script>
@@ -477,10 +442,10 @@
   function updateComposePlaceholder() {
     const agent = agentStatuses.find(a => a.agent_id === selectedAgentId);
     const label = agent ? `:${agent.slot}` : null;
-    document.getElementById('msg-input').placeholder = label
-      ? `Message to ${label}…`
-      : 'Select an agent to send a message…';
-    document.getElementById('send-btn').disabled = !selectedAgentId;
+    msgInput.placeholder = label
+      ? `Message to ${label}… ⌘↵ send · ⌘⇧↵ urgent`
+      : 'Select an agent… ⌘↵ send · ⌘⇧↵ urgent';
+    msgInput.disabled = !selectedAgentId;
   }
 
   // Re-render agents every 5s so timeAgo and stale state stay current
@@ -538,15 +503,20 @@
   }
 
   // ── Send message ──────────────────────────────────────────────────────────
-  document.getElementById('send-btn').addEventListener('click', send);
-  document.getElementById('msg-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send();
+  const msgInput = document.getElementById('msg-input');
+
+  msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) { e.preventDefault(); send(5); }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.shiftKey)  { e.preventDefault(); send(0); }
+  });
+  msgInput.addEventListener('input', () => {
+    msgInput.style.height = '38px';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 180) + 'px';
   });
 
-  async function send() {
+  async function send(priority = 5) {
     if (!selectedAgentId) return;
-    const content  = document.getElementById('msg-input').value.trim();
-    const priority = parseInt(document.getElementById('pri-select').value, 10);
+    const content = msgInput.value.trim();
 
     if (!content) return;
 
@@ -556,7 +526,8 @@
       body: JSON.stringify({ to_id: selectedAgentId, content, priority }),
     });
 
-    document.getElementById('msg-input').value = '';
+    msgInput.value = '';
+    msgInput.style.height = '38px';
   }
 
   // ── Utils ─────────────────────────────────────────────────────────────────
