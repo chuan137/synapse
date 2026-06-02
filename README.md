@@ -27,8 +27,8 @@ Do this once globally — it works for all projects.
 {
   "mcpServers": {
     "synapse-bus": {
-      "command": "node",
-      "args": ["/path/to/synapse/dist/mcp-server.js"]
+      "command": "synapse",
+      "args": ["mcp"]
     }
   }
 }
@@ -40,8 +40,8 @@ Do this once globally — it works for all projects.
   "context_servers": {
     "synapse-bus": {
       "command": {
-        "path": "node",
-        "args": ["/path/to/synapse/dist/mcp-server.js"]
+        "path": "synapse",
+        "args": ["mcp"]
       }
     }
   }

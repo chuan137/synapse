@@ -37,6 +37,14 @@ program
   });
 
 program
+  .command('mcp')
+  .description('Start the MCP server (stdio transport, for editor integration)')
+  .action(async () => {
+    const { startMcpServer } = await import('./mcp-server.js');
+    await startMcpServer();
+  });
+
+program
   .command('dash', { isDefault: true })
   .description('Open the S-Deck dashboard for the current project')
   .option('-p, --port <number>', 'Dashboard port (0 = random free port)', '0')
