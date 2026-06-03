@@ -78,6 +78,30 @@ function synapseInit(projectRoot: string, silent = false): boolean {
   return isNew;
 }
 
+// Strip unknown flags before Commander sees them (for `synapse run` passthrough)
+const SYNAPSE_RUN_KNOWN = new Set(['--role', '--slot', '--task', '--task-file']);
+const extraArgs: string[] = [];
+if (process.argv[2] === 'run') {
+  const clean: string[] = [];
+  const argv = process.argv.slice(3);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (SYNAPSE_RUN_KNOWN.has(a)) {
+      clean.push(a);
+      if (i + 1 < argv.length) clean.push(argv[++i]);
+    } else if (a.startsWith('--') || a.startsWith('-')) {
+      extraArgs.push(a);
+      // If next arg is a value (doesn't start with -), include it too
+      if (i + 1 < argv.length && !argv[i + 1].startsWith('-')) {
+        extraArgs.push(argv[++i]);
+      }
+    } else {
+      clean.push(a);
+    }
+  }
+  process.argv = [...process.argv.slice(0, 3), ...clean];
+}
+
 const program = new Command();
 
 program
@@ -118,6 +142,7 @@ program
     if (task) {
       claudeArgs.push('--print', task);
     }
+    claudeArgs.push(...extraArgs);
     execFileSync('claude', claudeArgs, { stdio: 'inherit' });
   });
 
