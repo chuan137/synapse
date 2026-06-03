@@ -55,7 +55,7 @@ function synapseInit(projectRoot: string, silent = false): boolean {
   const existing = existsSync(claudeSettings)
     ? JSON.parse(readFileSync(claudeSettings, 'utf8'))
     : {};
-  const hookCommand = 'bash .synapse/synapse-hook.sh';
+  const hookCommand = `bash ${join(synapseDir, 'synapse-hook.sh')}`;
   const hooks = existing.hooks ?? {};
   const postToolUse: { matcher: string; hooks: { type: string; command: string }[] }[] =
     hooks.PostToolUse ?? [];
@@ -96,13 +96,27 @@ program
   .command('run')
   .description('Start a Claude session with Synapse system prompt injected')
   .option('--role <role>', 'Agent role: orchestrator or worker', 'orchestrator')
+  .option('--slot <slot>', 'Reuse a specific slot, e.g. --slot 0')
   .option('--task <task>', 'Task prompt for worker agents')
+  .option('--task-file <file>', 'File containing task prompt for worker agents')
   .action((options) => {
     const role = options.role as 'orchestrator' | 'worker';
     const systemPrompt = buildSystemPrompt(role);
+    const cwd = process.cwd();
+    if (options.slot !== undefined) {
+      process.env.SYNAPSE_SLOT = String(options.slot);
+    }
+
     const claudeArgs = ['--append-system-prompt', systemPrompt];
-    if (options.task) {
-      claudeArgs.push('--print', options.task);
+    if (role === 'worker') {
+      claudeArgs.push('--dangerously-skip-permissions');
+      claudeArgs.push('--allowedTools', 'mcp__synapse-bus__read_messages,mcp__synapse-bus__send_message,mcp__synapse-bus__update_status,mcp__synapse-bus__spawn_agent,mcp__synapse-bus__request_approval');
+      claudeArgs.push('--add-dir', cwd);
+    }
+    const task = options.task
+      ?? (options.taskFile ? readFileSync(options.taskFile, 'utf8') : null);
+    if (task) {
+      claudeArgs.push('--print', task);
     }
     execFileSync('claude', claudeArgs, { stdio: 'inherit' });
   });

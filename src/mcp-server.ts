@@ -4,8 +4,9 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, chmodSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
 import { execSync, spawnSync } from 'child_process';
 import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval } from './db.js';
@@ -38,9 +39,10 @@ function saveSettings(patch: Partial<Settings>): void {
 
 const isFirstInit = !existsSync(join(SYNAPSE_DIR, 'settings.json'));
 const settings = loadSettings();
-const SESSION_ID = process.env.CLAUDE_CODE_SESSION_ID ?? null;
-const TMUX_PANE  = process.env.TMUX_PANE ?? null;
-const { agentId: AGENT_ID, slot } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE);
+const SESSION_ID  = process.env.CLAUDE_CODE_SESSION_ID ?? null;
+const TMUX_PANE   = process.env.TMUX_PANE ?? null;
+const FORCED_SLOT = process.env.SYNAPSE_SLOT !== undefined ? parseInt(process.env.SYNAPSE_SLOT, 10) : undefined;
+const { agentId: AGENT_ID, slot } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE, FORCED_SLOT);
 let agentName = settings.name ?? '';
 
 // Write agent ID so the PostToolUse hook can look up unread messages.
@@ -247,18 +249,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     const slotsBefore = getLatestAgent()?.slot ?? -1;
-    const windowName = workerName ?? `worker`;
-    const escapedTask = task.replace(/'/g, `'\\''`);
-    const escapedName = (workerName ?? '').replace(/'/g, `'\\''`);
+    const windowName = (workerName ?? 'worker').replace(/[^a-zA-Z0-9_-]/g, '-');
 
-    execSync(
-      `tmux new-window -d -n '${windowName}' ` +
-      `'SYNAPSE_DB_PATH=${dbPath} synapse run --role worker --task '\\''${escapedTask}'\\'`
-    );
+    // Write task to a temp file to avoid shell quoting issues with complex prompts
+    const tmpDir = mkdtempSync(join(tmpdir(), 'synapse-'));
+    const taskFile = join(tmpDir, 'task.txt');
+    writeFileSync(taskFile, task, 'utf8');
 
-    // Poll until the worker claims its slot (max 10s)
+    // Write a launcher script — cd to project dir, run worker with task
+    const projectDir = process.cwd();
+    const launchScript = join(tmpDir, 'launch.sh');
+    writeFileSync(launchScript, [
+      '#!/bin/sh',
+      `cd ${JSON.stringify(projectDir)}`,
+      `export SYNAPSE_DB_PATH=${JSON.stringify(dbPath)}`,
+      `synapse run --role worker --task-file ${JSON.stringify(taskFile)}`,
+      'echo "[Synapse] Worker task complete. Press Enter to close."',
+      'read _',
+    ].join('\n') + '\n', 'utf8');
+    chmodSync(launchScript, 0o755);
+
+    execSync(`tmux new-window -d -n ${JSON.stringify(windowName)} ${JSON.stringify(launchScript)}`);
+
+    // Poll until the worker claims its slot (max 15s)
     let worker = null;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 30; i++) {
       spawnSync('sleep', ['0.5']);
       const latest = getLatestAgent();
       if (latest && latest.slot > slotsBefore) { worker = latest; break; }

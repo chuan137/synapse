@@ -137,8 +137,25 @@ export function claimAgentSlot(
   projectId: string,
   sessionId: string | null,
   tmuxPane: string | null,
+  forcedSlot?: number,
 ): { agentId: string; slot: number } {
   return db.transaction(() => {
+    // Forced slot — reuse existing row or insert at that slot
+    if (forcedSlot !== undefined) {
+      const agentId = `${projectId}:${forcedSlot}`;
+      const existing = db.prepare<[string], { agent_id: string; slot: number }>(
+        `SELECT agent_id, slot FROM agent_status WHERE agent_id = ?`
+      ).get(agentId);
+      if (existing) {
+        db.prepare(`UPDATE agent_status SET session_id = ?, tmux_pane = ?, state = 'idle', updated_at = ? WHERE agent_id = ?`)
+          .run(sessionId, tmuxPane, Date.now(), agentId);
+      } else {
+        db.prepare(`INSERT INTO agent_status (agent_id, slot, session_id, tmux_pane, state, updated_at) VALUES (?, ?, ?, ?, 'idle', ?)`)
+          .run(agentId, forcedSlot, sessionId, tmuxPane, Date.now());
+      }
+      return { agentId, slot: forcedSlot };
+    }
+    // Reuse by session ID
     if (sessionId) {
       const existing = db.prepare<[string], { agent_id: string; slot: number }>(
         `SELECT agent_id, slot FROM agent_status WHERE session_id = ?`
