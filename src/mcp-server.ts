@@ -292,9 +292,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     execSync(`tmux new-window -d -n ${JSON.stringify(windowName)} ${JSON.stringify(launchScript)}`);
 
-    // Poll until the worker claims its slot (max 15s)
+    // Poll until the worker claims its slot (max 60s)
     let worker = null;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 120; i++) {
       spawnSync('sleep', ['0.5']);
       const latest = getLatestAgent();
       if (latest && latest.slot > slotsBefore) { worker = latest; break; }
