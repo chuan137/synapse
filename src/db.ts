@@ -428,6 +428,17 @@ export function getAllStatuses(): AgentStatus[] {
   return stmts.allStatuses.all();
 }
 
+export function getAgentConfigBySlot(
+  projectId: string,
+  slot: number,
+): { model: string | null; effort: string | null; name: string | null } | null {
+  const agentId = `${projectId}:${slot}`;
+  const row = db.prepare<[string], { model: string | null; effort: string | null; name: string | null }>(
+    `SELECT model, effort, name FROM agent_status WHERE agent_id = ?`
+  ).get(agentId);
+  return row ?? null;
+}
+
 export function getRecentMessages(limit = 100): Message[] {
   return stmts.recentMessages.all(limit);
 }

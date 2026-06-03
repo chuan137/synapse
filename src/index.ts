@@ -4,6 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
+import { openDb } from './db.js';
 
 function buildSystemPrompt(role: 'orchestrator' | 'worker'): string {
   const templatesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -174,7 +175,31 @@ program
       process.env.SYNAPSE_SLOT = String(options.slot);
     }
 
+    // Look up persisted model/effort config for this slot (if any)
+    let persistedModel: string | null = null;
+    let persistedEffort: string | null = null;
+    if (options.slot !== undefined) {
+      try {
+        const dbPath = process.env.SYNAPSE_DB_PATH ?? join(cwd, '.synapse', 'synapse.db');
+        const settingsPath = join(cwd, '.synapse', 'settings.json');
+        const projectId: string | null = existsSync(settingsPath)
+          ? (JSON.parse(readFileSync(settingsPath, 'utf8')).projectId ?? null)
+          : null;
+        if (projectId && existsSync(dbPath)) {
+          const localDb = openDb(dbPath);
+          const row = localDb.prepare<[string], { model: string | null; effort: string | null }>(
+            `SELECT model, effort FROM agent_status WHERE agent_id = ?`
+          ).get(`${projectId}:${options.slot}`);
+          localDb.close();
+          persistedModel  = row?.model  ?? null;
+          persistedEffort = row?.effort ?? null;
+        }
+      } catch { /* DB not yet initialized — ignore */ }
+    }
+
     const claudeArgs = ['--append-system-prompt', systemPrompt];
+    if (persistedModel)  claudeArgs.push('--model',  persistedModel);
+    if (persistedEffort) claudeArgs.push('--effort', persistedEffort);
     if (role === 'worker') {
       claudeArgs.push('--print');
       claudeArgs.push('--dangerously-skip-permissions');
