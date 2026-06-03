@@ -140,7 +140,7 @@ program
     const task = options.task
       ?? (options.taskFile ? readFileSync(options.taskFile, 'utf8') : null);
     if (task) {
-      claudeArgs.push('--print', task);
+      claudeArgs.push(task);
     }
     claudeArgs.push(...extraArgs);
     execFileSync('claude', claudeArgs, { stdio: 'inherit' });

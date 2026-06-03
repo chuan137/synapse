@@ -142,6 +142,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Short human-readable name for this agent, e.g. "backend-reviewer".',
           },
+          slot: {
+            type: 'number',
+            description: 'Optional slot number to assign to this agent. If omitted, the next available slot is used.',
+          },
         },
         required: ['task'],
       },
@@ -245,7 +249,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'spawn_agent') {
-    const { task, name: workerName } = args as { task: string; name?: string };
+    const { task, name: workerName, slot: forcedSlot } = args as { task: string; name?: string; slot?: number };
 
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     const slotsBefore = getLatestAgent()?.slot ?? -1;
@@ -259,11 +263,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Write a launcher script — cd to project dir, run worker with task
     const projectDir = process.cwd();
     const launchScript = join(tmpDir, 'launch.sh');
+    const slotArg = forcedSlot !== undefined ? ` --slot ${forcedSlot}` : '';
     writeFileSync(launchScript, [
       '#!/bin/sh',
       `cd ${JSON.stringify(projectDir)}`,
       `export SYNAPSE_DB_PATH=${JSON.stringify(dbPath)}`,
-      `synapse run --role worker --task-file ${JSON.stringify(taskFile)}`,
+      `synapse run --role worker${slotArg} --task-file ${JSON.stringify(taskFile)}`,
       'echo "[Synapse] Worker task complete. Press Enter to close."',
       'read _',
     ].join('\n') + '\n', 'utf8');
