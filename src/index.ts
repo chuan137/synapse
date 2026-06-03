@@ -28,7 +28,8 @@ function synapseInit(projectRoot: string, silent = false): boolean {
     copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'templates', f), join(synapseDir, f));
   }
 
-  // Copy hook script
+  // Copy the unread-message nudge script into .synapse/ (always refresh).
+  // The event/guard hooks are CLI subcommands (`synapse hook …`), not copied files.
   const hookDest = join(synapseDir, 'synapse-hook.sh');
   copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'scripts', 'synapse-hook.sh'), hookDest);
   chmodSync(hookDest, 0o755);
@@ -48,23 +49,52 @@ function synapseInit(projectRoot: string, silent = false): boolean {
     writeFileSync(claudeMd, claudeContent + synapseBlock, 'utf8');
   }
 
-  // Register PostToolUse hook in .claude/settings.json
+  // Register Synapse hooks in .claude/settings.json (idempotent).
   const claudeDir = join(projectRoot, '.claude');
   mkdirSync(claudeDir, { recursive: true });
   const claudeSettings = join(claudeDir, 'settings.json');
   const existing = existsSync(claudeSettings)
     ? JSON.parse(readFileSync(claudeSettings, 'utf8'))
     : {};
-  const hookCommand = `bash ${join(synapseDir, 'synapse-hook.sh')}`;
   const hooks = existing.hooks ?? {};
-  const postToolUse: { matcher: string; hooks: { type: string; command: string }[] }[] =
-    hooks.PostToolUse ?? [];
-  const alreadyRegistered = postToolUse.some(h =>
-    h.hooks?.some(hh => hh.command === hookCommand)
-  );
-  if (!alreadyRegistered) {
-    postToolUse.push({ matcher: '', hooks: [{ type: 'command', command: hookCommand }] });
-    existing.hooks = { ...hooks, PostToolUse: postToolUse };
+
+  // Hooks invoke the `synapse` CLI directly — no paths, no copied files. Assumes
+  // `synapse` is on PATH (npm link / global install), which the project requires.
+  const nudgeCmd = `bash .synapse/synapse-hook.sh`;
+  const guardCmd = `synapse hook guard`;
+  const eventCmd = (type: string) => `synapse hook event ${type}`;
+
+  // Desired hook registrations: [event, matcher (null = no matcher), command].
+  const desired: [string, string | null, string][] = [
+    ['PreToolUse',       '.*', guardCmd],          // approval lock (workers only) runs first
+    ['PreToolUse',       '.*', eventCmd('PreToolUse')],
+    ['PostToolUse',      '',   nudgeCmd],           // unread-message nudge
+    ['PostToolUse',      '',   eventCmd('PostToolUse')],
+    ['UserPromptSubmit', null, eventCmd('UserPromptSubmit')],
+    ['SubagentStart',    '.*', eventCmd('SubagentStart')],
+    ['SubagentStop',     '.*', eventCmd('SubagentStop')],
+    ['PreCompact',       null, eventCmd('PreCompact')],
+    ['SessionStart',     null, eventCmd('SessionStart')],
+    ['SessionEnd',       null, eventCmd('SessionEnd')],
+    ['Stop',             null, eventCmd('Stop')],
+    ['Notification',     null, eventCmd('Notification')],
+  ];
+
+  let changed = false;
+  for (const [event, matcher, command] of desired) {
+    const list: { matcher?: string; hooks: { type: string; command: string }[] }[] =
+      hooks[event] ?? (hooks[event] = []);
+    const already = list.some(h => h.hooks?.some(hh => hh.command === command));
+    if (!already) {
+      const entry: { matcher?: string; hooks: { type: string; command: string }[] } =
+        { hooks: [{ type: 'command', command }] };
+      if (matcher !== null) entry.matcher = matcher;
+      list.push(entry);
+      changed = true;
+    }
+  }
+  if (changed) {
+    existing.hooks = hooks;
     writeFileSync(claudeSettings, JSON.stringify(existing, null, 2), 'utf8');
   }
 
@@ -144,6 +174,22 @@ program
     }
     claudeArgs.push(...extraArgs);
     execFileSync('claude', claudeArgs, { stdio: 'inherit' });
+  });
+
+program
+  .command('hook <kind> [type]')
+  .description('Internal: Claude Code hook entrypoint (event|guard). Wired by `synapse init`.')
+  .action(async (kind: string, type?: string) => {
+    if (kind === 'guard') {
+      const { runGuardHook } = await import('./hooks/guard.js');
+      await runGuardHook();
+    } else if (kind === 'event') {
+      const { runEventHook } = await import('./hooks/event.js');
+      await runEventHook(type);
+    } else {
+      process.stderr.write(`Unknown hook kind: ${kind} (expected 'event' or 'guard')\n`);
+      process.exit(1);
+    }
   });
 
 program

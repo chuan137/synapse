@@ -10,7 +10,9 @@ import {
   getTmuxPane,
   getPendingApprovals,
   resolveApproval,
-  getIdleAgentsWithUnreadMessages,
+  getIdleAgentsWithUnreadSignature,
+  getRecentEvents,
+  getAllToolMetrics,
   AgentStatus,
   Message,
   ApprovalRequest,
@@ -45,26 +47,53 @@ function broadcast(data: object) {
 let lastStatuses  = '';
 let lastMessages  = '';
 let lastApprovals = '';
+let lastEvents    = '';
+
+// agent_id → newest unread message id we've already nudged about (de-dupe).
+const nudgedMsgId = new Map<string, number>();
 
 setInterval(() => {
   const statuses  = getAllStatuses();
   const messages  = getRecentMessages(200);
   const approvals = getPendingApprovals();
+  const events    = getRecentEvents(200);
+  const metrics   = getAllToolMetrics();
 
   const statusStr   = JSON.stringify(statuses);
   const msgStr      = JSON.stringify(messages.map((m) => m.id));
   const approvalStr = JSON.stringify(approvals.map((a) => a.id));
+  const eventStr    = JSON.stringify(events.map((e) => e.id));
 
-  if (statusStr !== lastStatuses || msgStr !== lastMessages || approvalStr !== lastApprovals) {
+  if (
+    statusStr !== lastStatuses ||
+    msgStr !== lastMessages ||
+    approvalStr !== lastApprovals ||
+    eventStr !== lastEvents
+  ) {
     lastStatuses  = statusStr;
     lastMessages  = msgStr;
     lastApprovals = approvalStr;
-    broadcast({ statuses, messages, approvals });
+    lastEvents    = eventStr;
+    broadcast({ statuses, messages, approvals, events, metrics });
+  }
 
-    // Nudge any idle agent that has unread messages
-    for (const agent of getIdleAgentsWithUnreadMessages()) {
-      pingAgent(agent.agent_id);
+  // Nudge is decoupled from the broadcast: it must NOT re-fire on every event/
+  // status delta. Fire once per agent each time its newest unread message id
+  // advances; reset the memory once the agent has no unread messages (so a
+  // future message nudges again).
+  for (const row of getIdleAgentsWithUnreadSignature()) {
+    const lastNudged = nudgedMsgId.get(row.agent_id) ?? 0;
+    if (row.max_msg_id > lastNudged) {
+      if (pingAgent(row.agent_id)) {
+        nudgedMsgId.set(row.agent_id, row.max_msg_id);
+      }
     }
+  }
+  // Forget agents that now have zero unread (they dropped out of the query),
+  // so the next message they receive nudges cleanly.
+  const stillUnread = new Set(getIdleAgentsWithUnreadSignature().map((r) => r.agent_id));
+  for (const id of nudgedMsgId.keys()) {
+    if (!stillUnread.has(id)) nudgedMsgId.delete(id);
   }
 }, 500);
 
@@ -96,6 +125,8 @@ app.get('/api/state', (_req: Request, res: Response) => {
     statuses: getAllStatuses(),
     messages: getRecentMessages(200),
     approvals: getPendingApprovals(),
+    events: getRecentEvents(200),
+    metrics: getAllToolMetrics(),
   });
 });
 
@@ -142,6 +173,8 @@ app.get('/events', (req: Request, res: Response) => {
     statuses: getAllStatuses(),
     messages: getRecentMessages(200),
     approvals: getPendingApprovals(),
+    events: getRecentEvents(200),
+    metrics: getAllToolMetrics(),
   });
   res.write(`data: ${initial}\n\n`);
 

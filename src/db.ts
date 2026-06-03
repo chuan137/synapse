@@ -46,6 +46,38 @@ export function openDb(dbPath: string): Database.Database {
       current_task TEXT,
       updated_at  INTEGER NOT NULL
     );
+
+    -- Raw append-only Claude Code lifecycle event log (the audit trail + S-Deck feed).
+    -- Every row is correlated to a known Synapse agent via session_id; events that
+    -- cannot be correlated are dropped at ingest, so synapse_agent_id is NOT NULL.
+    CREATE TABLE IF NOT EXISTS events (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id         TEXT    NOT NULL UNIQUE,   -- inspector evt_… id (idempotent ingest)
+      event            TEXT    NOT NULL,          -- e.g. tool:after:Bash
+      session_id       TEXT    NOT NULL,          -- Claude Code session (join key)
+      synapse_agent_id TEXT    NOT NULL,          -- resolved <projectId>:<slot>
+      claude_agent_id  TEXT,                      -- Claude subagent id, only on subagent:* events
+      payload          TEXT,                      -- JSON blob
+      timestamp        INTEGER NOT NULL,
+      duration_ms      INTEGER,
+      FOREIGN KEY (synapse_agent_id) REFERENCES agent_status(agent_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_agent ON events(synapse_agent_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, timestamp);
+
+    -- Derived per-tool-call metrics (DESIGN.md §3.2). One row per tool:after:* event.
+    CREATE TABLE IF NOT EXISTS tool_metrics (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id         TEXT    NOT NULL UNIQUE,   -- the tool:after event id
+      synapse_agent_id TEXT    NOT NULL,
+      session_id       TEXT    NOT NULL,
+      tool             TEXT    NOT NULL,
+      status           TEXT    NOT NULL CHECK(status IN ('ok', 'error')),
+      duration_ms      INTEGER,
+      timestamp        INTEGER NOT NULL,
+      FOREIGN KEY (synapse_agent_id) REFERENCES agent_status(agent_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_metrics_agent ON tool_metrics(synapse_agent_id, tool);
   `);
 
   // Migrate existing tables — ignore errors if columns already exist
@@ -88,6 +120,40 @@ export interface AgentStatus {
   updated_at: number;
 }
 
+// An EventRecord as emitted by the inspector hook (inspector/types.ts shape,
+// extended with the session/agent fields the inspector's hook.mjs attaches).
+export interface InspectorEvent {
+  id: string;
+  event: string;
+  sessionId: string;
+  payload?: unknown;
+  timestamp: number;
+  durationMs?: number;
+}
+
+export interface EventRow {
+  id: number;
+  event_id: string;
+  event: string;
+  session_id: string;
+  synapse_agent_id: string;
+  claude_agent_id: string | null;
+  payload: string | null;
+  timestamp: number;
+  duration_ms: number | null;
+}
+
+export interface ToolMetricRow {
+  id: number;
+  event_id: string;
+  synapse_agent_id: string;
+  session_id: string;
+  tool: string;
+  status: 'ok' | 'error';
+  duration_ms: number | null;
+  timestamp: number;
+}
+
 // ── Queries ────────────────────────────────────────────────────────────────
 
 const stmts = {
@@ -128,6 +194,61 @@ const stmts = {
 
   recentMessages: db.prepare<[number], Message>(`
     SELECT * FROM messages ORDER BY created_at DESC LIMIT ?
+  `),
+
+  // Resolve a Claude session_id to a known Synapse agent (the join key).
+  agentBySession: db.prepare<[string], { agent_id: string; slot: number | null }>(`
+    SELECT agent_id, slot FROM agent_status WHERE session_id = ?
+  `),
+
+  // INSERT OR IGNORE makes ingest idempotent on event_id (re-tailing is safe).
+  insertEvent: db.prepare<[string, string, string, string, string | null, string | null, number, number | null]>(`
+    INSERT OR IGNORE INTO events
+      (event_id, event, session_id, synapse_agent_id, claude_agent_id, payload, timestamp, duration_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+
+  insertToolMetric: db.prepare<[string, string, string, string, string, number | null, number]>(`
+    INSERT OR IGNORE INTO tool_metrics
+      (event_id, synapse_agent_id, session_id, tool, status, duration_ms, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `),
+
+  recentEvents: db.prepare<[number], EventRow>(`
+    SELECT * FROM events ORDER BY timestamp DESC LIMIT ?
+  `),
+
+  eventsByAgent: db.prepare<[string, number], EventRow>(`
+    SELECT * FROM events WHERE synapse_agent_id = ? ORDER BY timestamp DESC LIMIT ?
+  `),
+
+  toolMetricsByAgent: db.prepare<[string], {
+    tool: string; calls: number; errors: number; avg_ms: number | null; max_ms: number | null;
+  }>(`
+    SELECT tool,
+           COUNT(*)                               AS calls,
+           SUM(status = 'error')                  AS errors,
+           AVG(duration_ms)                       AS avg_ms,
+           MAX(duration_ms)                       AS max_ms
+    FROM tool_metrics
+    WHERE synapse_agent_id = ?
+    GROUP BY tool
+    ORDER BY calls DESC
+  `),
+
+  // Per-agent + per-tool rollup across the whole swarm (for the dashboard).
+  toolMetricsAll: db.prepare<[], {
+    synapse_agent_id: string; tool: string; calls: number; errors: number; avg_ms: number | null; max_ms: number | null;
+  }>(`
+    SELECT synapse_agent_id,
+           tool,
+           COUNT(*)              AS calls,
+           SUM(status = 'error') AS errors,
+           AVG(duration_ms)      AS avg_ms,
+           MAX(duration_ms)      AS max_ms
+    FROM tool_metrics
+    GROUP BY synapse_agent_id, tool
+    ORDER BY synapse_agent_id, calls DESC
   `),
 };
 
@@ -227,6 +348,18 @@ export function getIdleAgentsWithUnreadMessages(): AgentStatus[] {
   `).all();
 }
 
+/** Idle agents with unread messages, paired with the max unread message id —
+ *  lets the nudger fire once per (agent, message-set) instead of every poll. */
+export function getIdleAgentsWithUnreadSignature(): { agent_id: string; tmux_pane: string | null; max_msg_id: number }[] {
+  return db.prepare<[], { agent_id: string; tmux_pane: string | null; max_msg_id: number }>(`
+    SELECT a.agent_id, a.tmux_pane, MAX(m.id) AS max_msg_id
+    FROM agent_status a
+    JOIN messages m ON m.to_id = a.agent_id AND m.read_at IS NULL
+    WHERE a.state = 'idle'
+    GROUP BY a.agent_id, a.tmux_pane
+  `).all();
+}
+
 export function getTmuxPane(agentId: string): string | null {
   const row = db.prepare<[string], { tmux_pane: string | null }>(
     `SELECT tmux_pane FROM agent_status WHERE agent_id = ?`
@@ -265,4 +398,107 @@ export function getAllStatuses(): AgentStatus[] {
 
 export function getRecentMessages(limit = 100): Message[] {
   return stmts.recentMessages.all(limit);
+}
+
+/** Resolve a Claude session_id to its Synapse agent (id + slot), or null if unknown. */
+export function resolveSessionToAgent(
+  sessionId: string,
+): { agentId: string; slot: number | null } | null {
+  const row = stmts.agentBySession.get(sessionId);
+  return row ? { agentId: row.agent_id, slot: row.slot } : null;
+}
+
+// ── Event ingestion ──────────────────────────────────────────────────────────
+
+/**
+ * Ingest one inspector EventRecord into the events log, correlating it to a
+ * Synapse agent via session_id. Events whose session_id does not map to a known
+ * agent are DROPPED (returns null) — the table is swarm-only by design. A
+ * tool:after:* event additionally produces a derived tool_metrics row.
+ *
+ * Idempotent: re-ingesting the same event_id is a no-op (INSERT OR IGNORE).
+ * Returns the resolved synapse agent_id when stored, or null when dropped.
+ */
+export function ingestEvent(ev: InspectorEvent): string | null {
+  if (!ev?.id || !ev.event || !ev.sessionId) return null;
+
+  const agent = stmts.agentBySession.get(ev.sessionId);
+  if (!agent) return null; // unmatched → drop
+
+  const payload = (ev.payload && typeof ev.payload === 'object')
+    ? (ev.payload as Record<string, unknown>)
+    : {};
+  // Claude's internal subagent id, present only on subagent:* events.
+  const claudeAgentId = typeof payload.agentId === 'string' ? payload.agentId : null;
+  const durationMs = typeof ev.durationMs === 'number' ? ev.durationMs : null;
+
+  return db.transaction(() => {
+    stmts.insertEvent.run(
+      ev.id,
+      ev.event,
+      ev.sessionId,
+      agent.agent_id,
+      claudeAgentId,
+      Object.keys(payload).length ? JSON.stringify(payload) : null,
+      ev.timestamp,
+      durationMs,
+    );
+
+    // Derive a tool_metrics row from tool:after:<Tool> events.
+    if (ev.event.startsWith('tool:after:')) {
+      const tool = typeof payload.tool === 'string'
+        ? payload.tool
+        : ev.event.slice('tool:after:'.length);
+      const status = payload.status === 'error' ? 'error' : 'ok';
+      stmts.insertToolMetric.run(
+        ev.id, agent.agent_id, ev.sessionId, tool, status, durationMs, ev.timestamp,
+      );
+    }
+
+    return agent.agent_id;
+  })();
+}
+
+/**
+ * Event-driven liveness: set an agent's state from observed activity.
+ * Only flips between 'idle' and 'working' — never overwrites a self-reported
+ * 'blocked' or 'error' (those are intentional states only the agent knows).
+ * No-op if the session maps to no known agent.
+ */
+export function setLivenessBySession(sessionId: string, state: 'idle' | 'working'): void {
+  db.prepare(`
+    UPDATE agent_status
+       SET state = ?, updated_at = ?
+     WHERE session_id = ?
+       AND state IN ('idle', 'working')
+  `).run(state, Date.now(), sessionId);
+}
+
+export function getRecentEvents(limit = 200): EventRow[] {
+  return stmts.recentEvents.all(limit);
+}
+
+export function getEventsByAgent(agentId: string, limit = 200): EventRow[] {
+  return stmts.eventsByAgent.all(agentId, limit);
+}
+
+export interface ToolMetricSummary {
+  tool: string;
+  calls: number;
+  errors: number;
+  avg_ms: number | null;
+  max_ms: number | null;
+}
+
+export function getToolMetricsByAgent(agentId: string): ToolMetricSummary[] {
+  return stmts.toolMetricsByAgent.all(agentId);
+}
+
+export interface AgentToolMetric extends ToolMetricSummary {
+  synapse_agent_id: string;
+}
+
+/** Whole-swarm tool metrics, one row per (agent, tool). */
+export function getAllToolMetrics(): AgentToolMetric[] {
+  return stmts.toolMetricsAll.all();
 }
