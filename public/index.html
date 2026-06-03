@@ -8,12 +8,12 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0d0f14;
-      --surface: #161920;
-      --border: #252830;
-      --text: #a8aab4;
-      --muted: #52575f;
-      --accent: #4068d4;
+      --bg: #16181e;
+      --surface: #1e2028;
+      --border: #2e3240;
+      --text: #c2c5cf;
+      --muted: #6b7080;
+      --accent: #4f7ef8;
     }
 
     :root.bright {
@@ -196,10 +196,11 @@
 
     /* ── Agents panel ── */
     #agents-panel {
-      border-right: 1px solid var(--border);
+      border-right: 2px solid var(--border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      background: var(--bg);
     }
 
     .panel-header {
@@ -288,6 +289,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      background: var(--surface);
     }
 
     #messages-list {
