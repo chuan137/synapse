@@ -497,6 +497,24 @@ export function markAgentEndedBySession(sessionId: string): void {
   `).run(now, now, sessionId);
 }
 
+/**
+ * Post a deck milestone *as* the agent that owns this session, deduplicated on the
+ * exact content so the same observable event (e.g. one git commit, keyed by its
+ * hash in the text) is announced at most once. Used by the event hook for
+ * deterministic milestones (COMMIT) that don't depend on the model remembering to
+ * call send_message. No-op if the session maps to no known agent or an identical
+ * message from this agent already exists.
+ */
+export function postMilestoneOnce(sessionId: string, content: string, priority = 5): void {
+  const agent = stmts.agentBySession.get(sessionId);
+  if (!agent) return;
+  const dup = db.prepare(
+    `SELECT 1 FROM messages WHERE from_id = ? AND to_id = 'human' AND content = ? LIMIT 1`
+  ).get(agent.agent_id, content);
+  if (dup) return;
+  stmts.insertMessage.run(agent.agent_id, 'human', content, priority, Date.now());
+}
+
 export function getRecentEvents(limit = 200): EventRow[] {
   return stmts.recentEvents.all(limit);
 }

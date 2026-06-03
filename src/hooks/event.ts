@@ -12,7 +12,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { ingestEvent, setLivenessBySession, markAgentEndedBySession } from '../db.js';
+import { ingestEvent, setLivenessBySession, markAgentEndedBySession, postMilestoneOnce } from '../db.js';
 
 const MAX_LEN = 500;
 
@@ -58,8 +58,42 @@ export async function runEventHook(hookType: string | undefined): Promise<void> 
     }
   }
 
+  // Deterministic deck milestones: some events are worth announcing on S-Deck
+  // regardless of whether the model remembers to send_message. We detect them
+  // from the observable hook payload and post as the agent (deduped by content).
+  if (sessionId) {
+    try { emitDeterministicMilestones(hookType, sessionId, payload); } catch { /* never block on telemetry */ }
+  }
+
   // Hooks must exit 0 and stay silent on stdout so we don't perturb the agent.
   process.exit(0);
+}
+
+/**
+ * Emit deck milestones we can observe directly from a hook payload — currently a
+ * successful `git commit` seen in a PostToolUse Bash call. The commit hash makes
+ * the message self-deduping, so re-runs/retries never double-post. Semantic
+ * milestones the hook can't see (decisions, findings) stay the model's job via
+ * the milestone contract in the SYNAPSE templates.
+ */
+function emitDeterministicMilestones(hookType: string, sessionId: string, payload: any): void {
+  if (hookType !== 'PostToolUse') return;
+  if ((payload.tool_name ?? '') !== 'Bash') return;
+
+  const cmd = String(payload.tool_input?.command ?? '');
+  // Only care about commands that actually create a commit (not status/log/diff).
+  if (!/\bgit\b[^|&;]*\bcommit\b/.test(cmd)) return;
+
+  const out = typeof payload.tool_response === 'string'
+    ? payload.tool_response
+    : JSON.stringify(payload.tool_response ?? '');
+  if (isError(payload.tool_response)) return; // failed commit → nothing to announce
+
+  // Pull the short hash + subject git prints, e.g. "[main f29cb5f] Subject line".
+  const m = out.match(/\[[^\]]*\b([0-9a-f]{7,40})\]\s*(.+)/);
+  if (!m) return;
+  const [, hash, subject] = m;
+  postMilestoneOnce(sessionId, `✅ committed ${hash}: ${subject.trim()}`.slice(0, MAX_LEN));
 }
 
 function buildRecord(type: string, payload: any) {
