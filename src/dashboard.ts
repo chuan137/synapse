@@ -147,7 +147,7 @@ export function startDashboard(port = PORT): Promise<number> {
   return new Promise((resolve) => {
     const srv = app.listen(port, () => {
       const addr = srv.address() as { port: number };
-      process.stderr.write(`S-Deck running at http://localhost:${addr.port}\n`);
+      process.stderr.write(`[Synapse] S-Deck live at http://localhost:${addr.port}\n`);
       resolve(addr.port);
     });
   });

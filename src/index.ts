@@ -17,6 +17,67 @@ function buildSystemPrompt(role: 'orchestrator' | 'worker'): string {
 
 const SYNAPSE_INSTALL_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+function synapseInit(projectRoot: string, silent = false): boolean {
+  const synapseDir = join(projectRoot, '.synapse');
+  const isNew = !existsSync(join(synapseDir, 'synapse.db'));
+
+  mkdirSync(synapseDir, { recursive: true });
+
+  // Copy instruction templates into .synapse/ (always refresh)
+  for (const f of ['SYNAPSE.md', 'SYNAPSE-orchestrator.md', 'SYNAPSE-worker.md']) {
+    copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'templates', f), join(synapseDir, f));
+  }
+
+  // Copy hook script
+  const hookDest = join(synapseDir, 'synapse-hook.sh');
+  copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'scripts', 'synapse-hook.sh'), hookDest);
+  chmodSync(hookDest, 0o755);
+
+  // Patch .gitignore
+  const gitignorePath = join(projectRoot, '.gitignore');
+  const gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, 'utf8') : '';
+  if (!gitignore.includes('.synapse/')) {
+    writeFileSync(gitignorePath, gitignore + (gitignore.endsWith('\n') ? '' : '\n') + '.synapse/\n', 'utf8');
+  }
+
+  // Patch CLAUDE.md
+  const claudeMd = join(projectRoot, 'CLAUDE.md');
+  const claudeContent = existsSync(claudeMd) ? readFileSync(claudeMd, 'utf8') : '';
+  const synapseBlock = `\n## Synapse\n\nThis project uses Synapse for multi-agent orchestration.\nRead \`.synapse/SYNAPSE.md\` for the agent protocol.\nIf your slot is \`:0\`, also read \`.synapse/SYNAPSE-orchestrator.md\`.\nIf your slot is \`:1\` or higher, also read \`.synapse/SYNAPSE-worker.md\`.\n`;
+  if (!claudeContent.includes('## Synapse')) {
+    writeFileSync(claudeMd, claudeContent + synapseBlock, 'utf8');
+  }
+
+  // Register PostToolUse hook in .claude/settings.json
+  const claudeDir = join(projectRoot, '.claude');
+  mkdirSync(claudeDir, { recursive: true });
+  const claudeSettings = join(claudeDir, 'settings.json');
+  const existing = existsSync(claudeSettings)
+    ? JSON.parse(readFileSync(claudeSettings, 'utf8'))
+    : {};
+  const hookCommand = 'bash .synapse/synapse-hook.sh';
+  const hooks = existing.hooks ?? {};
+  const postToolUse: { matcher: string; hooks: { type: string; command: string }[] }[] =
+    hooks.PostToolUse ?? [];
+  const alreadyRegistered = postToolUse.some(h =>
+    h.hooks?.some(hh => hh.command === hookCommand)
+  );
+  if (!alreadyRegistered) {
+    postToolUse.push({ matcher: '', hooks: [{ type: 'command', command: hookCommand }] });
+    existing.hooks = { ...hooks, PostToolUse: postToolUse };
+    writeFileSync(claudeSettings, JSON.stringify(existing, null, 2), 'utf8');
+  }
+
+  if (!silent) {
+    process.stdout.write(isNew
+      ? `[Synapse] Initialized at ${projectRoot}\n`
+      : `[Synapse] Already initialized at ${projectRoot}\n`
+    );
+  }
+
+  return isNew;
+}
+
 const program = new Command();
 
 program
@@ -28,65 +89,7 @@ program
   .command('init [path]')
   .description('Initialize Synapse in a project directory')
   .action((targetPath) => {
-    const projectRoot = resolve(targetPath ?? '.');
-    const dbPath = join(projectRoot, '.synapse', 'synapse.db');
-    const isNew = !existsSync(dbPath);
-
-    if (isNew) {
-      mkdirSync(join(projectRoot, '.synapse'), { recursive: true });
-    }
-
-    const synapseDir = join(projectRoot, '.synapse');
-
-    // Copy instruction templates into .synapse/ (always refresh)
-    for (const f of ['SYNAPSE.md', 'SYNAPSE-orchestrator.md', 'SYNAPSE-worker.md']) {
-      copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'templates', f), join(synapseDir, f));
-    }
-
-    // Copy hook script
-    const hookDest = join(synapseDir, 'synapse-hook.sh');
-    copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'scripts', 'synapse-hook.sh'), hookDest);
-    chmodSync(hookDest, 0o755);
-
-    // Patch .gitignore — add .synapse/ if not already ignored
-    const gitignorePath = join(projectRoot, '.gitignore');
-    const gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, 'utf8') : '';
-    if (!gitignore.includes('.synapse/')) {
-      writeFileSync(gitignorePath, gitignore + (gitignore.endsWith('\n') ? '' : '\n') + '.synapse/\n', 'utf8');
-    }
-
-    // Patch CLAUDE.md — append Synapse bootstrap block if not already present
-    const claudeMd = join(projectRoot, 'CLAUDE.md');
-    const claudeContent = existsSync(claudeMd) ? readFileSync(claudeMd, 'utf8') : '';
-    const synapseBlock = `\n## Synapse\n\nThis project uses Synapse for multi-agent orchestration.\nRead \`.synapse/SYNAPSE.md\` for the agent protocol.\nIf your slot is \`:0\`, also read \`.synapse/SYNAPSE-orchestrator.md\`.\nIf your slot is \`:1\` or higher, also read \`.synapse/SYNAPSE-worker.md\`.\n`;
-    if (!claudeContent.includes('## Synapse')) {
-      writeFileSync(claudeMd, claudeContent + synapseBlock, 'utf8');
-    }
-
-    // Register PostToolUse hook in .claude/settings.json
-    const claudeDir = join(projectRoot, '.claude');
-    mkdirSync(claudeDir, { recursive: true });
-    const claudeSettings = join(claudeDir, 'settings.json');
-    const existing = existsSync(claudeSettings)
-      ? JSON.parse(readFileSync(claudeSettings, 'utf8'))
-      : {};
-    const hookCommand = 'bash .synapse/synapse-hook.sh';
-    const hooks = existing.hooks ?? {};
-    const postToolUse: { matcher: string; hooks: { type: string; command: string }[] }[] =
-      hooks.PostToolUse ?? [];
-    const alreadyRegistered = postToolUse.some(h =>
-      h.hooks?.some(hh => hh.command === hookCommand)
-    );
-    if (!alreadyRegistered) {
-      postToolUse.push({ matcher: '', hooks: [{ type: 'command', command: hookCommand }] });
-      existing.hooks = { ...hooks, PostToolUse: postToolUse };
-      writeFileSync(claudeSettings, JSON.stringify(existing, null, 2), 'utf8');
-    }
-
-    process.stdout.write(isNew
-      ? `Synapse initialized at ${projectRoot}\n`
-      : `Synapse already initialized at ${projectRoot}\n`
-    );
+    synapseInit(resolve(targetPath ?? '.'), false);
   });
 
 program
@@ -117,6 +120,8 @@ program
   .description('Open the S-Deck dashboard for the current project')
   .option('-p, --port <number>', 'Dashboard port (0 = random free port)', '0')
   .action(async (options) => {
+    const isNew = synapseInit(process.cwd(), true);
+    if (isNew) process.stderr.write(`[Synapse] Initialized project at ${process.cwd()}\n`);
     const { db } = await import('./db.js');
     const { startDashboard } = await import('./dashboard.js');
 

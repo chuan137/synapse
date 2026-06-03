@@ -36,14 +36,21 @@ function saveSettings(patch: Partial<Settings>): void {
   writeFileSync(SETTINGS_PATH, JSON.stringify({ ...current, ...patch }, null, 2), 'utf8');
 }
 
+const isFirstInit = !existsSync(join(SYNAPSE_DIR, 'settings.json'));
 const settings = loadSettings();
 const SESSION_ID = process.env.CLAUDE_CODE_SESSION_ID ?? null;
 const TMUX_PANE  = process.env.TMUX_PANE ?? null;
-const { agentId: AGENT_ID } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE);
+const { agentId: AGENT_ID, slot } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE);
 let agentName = settings.name ?? '';
 
 // Write agent ID so the PostToolUse hook can look up unread messages.
 writeFileSync(join(SYNAPSE_DIR, 'agent.env'), `SYNAPSE_AGENT_ID=${AGENT_ID}\n`, 'utf8');
+
+if (isFirstInit) {
+  process.stderr.write(`[Synapse] Project initialized (${settings.projectId}). You are :${slot}. Run \`synapse dash\` to open S-Deck.\n`);
+} else {
+  process.stderr.write(`[Synapse] Connected as ${AGENT_ID} (:${slot}).\n`);
+}
 
 const server = new Server(
   { name: 'synapse-bus', version: '1.0.0' },

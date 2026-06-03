@@ -24,14 +24,19 @@
       --p0-bg: #2a1212;
     }
 
+    html, body {
+      height: 100%;
+    }
+
     body {
       background: var(--bg);
       color: var(--text);
       font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
       font-size: 13px;
-      min-height: 100vh;
+      height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
     /* ── Header ── */
@@ -84,12 +89,14 @@
       display: grid;
       grid-template-columns: 320px 1fr;
       grid-template-rows: auto 1fr;
-      gap: 0;
       flex: 1;
       min-height: 0;
+      overflow: hidden;
     }
 
-    #approvals-panel { grid-column: 1 / -1; }
+    #approvals-panel  { grid-column: 1 / -1; grid-row: 1; }
+    #agents-panel     { grid-column: 1;       grid-row: 2; min-height: 0; }
+    #messages-panel   { grid-column: 2;       grid-row: 2; min-height: 0; }
 
     /* ── Approvals ── */
     #approvals-panel {
