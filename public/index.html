@@ -14,6 +14,24 @@
       --text: #a8aab4;
       --muted: #52575f;
       --accent: #4068d4;
+    }
+
+    :root.bright {
+      --bg: #e8eaed;
+      --surface: #f2f3f5;
+      --border: #cdd0d6;
+      --text: #1a1d24;
+      --muted: #8890a0;
+      --accent: #3b6ef0;
+      --idle:    #16a34a;
+      --working: #d97706;
+      --blocked: #ea580c;
+      --error:   #dc2626;
+      --p0: #dc2626;
+      --p0-bg: #fef2f2;
+    }
+
+    :root {
 
       --idle:    #4ade80;
       --working: #facc15;
@@ -214,7 +232,7 @@
 
     .agent-card:hover { border-color: var(--accent); cursor: pointer; }
     .agent-card.stale { opacity: 0.4; }
-    .agent-card.selected { border-color: var(--accent); background: #151a2e; }
+    .agent-card.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 
     .agent-card-row {
       display: flex;
@@ -418,6 +436,7 @@ input, select, textarea {
   <div class="project-name" id="project-name">—</div>
   <div class="dot-label" id="conn-label">connecting…</div>
   <div class="dot" id="conn-dot" style="background: var(--muted); box-shadow: none;"></div>
+  <button id="theme-btn" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:inherit;" title="Toggle theme">☀</button>
 </header>
 
 <main>
@@ -451,6 +470,17 @@ input, select, textarea {
   let allMessages      = [];
   let pendingApprovals = [];
   let selectedAgentId  = null;
+
+  // ── Theme ────────────────────────────────────────────────────────────────
+  const themeBtn = document.getElementById('theme-btn');
+  const bright = localStorage.getItem('sdeck-theme') === 'bright';
+  if (bright) document.documentElement.classList.add('bright');
+  themeBtn.textContent = bright ? '☾' : '☀';
+  themeBtn.addEventListener('click', () => {
+    const isBright = document.documentElement.classList.toggle('bright');
+    localStorage.setItem('sdeck-theme', isBright ? 'bright' : 'dark');
+    themeBtn.textContent = isBright ? '☾' : '☀';
+  });
 
   // ── Project info ──────────────────────────────────────────────────────────
   fetch('/api/info').then(r => r.json()).then(({ project, projectId }) => {
