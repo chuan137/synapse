@@ -218,6 +218,15 @@ export function getLatestAgent(): AgentStatus | null {
   ).get() ?? null;
 }
 
+export function getIdleAgentsWithUnreadMessages(): AgentStatus[] {
+  return db.prepare<[], AgentStatus>(`
+    SELECT DISTINCT a.*
+    FROM agent_status a
+    JOIN messages m ON m.to_id = a.agent_id AND m.read_at IS NULL
+    WHERE a.state = 'idle'
+  `).all();
+}
+
 export function getTmuxPane(agentId: string): string | null {
   const row = db.prepare<[string], { tmux_pane: string | null }>(
     `SELECT tmux_pane FROM agent_status WHERE agent_id = ?`

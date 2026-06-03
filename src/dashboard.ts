@@ -10,6 +10,7 @@ import {
   getTmuxPane,
   getPendingApprovals,
   resolveApproval,
+  getIdleAgentsWithUnreadMessages,
   AgentStatus,
   Message,
   ApprovalRequest,
@@ -59,6 +60,11 @@ setInterval(() => {
     lastMessages  = msgStr;
     lastApprovals = approvalStr;
     broadcast({ statuses, messages, approvals });
+
+    // Nudge any idle agent that has unread messages
+    for (const agent of getIdleAgentsWithUnreadMessages()) {
+      pingAgent(agent.agent_id);
+    }
   }
 }, 500);
 
