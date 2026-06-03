@@ -603,7 +603,10 @@ input, select, textarea {
 
   <!-- Agents -->
   <section id="agents-panel">
-    <div class="panel-header">Agents</div>
+    <div class="panel-header">
+      <span>Agents</span>
+      <button id="purge-btn" title="Delete ended agents with no real history" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;align-self:auto;transition:border-color 0.15s,color 0.15s;">purge stale</button>
+    </div>
     <div id="agents-list">
       <div class="empty-state">No agents connected yet.</div>
     </div>
@@ -1001,6 +1004,22 @@ input, select, textarea {
     msgInput.value = '';
     msgInput.style.height = MSG_INPUT_MIN + 'px';
   }
+
+  // ── Purge stale agents ────────────────────────────────────────────────────
+  const purgeBtn = document.getElementById('purge-btn');
+  purgeBtn.addEventListener('click', async () => {
+    purgeBtn.disabled = true;
+    purgeBtn.textContent = '…';
+    try {
+      const res = await fetch('/api/agents/purge', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { purged } = await res.json();
+      purgeBtn.textContent = purged > 0 ? `purged ${purged}` : 'none';
+    } catch (err) {
+      purgeBtn.textContent = `error: ${err.message}`;
+    }
+    setTimeout(() => { purgeBtn.disabled = false; purgeBtn.textContent = 'purge stale'; }, 2000);
+  });
 
   // ── Utils ─────────────────────────────────────────────────────────────────
   function esc(str) {

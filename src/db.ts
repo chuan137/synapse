@@ -498,6 +498,33 @@ export function markAgentEndedBySession(sessionId: string): void {
 }
 
 /**
+ * Hard-delete ended agent rows (ended_at IS NOT NULL) that have no tool_metrics
+ * or message history worth preserving. Only session:start/session:end events
+ * are deleted with them. Returns the count of agents removed.
+ */
+export function purgeStaleAgents(): number {
+  return db.transaction(() => {
+    const candidates = db.prepare<[], { agent_id: string }>(`
+      SELECT agent_id FROM agent_status
+      WHERE ended_at IS NOT NULL
+        AND agent_id NOT IN (SELECT synapse_agent_id FROM tool_metrics)
+        AND agent_id NOT IN (
+          SELECT from_id FROM messages
+          UNION
+          SELECT to_id FROM messages WHERE to_id != 'human'
+        )
+    `).all();
+
+    if (candidates.length === 0) return 0;
+    const ids = candidates.map(r => r.agent_id);
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`DELETE FROM events WHERE synapse_agent_id IN (${placeholders})`).run(...ids);
+    db.prepare(`DELETE FROM agent_status WHERE agent_id IN (${placeholders})`).run(...ids);
+    return ids.length;
+  })();
+}
+
+/**
  * Post a deck milestone *as* the agent that owns this session, deduplicated on the
  * exact content so the same observable event (e.g. one git commit, keyed by its
  * hash in the text) is announced at most once. Used by the event hook for

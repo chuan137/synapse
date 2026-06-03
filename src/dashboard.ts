@@ -13,6 +13,7 @@ import {
   getIdleAgentsWithUnreadSignature,
   getRecentEvents,
   getAllToolMetrics,
+  purgeStaleAgents,
   AgentStatus,
   Message,
   ApprovalRequest,
@@ -30,6 +31,12 @@ function readProjectId(): string | null {
 
 const app = express();
 app.use(express.json());
+app.use((req, _res, next) => {
+  if (!req.path.startsWith('/events')) {
+    process.stderr.write(`[Synapse] ${req.method} ${req.path}\n`);
+  }
+  next();
+});
 app.use(express.static(join(__dirname, '..', 'public')));
 
 // ── SSE clients ────────────────────────────────────────────────────────────
@@ -159,6 +166,12 @@ app.post('/api/messages', (req: Request, res: Response) => {
   sendMessage('human', to_id, content, p);
   if (p === 0) pingAgent(to_id);
   res.json({ ok: true });
+});
+
+// Purge stale ended agents that have no real history
+app.post('/api/agents/purge', (_req: Request, res: Response) => {
+  const count = purgeStaleAgents();
+  res.json({ ok: true, purged: count });
 });
 
 // SSE stream
