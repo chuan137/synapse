@@ -275,10 +275,10 @@
     #messages-list {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 16px;
+      padding: 10px 14px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
     }
 
     /* ── Compose (inside messages panel) ── */
@@ -290,56 +290,80 @@
 
     .message-row {
       display: flex;
-      flex-direction: column;
-      gap: 3px;
-      padding: 10px 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
+      flex-direction: row;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 6px 8px;
       border-radius: 6px;
-      border-left: 3px solid var(--border);
-    }
-
-    .message-row.p0 {
-      border-left-color: var(--p0);
-      background: var(--p0-bg);
     }
 
     .message-row.from-human {
-      border-left-color: var(--accent);
+      background: rgba(79, 126, 248, 0.08);
     }
 
     .message-row.from-agent {
-      border-left-color: var(--idle);
+      background: rgba(255, 255, 255, 0.02);
     }
 
-    .message-meta {
+    .message-row:hover { filter: brightness(1.15); }
+
+    .message-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
       display: flex;
       align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .from-human .message-avatar {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .from-agent .message-avatar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .from-agent.p0 .message-avatar {
+      border-color: var(--p0);
+      color: var(--p0);
+    }
+
+    .message-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: baseline;
       gap: 8px;
+    }
+
+    .message-time {
       font-size: 10px;
       color: var(--muted);
     }
 
-    .message-priority {
-      font-weight: 700;
-      color: var(--p0);
-    }
-
-    .message-priority.p5 { color: var(--muted); }
-
-    .message-route {
-      flex: 1;
-    }
-
-    .message-time { margin-left: auto; }
-
     .message-content {
       font-size: 12px;
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.55;
       white-space: pre-wrap;
       word-break: break-word;
     }
+
+    .from-agent.p0 .message-content { color: #fca5a5; }
 
 input, select, textarea {
       background: var(--bg);
@@ -537,11 +561,16 @@ input, select, textarea {
       const slot = `:${a.slot}`;
       const humanName = a.name && a.name !== a.agent_id ? esc(a.name) : '';
       const hasTmux = !!a.tmux_pane;
+      const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[a.state] ?? 'var(--muted)';
       return `
         <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}">
           <div class="agent-card-row">
             <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
             <button class="ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:${stateColor};flex-shrink:0;"></span>
+            <span style="font-size:11px;color:${stateColor};font-weight:600;">${esc(a.state)}</span>
           </div>
         </div>
       `;
@@ -593,6 +622,7 @@ input, select, textarea {
     messagesHeader.textContent = slotLabel ? `Messages — ${slotLabel}` : 'Messages';
 
     const msgs = [...allMessages]
+      .filter(m => m.from_id === 'human' || m.to_id === 'human')
       .filter(m => !selectedAgentId || m.from_id === selectedAgentId || m.to_id === selectedAgentId)
       .sort((a, b) => a.created_at - b.created_at);
 
@@ -604,31 +634,43 @@ input, select, textarea {
     messagesList.innerHTML = msgs.map(m => {
       const isP0      = m.priority === 0;
       const fromHuman = m.from_id === 'human';
-      const cls = [
-        isP0      ? 'p0'         : '',
-        fromHuman ? 'from-human' : 'from-agent',
-      ].filter(Boolean).join(' ');
-      const t = new Date(m.created_at).toLocaleTimeString();
-      const sender = fromHuman
-        ? `<span style="color:var(--accent);font-weight:700;">you</span>`
-        : `<span style="color:var(--idle);font-weight:700;">${esc(m.from_id)}</span>`;
-      const recipient = fromHuman
-        ? `<span style="color:var(--muted);">→ ${esc(m.to_id)}</span>`
-        : `<span style="color:var(--muted);">→ ${esc(m.to_id)}</span>`;
-      const priorityBadge = isP0
-        ? `<span style="color:var(--p0);font-weight:700;font-size:10px;">P0</span>`
-        : '';
+      const cls = [isP0 ? 'p0' : '', fromHuman ? 'from-human' : 'from-agent'].filter(Boolean).join(' ');
+      const t = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const senderId = fromHuman ? 'human' : m.from_id;
+      const agent = agentStatuses.find(a => a.agent_id === senderId);
+      const senderLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}${agent.name && agent.name !== agent.agent_id ? ' ' + agent.name : ''}` : senderId);
+      const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
+      const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
       return `
         <div class="message-row ${cls}">
-          <div class="message-meta">
-            ${sender} ${recipient}
-            ${priorityBadge}
-            <span class="message-time">${t}</span>
+          <div class="message-avatar">${esc(avatarLabel)}</div>
+          <div class="message-body">
+            <div class="message-header">
+              ${p0badge}
+              <span class="message-time">${t}</span>
+            </div>
+            <div class="message-content">${esc(m.content)}</div>
           </div>
-          <div class="message-content">${esc(m.content)}</div>
         </div>
       `;
     }).join('');
+
+    // Append current status at the bottom of the chat
+    if (selectedAgent) {
+      const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[selectedAgent.state] ?? 'var(--muted)';
+      const task = selectedAgent.current_task ? esc(selectedAgent.current_task) : '';
+      messagesList.innerHTML += `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0 2px;opacity:0.6;">
+          <div style="flex:1;height:1px;background:var(--border);"></div>
+          <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);white-space:nowrap;">
+            <span style="width:5px;height:5px;border-radius:50%;background:${stateColor};"></span>
+            <span style="color:${stateColor};">${esc(selectedAgent.state)}</span>
+            ${task ? `<span>·</span><span>${task}</span>` : ''}
+          </span>
+          <div style="flex:1;height:1px;background:var(--border);"></div>
+        </div>
+      `;
+    }
 
     // Scroll to bottom (newest)
     messagesList.scrollTop = messagesList.scrollHeight;
