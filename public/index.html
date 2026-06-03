@@ -557,7 +557,8 @@ input, select, textarea {
 
     select option { background: var(--bg); }
 
-    #msg-input  { width: 100%; resize: none; height: 38px; max-height: 180px; overflow-y: auto; }
+    /* --msg-input-min: floor height (~4 rows); JS auto-resize grows from here up to max-height. */
+    #msg-input  { --msg-input-min: 92px; width: 100%; resize: vertical; min-height: var(--msg-input-min); height: var(--msg-input-min); max-height: 220px; overflow-y: auto; }
     #msg-input:disabled { opacity: 0.4; cursor: not-allowed; }
 
     button {
@@ -618,7 +619,7 @@ input, select, textarea {
       <div class="empty-state" id="empty-msgs">No messages yet.</div>
     </div>
     <div id="compose">
-      <textarea id="msg-input" placeholder="Select an agent… ⌘↵ send · ⌘⇧↵ urgent" disabled></textarea>
+      <textarea id="msg-input" rows="4" placeholder="Select an agent… ⌘↵ send · ⌘⇧↵ urgent" disabled></textarea>
     </div>
   </section>
 
@@ -976,10 +977,14 @@ input, select, textarea {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) { e.preventDefault(); send(5); }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.shiftKey)  { e.preventDefault(); send(0); }
   });
-  msgInput.addEventListener('input', () => {
-    msgInput.style.height = '38px';
-    msgInput.style.height = Math.min(msgInput.scrollHeight, 180) + 'px';
-  });
+  // Auto-resize floor/ceiling — floor matches the CSS --msg-input-min (~4 rows).
+  const MSG_INPUT_MIN = 92;
+  const MSG_INPUT_MAX = 220;
+  function autosizeMsgInput() {
+    msgInput.style.height = MSG_INPUT_MIN + 'px';
+    msgInput.style.height = Math.min(Math.max(msgInput.scrollHeight, MSG_INPUT_MIN), MSG_INPUT_MAX) + 'px';
+  }
+  msgInput.addEventListener('input', autosizeMsgInput);
 
   async function send(priority = 5) {
     if (!selectedAgentId) return;
@@ -994,7 +999,7 @@ input, select, textarea {
     });
 
     msgInput.value = '';
-    msgInput.style.height = '38px';
+    msgInput.style.height = MSG_INPUT_MIN + 'px';
   }
 
   // ── Utils ─────────────────────────────────────────────────────────────────

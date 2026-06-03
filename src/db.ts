@@ -44,7 +44,10 @@ export function openDb(dbPath: string): Database.Database {
       tmux_pane   TEXT,
       state       TEXT    NOT NULL CHECK(state IN ('idle', 'working', 'blocked', 'error')),
       current_task TEXT,
-      updated_at  INTEGER NOT NULL
+      updated_at  INTEGER NOT NULL,
+      -- Set when the agent's Claude session fires SessionEnd. A non-null value
+      -- retires the row: it stays for event history but drops off the live roster.
+      ended_at    INTEGER
     );
 
     -- Raw append-only Claude Code lifecycle event log (the audit trail + S-Deck feed).
@@ -86,6 +89,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE agent_status ADD COLUMN session_id TEXT`,
     `ALTER TABLE agent_status ADD COLUMN slot INTEGER`,
     `ALTER TABLE agent_status ADD COLUMN tmux_pane TEXT`,
+    `ALTER TABLE agent_status ADD COLUMN ended_at INTEGER`,
   ]) {
     try { database.exec(sql); } catch { /* column already exists */ }
   }
@@ -118,6 +122,7 @@ export interface AgentStatus {
   state: 'idle' | 'working' | 'blocked' | 'error';
   current_task: string | null;
   updated_at: number;
+  ended_at: number | null;
 }
 
 // An EventRecord as emitted by the inspector hook (inspector/types.ts shape,
@@ -188,8 +193,10 @@ const stmts = {
       updated_at   = excluded.updated_at
   `),
 
+  // Retired agents (sessions that fired SessionEnd → ended_at set) are kept for
+  // event history but hidden from the live roster.
   allStatuses: db.prepare<[], AgentStatus>(`
-    SELECT * FROM agent_status ORDER BY slot ASC
+    SELECT * FROM agent_status WHERE ended_at IS NULL ORDER BY slot ASC
   `),
 
   recentMessages: db.prepare<[number], Message>(`
@@ -268,7 +275,7 @@ export function claimAgentSlot(
         `SELECT agent_id, slot FROM agent_status WHERE agent_id = ?`
       ).get(agentId);
       if (existing) {
-        db.prepare(`UPDATE agent_status SET session_id = ?, tmux_pane = ?, state = 'idle', updated_at = ? WHERE agent_id = ?`)
+        db.prepare(`UPDATE agent_status SET session_id = ?, tmux_pane = ?, state = 'idle', ended_at = NULL, updated_at = ? WHERE agent_id = ?`)
           .run(sessionId, tmuxPane, Date.now(), agentId);
       } else {
         db.prepare(`INSERT INTO agent_status (agent_id, slot, session_id, tmux_pane, state, updated_at) VALUES (?, ?, ?, ?, 'idle', ?)`)
@@ -282,7 +289,7 @@ export function claimAgentSlot(
         `SELECT agent_id, slot FROM agent_status WHERE session_id = ?`
       ).get(sessionId);
       if (existing) {
-        db.prepare(`UPDATE agent_status SET tmux_pane = ?, updated_at = ? WHERE agent_id = ?`)
+        db.prepare(`UPDATE agent_status SET tmux_pane = ?, ended_at = NULL, updated_at = ? WHERE agent_id = ?`)
           .run(tmuxPane, Date.now(), existing.agent_id);
         return { agentId: existing.agent_id, slot: existing.slot };
       }
@@ -344,7 +351,7 @@ export function getIdleAgentsWithUnreadMessages(): AgentStatus[] {
     SELECT DISTINCT a.*
     FROM agent_status a
     JOIN messages m ON m.to_id = a.agent_id AND m.read_at IS NULL
-    WHERE a.state = 'idle'
+    WHERE a.state = 'idle' AND a.ended_at IS NULL
   `).all();
 }
 
@@ -355,7 +362,7 @@ export function getIdleAgentsWithUnreadSignature(): { agent_id: string; tmux_pan
     SELECT a.agent_id, a.tmux_pane, MAX(m.id) AS max_msg_id
     FROM agent_status a
     JOIN messages m ON m.to_id = a.agent_id AND m.read_at IS NULL
-    WHERE a.state = 'idle'
+    WHERE a.state = 'idle' AND a.ended_at IS NULL
     GROUP BY a.agent_id, a.tmux_pane
   `).all();
 }
@@ -472,6 +479,22 @@ export function setLivenessBySession(sessionId: string, state: 'idle' | 'working
      WHERE session_id = ?
        AND state IN ('idle', 'working')
   `).run(state, Date.now(), sessionId);
+}
+
+/**
+ * Retire an agent when its Claude session fires SessionEnd. The row is kept
+ * (events/tool_metrics FK-reference it and we want the history) but stamped with
+ * ended_at, which hides it from the live roster (getAllStatuses) and the
+ * idle-nudge pollers. No-op for an unknown session. A later claimAgentSlot reuse
+ * of the same session clears ended_at, so a genuinely restarted session reappears.
+ */
+export function markAgentEndedBySession(sessionId: string): void {
+  const now = Date.now();
+  db.prepare(`
+    UPDATE agent_status
+       SET ended_at = ?, updated_at = ?
+     WHERE session_id = ? AND ended_at IS NULL
+  `).run(now, now, sessionId);
 }
 
 export function getRecentEvents(limit = 200): EventRow[] {

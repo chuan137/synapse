@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { copyFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
@@ -28,11 +28,9 @@ function synapseInit(projectRoot: string, silent = false): boolean {
     copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'templates', f), join(synapseDir, f));
   }
 
-  // Copy the unread-message nudge script into .synapse/ (always refresh).
-  // The event/guard hooks are CLI subcommands (`synapse hook …`), not copied files.
-  const hookDest = join(synapseDir, 'synapse-hook.sh');
-  copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'scripts', 'synapse-hook.sh'), hookDest);
-  chmodSync(hookDest, 0o755);
+  // Unread messages are surfaced by the dashboard poller (see src/dashboard.ts),
+  // which nudges idle agents over tmux. The event/guard hooks are CLI subcommands
+  // (`synapse hook …`), not copied files.
 
   // Patch .gitignore
   const gitignorePath = join(projectRoot, '.gitignore');
@@ -49,6 +47,23 @@ function synapseInit(projectRoot: string, silent = false): boolean {
     writeFileSync(claudeMd, claudeContent + synapseBlock, 'utf8');
   }
 
+  // Register the synapse-bus MCP server in .mcp.json (idempotent).
+  // This is what exposes the mcp__synapse-bus__* tools to agents in this project.
+  const mcpConfigPath = join(projectRoot, '.mcp.json');
+  const mcpConfig = existsSync(mcpConfigPath)
+    ? JSON.parse(readFileSync(mcpConfigPath, 'utf8'))
+    : {};
+  const servers = mcpConfig.mcpServers ?? (mcpConfig.mcpServers = {});
+  if (!servers['synapse-bus']) {
+    servers['synapse-bus'] = {
+      type: 'stdio',
+      command: 'synapse',
+      args: ['mcp'],
+      env: {},
+    };
+    writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + '\n', 'utf8');
+  }
+
   // Register Synapse hooks in .claude/settings.json (idempotent).
   const claudeDir = join(projectRoot, '.claude');
   mkdirSync(claudeDir, { recursive: true });
@@ -60,7 +75,6 @@ function synapseInit(projectRoot: string, silent = false): boolean {
 
   // Hooks invoke the `synapse` CLI directly — no paths, no copied files. Assumes
   // `synapse` is on PATH (npm link / global install), which the project requires.
-  const nudgeCmd = `bash .synapse/synapse-hook.sh`;
   const guardCmd = `synapse hook guard`;
   const eventCmd = (type: string) => `synapse hook event ${type}`;
 
@@ -68,7 +82,6 @@ function synapseInit(projectRoot: string, silent = false): boolean {
   const desired: [string, string | null, string][] = [
     ['PreToolUse',       '.*', guardCmd],          // approval lock (workers only) runs first
     ['PreToolUse',       '.*', eventCmd('PreToolUse')],
-    ['PostToolUse',      '',   nudgeCmd],           // unread-message nudge
     ['PostToolUse',      '',   eventCmd('PostToolUse')],
     ['UserPromptSubmit', null, eventCmd('UserPromptSubmit')],
     ['SubagentStart',    '.*', eventCmd('SubagentStart')],

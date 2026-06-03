@@ -12,7 +12,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { ingestEvent, setLivenessBySession } from '../db.js';
+import { ingestEvent, setLivenessBySession, markAgentEndedBySession } from '../db.js';
 
 const MAX_LEN = 500;
 
@@ -40,15 +40,21 @@ export async function runEventHook(hookType: string | undefined): Promise<void> 
   }
 
   // Event-driven liveness: the hook owns idle/working; it never overwrites a
-  // self-reported blocked/error (see setLivenessBySession).
+  // self-reported blocked/error (see setLivenessBySession). SessionEnd is
+  // terminal — it retires the agent (markAgentEndedBySession) so a dead session
+  // stops showing on the live roster, rather than lingering as a phantom 'idle'.
   const sessionId: string | undefined = payload.session_id;
   if (sessionId) {
-    const live =
-      (hookType === 'PreToolUse' || hookType === 'UserPromptSubmit' || hookType === 'SubagentStart') ? 'working'
-      : (hookType === 'Stop' || hookType === 'SessionEnd') ? 'idle'
-      : null;
-    if (live) {
-      try { setLivenessBySession(sessionId, live as 'idle' | 'working'); } catch { /* telemetry must not block */ }
+    if (hookType === 'SessionEnd') {
+      try { markAgentEndedBySession(sessionId); } catch { /* telemetry must not block */ }
+    } else {
+      const live =
+        (hookType === 'PreToolUse' || hookType === 'UserPromptSubmit' || hookType === 'SubagentStart') ? 'working'
+        : (hookType === 'Stop') ? 'idle'
+        : null;
+      if (live) {
+        try { setLivenessBySession(sessionId, live as 'idle' | 'working'); } catch { /* telemetry must not block */ }
+      }
     }
   }
 
