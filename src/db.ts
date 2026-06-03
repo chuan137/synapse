@@ -133,7 +133,6 @@ export function claimAgentSlot(
         `SELECT agent_id, slot FROM agent_status WHERE session_id = ?`
       ).get(sessionId);
       if (existing) {
-        // Update tmux_pane in case pane changed after reconnect
         db.prepare(`UPDATE agent_status SET tmux_pane = ?, updated_at = ? WHERE agent_id = ?`)
           .run(tmuxPane, Date.now(), existing.agent_id);
         return { agentId: existing.agent_id, slot: existing.slot };
@@ -147,6 +146,12 @@ export function claimAgentSlot(
       .run(agentId, next, sessionId, tmuxPane, Date.now());
     return { agentId, slot: next };
   })();
+}
+
+export function getLatestAgent(): AgentStatus | null {
+  return db.prepare<[], AgentStatus>(
+    `SELECT * FROM agent_status ORDER BY slot DESC LIMIT 1`
+  ).get() ?? null;
 }
 
 export function getTmuxPane(agentId: string): string | null {

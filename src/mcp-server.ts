@@ -7,7 +7,8 @@ import {
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot } from './db.js';
+import { execSync, spawnSync } from 'child_process';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent } from './db.js';
 
 // ── Agent identity ─────────────────────────────────────────────────────────
 
@@ -38,7 +39,6 @@ function saveSettings(patch: Partial<Settings>): void {
 const settings = loadSettings();
 const SESSION_ID = process.env.CLAUDE_CODE_SESSION_ID ?? null;
 const TMUX_PANE  = process.env.TMUX_PANE ?? null;
-// Reuse existing slot if same Claude session restarts MCP; otherwise claim new.
 const { agentId: AGENT_ID } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE);
 let agentName = settings.name ?? '';
 
@@ -116,6 +116,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['state'],
       },
     },
+    {
+      name: 'spawn_agent',
+      description:
+        'Spawn a new Claude agent in a tmux window to work on a task. ' +
+        'The agent will register itself in Synapse and you can message it via its returned agent_id. ' +
+        'Use this to parallelize work across multiple agents.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task: {
+            type: 'string',
+            description: 'The task instructions to give the new agent. Be specific — this is its entire context.',
+          },
+          name: {
+            type: 'string',
+            description: 'Short human-readable name for this agent, e.g. "backend-reviewer".',
+          },
+        },
+        required: ['task'],
+      },
+    },
   ],
 }));
 
@@ -188,6 +209,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: 'text',
           text: `Status updated: ${state}${current_task ? ` — ${current_task}` : ''}`,
+        },
+      ],
+    };
+  }
+
+  if (name === 'spawn_agent') {
+    const { task, name: workerName } = args as { task: string; name?: string };
+
+    const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
+    const slotsBefore = getLatestAgent()?.slot ?? -1;
+    const windowName = workerName ?? `worker`;
+    const escapedTask = task.replace(/'/g, `'\\''`);
+    const escapedName = (workerName ?? '').replace(/'/g, `'\\''`);
+
+    execSync(
+      `tmux new-window -d -n '${windowName}' ` +
+      `'SYNAPSE_DB_PATH=${dbPath} synapse run --role worker --task '\\''${escapedTask}'\\'`
+    );
+
+    // Poll until the worker claims its slot (max 10s)
+    let worker = null;
+    for (let i = 0; i < 20; i++) {
+      spawnSync('sleep', ['0.5']);
+      const latest = getLatestAgent();
+      if (latest && latest.slot > slotsBefore) { worker = latest; break; }
+    }
+
+    if (!worker) {
+      return { content: [{ type: 'text', text: `Worker spawned in tmux window "${windowName}" but has not registered yet. Check S-Deck.` }] };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Spawned agent ${worker.agent_id} (slot :${worker.slot}) in tmux window "${windowName}". ` +
+                `Send it messages using to_id = "${worker.agent_id}".`,
         },
       ],
     };
