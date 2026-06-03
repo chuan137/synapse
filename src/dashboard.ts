@@ -14,6 +14,7 @@ import {
   getRecentEvents,
   getAllToolMetrics,
   purgeStaleAgents,
+  updateAgentConfig,
   AgentStatus,
   Message,
   ApprovalRequest,
@@ -210,6 +211,18 @@ app.post('/api/messages', (req: Request, res: Response) => {
 app.post('/api/agents/purge', (_req: Request, res: Response) => {
   const count = purgeStaleAgents();
   res.json({ ok: true, purged: count });
+});
+
+// Update agent config (name, model, effort) from the dashboard
+app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId);
+  const { name, model, effort } = req.body as { name?: string | null; model?: string | null; effort?: string | null };
+  const fields: { name?: string | null; model?: string | null; effort?: string | null } = {};
+  if ('name'   in req.body) fields.name   = name   || null;
+  if ('model'  in req.body) fields.model  = model  || null;
+  if ('effort' in req.body) fields.effort = effort || null;
+  updateAgentConfig(agentId, fields);
+  res.json({ ok: true });
 });
 
 // SSE stream
