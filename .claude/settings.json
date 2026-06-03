@@ -25,15 +25,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .synapse/synapse-hook.sh"
-          }
-        ],
-        "matcher": ""
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
             "command": "synapse hook event PostToolUse"
           }
         ],
