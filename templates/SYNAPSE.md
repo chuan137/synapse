@@ -30,6 +30,8 @@ Match priority to the request (P0 question → P0 reply). Mirror the answer in t
 Call `update_status` whenever your state changes and at the end of every turn.
 States: `idle` · `working` · `blocked` · `error`
 
+`current_task` is task text only — describe **what you are doing**, not your state. The deck already renders the state badge next to it, so prefixing the task with `"Idle — …"` or `"Working on …"` produces a duplicated word like `idle · Idle — …`. Write `"split working-tree changes into 5 commits"`, not `"Idle — split working-tree changes into 5 commits"`.
+
 **Rule 3 — Announce milestones on the deck**
 The operator watches the deck, not your scratchpad. The moment one of these happens, `send_message(to_id="human", priority=5, content="<TAG> …")` — one line, before you move on:
 
