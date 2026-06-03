@@ -203,6 +203,14 @@ const stmts = {
     SELECT * FROM messages ORDER BY created_at DESC LIMIT ?
   `),
 
+  agentHistory: db.prepare<[string, string, number], Message>(`
+    SELECT * FROM (
+      SELECT * FROM messages
+      WHERE to_id = ? OR from_id = ?
+      ORDER BY created_at DESC LIMIT ?
+    ) ORDER BY created_at ASC
+  `),
+
   // Resolve a Claude session_id to a known Synapse agent (the join key).
   agentBySession: db.prepare<[string], { agent_id: string; slot: number | null }>(`
     SELECT agent_id, slot FROM agent_status WHERE session_id = ?
@@ -405,6 +413,10 @@ export function getAllStatuses(): AgentStatus[] {
 
 export function getRecentMessages(limit = 100): Message[] {
   return stmts.recentMessages.all(limit);
+}
+
+export function getAgentHistory(agentId: string, limit = 10): Message[] {
+  return stmts.agentHistory.all(agentId, agentId, limit);
 }
 
 /** Resolve a Claude session_id to its Synapse agent (id + slot), or null if unknown. */

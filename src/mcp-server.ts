@@ -9,7 +9,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
 import { execSync, spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval, getAgentHistory } from './db.js';
 
 // ── Agent identity ─────────────────────────────────────────────────────────
 
@@ -171,6 +171,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['question'],
       },
     },
+    {
+      name: 'get_history',
+      description:
+        'Retrieve recent message history for this agent (both sent and received). ' +
+        'Use this to recall context from earlier in the session when messages have already been read.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: 'Maximum number of messages to return (default: 10, max: 50).',
+          },
+        },
+        required: [],
+      },
+    },
   ],
 }));
 
@@ -326,6 +342,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return {
       content: [{ type: 'text', text: 'Approval request timed out after 10 minutes. Treat as rejected.' }],
     };
+  }
+
+  if (name === 'get_history') {
+    const { limit = 10 } = args as { limit?: number };
+    const clampedLimit = Math.min(Math.max(1, limit), 50);
+    const msgs = getAgentHistory(AGENT_ID, clampedLimit);
+
+    if (msgs.length === 0) {
+      return { content: [{ type: 'text', text: 'No message history found.' }] };
+    }
+
+    const formatted = msgs
+      .map((m) => {
+        const ts = new Date(m.created_at).toISOString();
+        const direction = m.from_id === AGENT_ID ? `→ ${m.to_id}` : `← ${m.from_id}`;
+        const label = m.priority === 0 ? '[P0]' : '[P5]';
+        const readMark = m.read_at ? '' : ' [unread]';
+        return `${label} ${direction} at ${ts}${readMark}\n${m.content}`;
+      })
+      .join('\n\n---\n\n');
+
+    return { content: [{ type: 'text', text: `${msgs.length} message(s):\n\n${formatted}` }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);
