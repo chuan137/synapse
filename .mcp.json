@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "synapse-bus": {
+      "type": "stdio",
+      "command": "synapse",
+      "args": [
+        "mcp"
+      ],
+      "env": {}
+    }
+  }
+}
