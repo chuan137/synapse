@@ -797,7 +797,7 @@ input, select, textarea {
       const hasTmux = !!a.tmux_pane;
       const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[a.state] ?? 'var(--muted)';
       return `
-        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}">
+        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to select · double-click to focus tmux pane">
           <div class="agent-card-row">
             <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;">
@@ -814,7 +814,7 @@ input, select, textarea {
       `;
     }).join('');
 
-    // Wire click handlers
+    // Wire click / dblclick handlers
     agentsList.querySelectorAll('.agent-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.ping-btn')) return;
@@ -822,6 +822,13 @@ input, select, textarea {
         renderAgents();
         renderMessages();
         renderActivity();
+      });
+      card.addEventListener('dblclick', async (e) => {
+        if (e.target.closest('.ping-btn')) return;
+        const agentId = card.dataset.agentId;
+        await fetch(`/api/focus/${encodeURIComponent(agentId)}`, { method: 'POST' });
+        card.style.boxShadow = 'inset 3px 0 0 var(--accent), 0 0 0 1px var(--accent)';
+        setTimeout(() => { card.style.boxShadow = ''; }, 400);
       });
     });
 

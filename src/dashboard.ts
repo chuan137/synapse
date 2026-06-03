@@ -126,6 +126,44 @@ app.post('/api/ping/:agentId', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+/** Try to raise the terminal window on macOS using AppleScript. Best-effort. */
+function raiseTerminal(): void {
+  const TERMINALS = ['iTerm2', 'Terminal', 'Ghostty', 'Warp', 'Alacritty', 'kitty'];
+  let running: string;
+  try {
+    running = execSync(
+      `osascript -e 'tell application "System Events" to get name of every process whose background only is false'`,
+      { stdio: 'pipe' }
+    ).toString();
+  } catch { return; }
+  for (const app of TERMINALS) {
+    if (!running.includes(app)) continue;
+    try {
+      execSync(`osascript -e 'tell application "${app}" to activate'`, { stdio: 'pipe' });
+      process.stderr.write(`[Synapse] raised ${app}\n`);
+    } catch { /* AppleScript failed, not fatal */ }
+    return;
+  }
+}
+
+app.post('/api/focus/:agentId', (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId);
+  const pane = getTmuxPane(agentId);
+  process.stderr.write(`[Synapse] focus ${agentId} → pane=${pane}\n`);
+  if (!pane) { res.status(404).json({ error: 'No tmux pane for this agent' }); return; }
+  try {
+    // select-pane moves focus within the session; switch-client then jumps any
+    // attached terminal clients to that window so the user sees the switch.
+    execSync(`tmux select-pane -t ${pane} && tmux switch-client -t ${pane}`);
+    raiseTerminal();
+    process.stderr.write(`[Synapse] focus OK\n`);
+    res.json({ ok: true });
+  } catch (e: unknown) {
+    process.stderr.write(`[Synapse] focus FAILED: ${e}\n`);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 // Initial state snapshot
 app.get('/api/state', (_req: Request, res: Response) => {
   res.json({
