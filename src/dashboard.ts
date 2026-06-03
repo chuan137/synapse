@@ -8,8 +8,11 @@ import {
   getRecentMessages,
   sendMessage,
   getTmuxPane,
+  getPendingApprovals,
+  resolveApproval,
   AgentStatus,
   Message,
+  ApprovalRequest,
 } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,20 +41,24 @@ function broadcast(data: object) {
 }
 
 // Poll DB every 500ms and push state to all connected dashboards
-let lastStatuses = '';
-let lastMessages = '';
+let lastStatuses  = '';
+let lastMessages  = '';
+let lastApprovals = '';
 
 setInterval(() => {
-  const statuses = getAllStatuses();
-  const messages = getRecentMessages(200);
+  const statuses  = getAllStatuses();
+  const messages  = getRecentMessages(200);
+  const approvals = getPendingApprovals();
 
-  const statusStr = JSON.stringify(statuses);
-  const msgStr = JSON.stringify(messages.map((m) => m.id));
+  const statusStr   = JSON.stringify(statuses);
+  const msgStr      = JSON.stringify(messages.map((m) => m.id));
+  const approvalStr = JSON.stringify(approvals.map((a) => a.id));
 
-  if (statusStr !== lastStatuses || msgStr !== lastMessages) {
-    lastStatuses = statusStr;
-    lastMessages = msgStr;
-    broadcast({ statuses, messages });
+  if (statusStr !== lastStatuses || msgStr !== lastMessages || approvalStr !== lastApprovals) {
+    lastStatuses  = statusStr;
+    lastMessages  = msgStr;
+    lastApprovals = approvalStr;
+    broadcast({ statuses, messages, approvals });
   }
 }, 500);
 
@@ -82,7 +89,20 @@ app.get('/api/state', (_req: Request, res: Response) => {
   res.json({
     statuses: getAllStatuses(),
     messages: getRecentMessages(200),
+    approvals: getPendingApprovals(),
   });
+});
+
+// Resolve an approval request
+app.post('/api/approvals/:id/resolve', (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id), 10);
+  const { status, comment } = req.body as { status: 'approved' | 'rejected'; comment?: string };
+  if (!['approved', 'rejected'].includes(status)) {
+    res.status(400).json({ error: 'status must be approved or rejected' });
+    return;
+  }
+  resolveApproval(id, status, comment ?? null);
+  res.json({ ok: true });
 });
 
 // Operator sends a message to an agent
@@ -115,6 +135,7 @@ app.get('/events', (req: Request, res: Response) => {
   const initial = JSON.stringify({
     statuses: getAllStatuses(),
     messages: getRecentMessages(200),
+    approvals: getPendingApprovals(),
   });
   res.write(`data: ${initial}\n\n`);
 

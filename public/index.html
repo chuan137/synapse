@@ -83,9 +83,90 @@
     main {
       display: grid;
       grid-template-columns: 320px 1fr;
+      grid-template-rows: auto 1fr;
       gap: 0;
       flex: 1;
       min-height: 0;
+    }
+
+    #approvals-panel { grid-column: 1 / -1; }
+
+    /* ── Approvals ── */
+    #approvals-panel {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      background: #1a1208;
+    }
+
+    #approvals-panel.visible { display: flex; }
+
+    .approval-card {
+      background: #2a1e08;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .approval-question {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fcd34d;
+    }
+
+    .approval-context {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
+
+    .approval-meta {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .approval-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .approval-comment {
+      flex: 1;
+      font-size: 11px;
+      height: 28px;
+      padding: 4px 8px;
+    }
+
+    .btn-approve {
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-reject {
+      background: #dc2626;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
     }
 
     /* ── Agents panel ── */
@@ -309,6 +390,10 @@ input, select, textarea {
 </header>
 
 <main>
+  <!-- Approvals -->
+  <div id="approvals-panel">
+  </div>
+
   <!-- Agents -->
   <section id="agents-panel">
     <div class="panel-header">Agents</div>
@@ -333,6 +418,7 @@ input, select, textarea {
   // ── State ────────────────────────────────────────────────────────────────
   let agentStatuses    = [];
   let allMessages      = [];
+  let pendingApprovals = [];
   let selectedAgentId  = null;
 
   // ── Project info ──────────────────────────────────────────────────────────
@@ -356,11 +442,13 @@ input, select, textarea {
     };
 
     es.onmessage = (e) => {
-      const { statuses, messages } = JSON.parse(e.data);
-      agentStatuses = statuses;
-      allMessages   = messages;
+      const { statuses, messages, approvals } = JSON.parse(e.data);
+      agentStatuses    = statuses;
+      allMessages      = messages;
+      pendingApprovals = approvals ?? [];
       renderAgents();
       renderMessages();
+      renderApprovals();
     };
 
     es.onerror = () => {
@@ -373,6 +461,43 @@ input, select, textarea {
   }
 
   connect();
+
+  // ── Render approvals ─────────────────────────────────────────────────────
+  const approvalsPanel = document.getElementById('approvals-panel');
+
+  function renderApprovals() {
+    if (pendingApprovals.length === 0) {
+      approvalsPanel.classList.remove('visible');
+      approvalsPanel.innerHTML = '';
+      return;
+    }
+    approvalsPanel.classList.add('visible');
+    approvalsPanel.innerHTML = pendingApprovals.map(a => `
+      <div class="approval-card" data-approval-id="${a.id}">
+        <div class="approval-question">⚠ ${esc(a.question)}</div>
+        ${a.context ? `<div class="approval-context">${esc(a.context)}</div>` : ''}
+        <div class="approval-meta">from ${esc(a.agent_id)} · ${new Date(a.created_at).toLocaleTimeString()}</div>
+        <div class="approval-actions">
+          <input class="approval-comment" type="text" placeholder="Optional comment…" />
+          <button class="btn-approve" data-id="${a.id}">Approve</button>
+          <button class="btn-reject" data-id="${a.id}">Reject</button>
+        </div>
+      </div>
+    `).join('');
+
+    approvalsPanel.querySelectorAll('.btn-approve, .btn-reject').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const status = btn.classList.contains('btn-approve') ? 'approved' : 'rejected';
+        const comment = btn.closest('.approval-card').querySelector('.approval-comment').value.trim() || null;
+        await fetch(`/api/approvals/${id}/resolve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status, comment }),
+        });
+      });
+    });
+  }
 
   // ── Render agents ─────────────────────────────────────────────────────────
   const agentsList = document.getElementById('agents-list');

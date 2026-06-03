@@ -15,6 +15,17 @@ export function openDb(dbPath: string): Database.Database {
   database.pragma('foreign_keys = ON');
 
   database.exec(`
+    CREATE TABLE IF NOT EXISTS approval_requests (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id    TEXT    NOT NULL,
+      question    TEXT    NOT NULL,
+      context     TEXT,
+      status      TEXT    NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+      comment     TEXT,
+      created_at  INTEGER NOT NULL,
+      resolved_at INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       from_id     TEXT    NOT NULL,
@@ -146,6 +157,42 @@ export function claimAgentSlot(
       .run(agentId, next, sessionId, tmuxPane, Date.now());
     return { agentId, slot: next };
   })();
+}
+
+export interface ApprovalRequest {
+  id: number;
+  agent_id: string;
+  question: string;
+  context: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  comment: string | null;
+  created_at: number;
+  resolved_at: number | null;
+}
+
+export function createApprovalRequest(agentId: string, question: string, context: string | null): number {
+  const result = db.prepare(
+    `INSERT INTO approval_requests (agent_id, question, context, created_at) VALUES (?, ?, ?, ?)`
+  ).run(agentId, question, context, Date.now());
+  return result.lastInsertRowid as number;
+}
+
+export function pollApproval(id: number): ApprovalRequest | null {
+  return db.prepare<[number], ApprovalRequest>(
+    `SELECT * FROM approval_requests WHERE id = ?`
+  ).get(id) ?? null;
+}
+
+export function resolveApproval(id: number, status: 'approved' | 'rejected', comment: string | null): void {
+  db.prepare(
+    `UPDATE approval_requests SET status = ?, comment = ?, resolved_at = ? WHERE id = ?`
+  ).run(status, comment, Date.now(), id);
+}
+
+export function getPendingApprovals(): ApprovalRequest[] {
+  return db.prepare<[], ApprovalRequest>(
+    `SELECT * FROM approval_requests WHERE status = 'pending' ORDER BY created_at ASC`
+  ).all();
 }
 
 export function getLatestAgent(): AgentStatus | null {

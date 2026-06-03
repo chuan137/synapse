@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { execSync, spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval } from './db.js';
 
 // ── Agent identity ─────────────────────────────────────────────────────────
 
@@ -137,6 +137,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['task'],
       },
     },
+    {
+      name: 'request_approval',
+      description:
+        'Ask the human operator for approval before proceeding. ' +
+        'This blocks until the operator approves or rejects via S-Deck. ' +
+        'Use for destructive actions, irreversible changes, or when you genuinely cannot decide.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description: 'The yes/no question for the operator. Be specific.',
+          },
+          context: {
+            type: 'string',
+            description: 'Additional context to help the operator decide.',
+          },
+        },
+        required: ['question'],
+      },
+    },
   ],
 }));
 
@@ -248,6 +269,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 `Send it messages using to_id = "${worker.agent_id}".`,
         },
       ],
+    };
+  }
+
+  if (name === 'request_approval') {
+    const { question, context } = args as { question: string; context?: string };
+
+    const id = createApprovalRequest(AGENT_ID, question, context ?? null);
+
+    // Notify operator via message
+    sendMessage(AGENT_ID, 'human', `[Approval needed] ${question}${context ? `\n\nContext: ${context}` : ''}`, 0);
+
+    // Poll until resolved (max 10 min)
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      spawnSync('sleep', ['3']);
+      const req = pollApproval(id);
+      if (req && req.status !== 'pending') {
+        const approved = req.status === 'approved';
+        return {
+          content: [{
+            type: 'text',
+            text: `${approved ? '✓ Approved' : '✗ Rejected'}${req.comment ? `: ${req.comment}` : ''}`
+          }],
+        };
+      }
+    }
+
+    return {
+      content: [{ type: 'text', text: 'Approval request timed out after 10 minutes. Treat as rejected.' }],
     };
   }
 
