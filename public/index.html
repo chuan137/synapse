@@ -352,7 +352,7 @@
     .ping-btn:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
     .ping-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-    .focus-btn {
+    .focus-btn, .cfg-btn {
       background: none;
       border: 1px solid var(--border);
       color: var(--muted);
@@ -364,7 +364,7 @@
       transition: border-color 0.15s, color 0.15s;
       white-space: nowrap;
     }
-    .focus-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .focus-btn:hover, .cfg-btn:hover { border-color: var(--accent); color: var(--accent); }
     .focus-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
     /* ── Agent config modal ── */
@@ -889,11 +889,12 @@ input, select, textarea {
       const hasTmux = !!a.tmux_pane;
       const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[a.state] ?? 'var(--muted)';
       return `
-        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to configure agent">
+        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to select">
           <div class="agent-card-row">
             <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;">
               ${stale ? '<span class="stale-badge">stale</span>' : ''}
+              <button class="cfg-btn" data-cfg-id="${esc(a.agent_id)}" title="Configure agent">cfg</button>
               <button class="focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
               <button class="ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
             </div>
@@ -907,20 +908,22 @@ input, select, textarea {
       `;
     }).join('');
 
-    // Wire card click → open config dialog; button clicks handled separately
+    // Wire card click → select agent (original behavior)
     agentsList.querySelectorAll('.agent-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.ping-btn') || e.target.closest('.focus-btn')) return;
-        // Select the agent for the messages panel
+        if (e.target.closest('.ping-btn') || e.target.closest('.focus-btn') || e.target.closest('.cfg-btn')) return;
         selectedAgentId = card.dataset.agentId;
+        renderAgents();
         renderMessages();
         renderActivity();
-        // Re-render to update selected state without disturbing event listeners
-        agentsList.querySelectorAll('.agent-card').forEach(c => {
-          c.classList.toggle('selected', c.dataset.agentId === selectedAgentId);
-        });
-        // Open config dialog
-        openAgentConfigDialog(card.dataset.agentId);
+      });
+    });
+
+    // Wire cfg button → open config dialog
+    agentsList.querySelectorAll('.cfg-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAgentConfigDialog(btn.dataset.cfgId);
       });
     });
 
