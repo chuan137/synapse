@@ -352,6 +352,98 @@
     .ping-btn:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
     .ping-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
+    .focus-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .focus-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .focus-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Agent config modal ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-backdrop.hidden { display: none; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+      width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0;
+    }
+    .modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .modal-field label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+    .modal-field input,
+    .modal-field select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .modal-field input:focus,
+    .modal-field select:focus { border-color: var(--accent); }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .modal-actions button {
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .modal-actions button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .modal-actions button:hover:not(.primary) { border-color: var(--accent); color: var(--accent); }
+    .modal-actions button.primary:hover { opacity: 0.88; }
+
     .agent-name {
       font-size: 13px;
       font-weight: 700;
@@ -797,11 +889,12 @@ input, select, textarea {
       const hasTmux = !!a.tmux_pane;
       const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[a.state] ?? 'var(--muted)';
       return `
-        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to select · double-click to focus tmux pane">
+        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to configure agent">
           <div class="agent-card-row">
             <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;">
               ${stale ? '<span class="stale-badge">stale</span>' : ''}
+              <button class="focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
               <button class="ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
             </div>
           </div>
@@ -814,21 +907,36 @@ input, select, textarea {
       `;
     }).join('');
 
-    // Wire click / dblclick handlers
+    // Wire card click → open config dialog; button clicks handled separately
     agentsList.querySelectorAll('.agent-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.ping-btn')) return;
+        if (e.target.closest('.ping-btn') || e.target.closest('.focus-btn')) return;
+        // Select the agent for the messages panel
         selectedAgentId = card.dataset.agentId;
-        renderAgents();
         renderMessages();
         renderActivity();
+        // Re-render to update selected state without disturbing event listeners
+        agentsList.querySelectorAll('.agent-card').forEach(c => {
+          c.classList.toggle('selected', c.dataset.agentId === selectedAgentId);
+        });
+        // Open config dialog
+        openAgentConfigDialog(card.dataset.agentId);
       });
-      card.addEventListener('dblclick', async (e) => {
-        if (e.target.closest('.ping-btn')) return;
-        const agentId = card.dataset.agentId;
+    });
+
+    agentsList.querySelectorAll('.focus-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const agentId = btn.dataset.focusId;
+        const card = btn.closest('.agent-card');
+        btn.disabled = true;
+        btn.textContent = '…';
         await fetch(`/api/focus/${encodeURIComponent(agentId)}`, { method: 'POST' });
-        card.style.boxShadow = 'inset 3px 0 0 var(--accent), 0 0 0 1px var(--accent)';
-        setTimeout(() => { card.style.boxShadow = ''; }, 400);
+        if (card) {
+          card.style.boxShadow = 'inset 3px 0 0 var(--accent), 0 0 0 1px var(--accent)';
+          setTimeout(() => { card.style.boxShadow = ''; }, 400);
+        }
+        setTimeout(() => { btn.disabled = false; btn.textContent = 'focus'; }, 1000);
       });
     });
 
@@ -1036,6 +1144,99 @@ input, select, textarea {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+
+  // ── Agent config dialog ────────────────────────────────────────────────────
+  const configBackdrop = document.getElementById('agent-config-backdrop');
+  const modalSlot      = document.getElementById('modal-agent-slot');
+  const modalName      = document.getElementById('modal-name');
+  const modalModel     = document.getElementById('modal-model');
+  const modalEffort    = document.getElementById('modal-effort');
+  const modalCancel    = document.getElementById('modal-cancel');
+  const modalSave      = document.getElementById('modal-save');
+
+  let configAgentId = null;
+
+  function openAgentConfigDialog(agentId) {
+    const agent = agentStatuses.find(a => a.agent_id === agentId);
+    if (!agent) return;
+    configAgentId = agentId;
+    modalSlot.textContent = `:${agent.slot}`;
+    modalName.value   = agent.name   && agent.name !== agentId ? agent.name  : '';
+    modalModel.value  = agent.model  ?? '';
+    modalEffort.value = agent.effort ?? '';
+    configBackdrop.classList.remove('hidden');
+    modalName.focus();
+  }
+
+  function closeConfigDialog() {
+    configBackdrop.classList.add('hidden');
+    configAgentId = null;
+  }
+
+  modalCancel.addEventListener('click', closeConfigDialog);
+  configBackdrop.addEventListener('click', (e) => { if (e.target === configBackdrop) closeConfigDialog(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeConfigDialog(); });
+
+  modalSave.addEventListener('click', async () => {
+    if (!configAgentId) return;
+    const body = {
+      name:   modalName.value.trim()   || null,
+      model:  modalModel.value         || null,
+      effort: modalEffort.value        || null,
+    };
+    modalSave.disabled = true;
+    modalSave.textContent = '…';
+    await fetch(`/api/agents/${encodeURIComponent(configAgentId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    modalSave.disabled = false;
+    modalSave.textContent = 'Save';
+    const savedId = configAgentId;
+    closeConfigDialog();
+    // Reflect the update locally immediately (SSE will confirm later)
+    const agent = agentStatuses.find(a => a.agent_id === savedId);
+    if (agent) {
+      agent.name   = body.name;
+      agent.model  = body.model;
+      agent.effort = body.effort;
+    }
+    renderAgents();
+  });
 </script>
+
+<!-- Agent config modal -->
+<div id="agent-config-backdrop" class="modal-backdrop hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 id="modal-title">Configure Agent <span id="modal-agent-slot" style="color:var(--accent)"></span></h2>
+    <div class="modal-field">
+      <label for="modal-name">Display Name</label>
+      <input id="modal-name" type="text" placeholder="e.g. backend-worker" autocomplete="off" />
+    </div>
+    <div class="modal-field">
+      <label for="modal-model">Model</label>
+      <select id="modal-model">
+        <option value="">— inherit default —</option>
+        <option value="claude-opus-4-8">Opus 4.8</option>
+        <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+        <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label for="modal-effort">Effort</label>
+      <select id="modal-effort">
+        <option value="">— inherit default —</option>
+        <option value="low">Low</option>
+        <option value="normal">Normal</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button id="modal-cancel">Cancel</button>
+      <button id="modal-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

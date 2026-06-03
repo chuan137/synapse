@@ -86,6 +86,8 @@ export function openDb(dbPath: string): Database.Database {
   // Migrate existing tables — ignore errors if columns already exist
   for (const sql of [
     `ALTER TABLE agent_status ADD COLUMN name TEXT`,
+    `ALTER TABLE agent_status ADD COLUMN model TEXT`,
+    `ALTER TABLE agent_status ADD COLUMN effort TEXT`,
     `ALTER TABLE agent_status ADD COLUMN session_id TEXT`,
     `ALTER TABLE agent_status ADD COLUMN slot INTEGER`,
     `ALTER TABLE agent_status ADD COLUMN tmux_pane TEXT`,
@@ -117,6 +119,8 @@ export interface AgentStatus {
   agent_id: string;
   slot: number;
   name: string | null;
+  model: string | null;
+  effort: string | null;
   session_id: string | null;
   tmux_pane: string | null;
   state: 'idle' | 'working' | 'blocked' | 'error';
@@ -405,6 +409,19 @@ export function updateStatus(
   sessionId: string | null = null,
 ): void {
   stmts.upsertStatus.run(agentId, name, sessionId, state, currentTask, Date.now());
+}
+
+export function updateAgentConfig(
+  agentId: string,
+  fields: { name?: string | null; model?: string | null; effort?: string | null },
+): void {
+  const sets: string[] = [];
+  const params: Record<string, unknown> = { agentId };
+  if ('name'   in fields) { sets.push('name = :name');     params.name   = fields.name   ?? null; }
+  if ('model'  in fields) { sets.push('model = :model');   params.model  = fields.model  ?? null; }
+  if ('effort' in fields) { sets.push('effort = :effort'); params.effort = fields.effort ?? null; }
+  if (sets.length === 0) return;
+  db.prepare(`UPDATE agent_status SET ${sets.join(', ')} WHERE agent_id = :agentId`).run(params);
 }
 
 export function getAllStatuses(): AgentStatus[] {
