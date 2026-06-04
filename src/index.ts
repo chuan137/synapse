@@ -7,13 +7,30 @@ import { fileURLToPath } from 'url';
 import { execFileSync, execSync } from 'child_process';
 import { openDb } from './db.js';
 
-function buildSystemPrompt(role: 'orchestrator' | 'worker'): string {
+function buildSystemPrompt(role: string): string {
   const templatesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
   const base = readFileSync(join(templatesDir, 'SYNAPSE.md'), 'utf8');
-  const roleFile = role === 'orchestrator' ? 'SYNAPSE-orchestrator.md' : 'SYNAPSE-worker.md';
-  const roleInstructions = readFileSync(join(templatesDir, roleFile), 'utf8');
+
+  let roleInstructions: string;
+  let roleLabel: string;
+
+  if (role === 'orchestrator') {
+    roleInstructions = readFileSync(join(templatesDir, 'SYNAPSE-orchestrator.md'), 'utf8');
+    roleLabel = 'orchestrator';
+  } else if (role === 'worker') {
+    roleInstructions = readFileSync(join(templatesDir, 'SYNAPSE-worker.md'), 'utf8');
+    roleLabel = 'worker';
+  } else {
+    // Named worker role — base worker instructions + role-specific overlay
+    const workerBase = readFileSync(join(templatesDir, 'SYNAPSE-worker.md'), 'utf8');
+    const roleFile = join(templatesDir, 'roles', `${role}.md`);
+    const roleOverlay = existsSync(roleFile) ? '\n\n' + readFileSync(roleFile, 'utf8') : '';
+    roleInstructions = workerBase + roleOverlay;
+    roleLabel = 'worker';
+  }
+
   return base
-    .replace('{ROLE}', role)
+    .replace('{ROLE}', roleLabel)
     .replace('{ROLE_INSTRUCTIONS}', roleInstructions);
 }
 
@@ -169,7 +186,8 @@ program
   .option('--task <task>', 'Task prompt for worker agents')
   .option('--task-file <file>', 'File containing task prompt for worker agents')
   .action((options) => {
-    const role = options.role as 'orchestrator' | 'worker';
+    const role = options.role as string;
+    const isWorker = role !== 'orchestrator';
     const systemPrompt = buildSystemPrompt(role);
     const cwd = process.cwd();
     if (options.slot !== undefined) {
@@ -201,7 +219,7 @@ program
     const claudeArgs = ['--append-system-prompt', systemPrompt];
     if (persistedModel)  claudeArgs.push('--model',  persistedModel);
     if (persistedEffort) claudeArgs.push('--effort', persistedEffort);
-    if (role === 'worker') {
+    if (isWorker) {
       claudeArgs.push('--dangerously-skip-permissions');
       claudeArgs.push('--add-dir', cwd);
       claudeArgs.push('--allowedTools', 'mcp__synapse-bus__read_messages,mcp__synapse-bus__send_message,mcp__synapse-bus__update_status,mcp__synapse-bus__spawn_agent,mcp__synapse-bus__request_approval,mcp__synapse-bus__get_history');

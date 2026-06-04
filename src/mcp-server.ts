@@ -142,6 +142,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Short human-readable name for this agent, e.g. "backend-reviewer".',
           },
+          role: {
+            type: 'string',
+            description: 'Worker role to load. Use "worker" for generic, or a named role like "code-reviewer". Named roles load templates/roles/<name>.md on top of the base worker instructions.',
+          },
           slot: {
             type: 'number',
             description: 'Optional slot number to assign to this agent. If omitted, the next available slot is used.',
@@ -263,11 +267,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'spawn_agent') {
-    const { task, name: workerName, slot: forcedSlot } = args as { task: string; name?: string; slot?: number };
+    const { task, name: workerName, role: workerRole = 'worker', slot: forcedSlot } = args as { task: string; name?: string; role?: string; slot?: number };
 
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     const slotsBefore = getLatestAgent()?.slot ?? -1;
-    const windowName = (workerName ?? 'worker').replace(/[^a-zA-Z0-9_-]/g, '-');
+    const windowName = (workerName ?? workerRole).replace(/[^a-zA-Z0-9_-]/g, '-');
 
     // Write task to a temp file to avoid shell quoting issues with complex prompts
     const tmpDir = mkdtempSync(join(tmpdir(), 'synapse-'));
@@ -282,7 +286,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       '#!/bin/sh',
       `cd ${JSON.stringify(projectDir)}`,
       `export SYNAPSE_DB_PATH=${JSON.stringify(dbPath)}`,
-      `synapse run --role worker${slotArg} --task-file ${JSON.stringify(taskFile)}`,
+      `synapse run --role ${JSON.stringify(workerRole)}${slotArg} --task-file ${JSON.stringify(taskFile)}`,
     ].join('\n') + '\n', 'utf8');
     chmodSync(launchScript, 0o755);
 
@@ -304,7 +308,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: 'text',
-          text: `Spawned agent ${worker.agent_id} (slot :${worker.slot}) in tmux window "${windowName}". ` +
+          text: `Spawned agent ${worker.agent_id} (slot :${worker.slot}, role: ${workerRole}) in tmux window "${windowName}". ` +
                 `Send it messages using to_id = "${worker.agent_id}".`,
         },
       ],
