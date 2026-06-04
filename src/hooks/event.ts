@@ -93,7 +93,9 @@ function emitDeterministicMilestones(hookType: string, sessionId: string, payloa
   const m = out.match(/\[[^\]]*\b([0-9a-f]{7,40})\]\s*(.+)/);
   if (!m) return;
   const [, hash, subject] = m;
-  postMilestoneOnce(sessionId, `✅ committed ${hash}: ${subject.trim()}`.slice(0, MAX_LEN));
+  // Take only the first line of the subject (git may print stats on subsequent lines).
+  const firstLine = subject.split(/\\n|\n/)[0].trim();
+  postMilestoneOnce(sessionId, `✅ committed ${hash}: ${firstLine}`.slice(0, MAX_LEN));
 }
 
 function buildRecord(type: string, payload: any) {

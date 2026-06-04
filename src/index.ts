@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { execFileSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { openDb } from './db.js';
 
 function buildSystemPrompt(role: 'orchestrator' | 'worker'): string {
@@ -242,12 +243,47 @@ program
   });
 
 program
-  .command('dash', { isDefault: true })
-  .description('Open the S-Deck dashboard for the current project')
+  .command('start', { isDefault: true })
+  .description('Start the S-Deck dashboard and launch an orchestrator (slot :0) if none is running')
   .option('-p, --port <number>', 'Dashboard port (0 = random free port)', '0')
   .action(async (options) => {
-    const isNew = synapseInit(process.cwd(), true);
-    if (isNew) process.stderr.write(`[Synapse] Initialized project at ${process.cwd()}\n`);
+    const cwd = process.cwd();
+    const isNew = synapseInit(cwd, true);
+    if (isNew) process.stderr.write(`[Synapse] Initialized project at ${cwd}\n`);
+
+    // Check if an orchestrator (slot 0) is already live in the DB
+    let hasOrchestrator = false;
+    try {
+      const dbPath = process.env.SYNAPSE_DB_PATH ?? join(cwd, '.synapse', 'synapse.db');
+      if (existsSync(dbPath)) {
+        const localDb = openDb(dbPath);
+        const row = localDb.prepare<[], { agent_id: string }>(
+          `SELECT agent_id FROM agent_status WHERE slot = 0 AND ended_at IS NULL LIMIT 1`
+        ).get();
+        localDb.close();
+        hasOrchestrator = row !== undefined;
+      }
+    } catch { /* DB not yet initialized — no orchestrator */ }
+
+    if (hasOrchestrator) {
+      process.stderr.write('[Synapse] Orchestrator (slot :0) already running — starting dashboard only.\n');
+    } else {
+      // Spawn the orchestrator in a new tmux pane
+      const dbPath = process.env.SYNAPSE_DB_PATH ?? join(cwd, '.synapse', 'synapse.db');
+      const tmpDir = mkdtempSync(join(tmpdir(), 'synapse-'));
+      const launchScript = join(tmpDir, 'launch.sh');
+      writeFileSync(launchScript, [
+        '#!/bin/sh',
+        `export SYNAPSE_DB_PATH=${JSON.stringify(dbPath)}`,
+        `synapse run --role orchestrator --slot 0`,
+      ].join('\n') + '\n', 'utf8');
+      chmodSync(launchScript, 0o755);
+
+      execSync(`tmux new-window -d -c ${JSON.stringify(cwd)} -n orchestrator ${JSON.stringify(launchScript)}`);
+      process.stderr.write('[Synapse] Launched orchestrator in tmux window "orchestrator" (slot :0).\n');
+    }
+
+    // Start the dashboard
     const { db } = await import('./db.js');
     const { startDashboard } = await import('./dashboard.js');
 
