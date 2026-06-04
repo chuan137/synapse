@@ -196,7 +196,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   if (name === 'read_messages') {
-    updateStatus(AGENT_ID, 'idle', null, agentName || null, null);
     const msgs = readMessages(AGENT_ID);
 
     const reminder = '\n\n[Synapse] Now call update_status to report your current state.';
@@ -224,7 +223,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'send_message') {
-    updateStatus(AGENT_ID, 'idle', null, agentName || null, null);
     const { to_id, content, priority = 5 } = args as {
       to_id: string;
       content: string;
