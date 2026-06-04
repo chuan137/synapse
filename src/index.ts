@@ -203,17 +203,15 @@ program
     if (role === 'worker') {
       claudeArgs.push('--print');
       claudeArgs.push('--dangerously-skip-permissions');
+      claudeArgs.push('--add-dir', cwd);
       claudeArgs.push('--allowedTools', 'mcp__synapse-bus__read_messages,mcp__synapse-bus__send_message,mcp__synapse-bus__update_status,mcp__synapse-bus__spawn_agent,mcp__synapse-bus__request_approval,mcp__synapse-bus__get_history');
+      // '--' ends option parsing so the task prompt isn't consumed as a tool name
+      claudeArgs.push('--');
     }
     const task = options.task
       ?? (options.taskFile ? readFileSync(options.taskFile, 'utf8') : null);
     if (task) {
       claudeArgs.push(task);
-    }
-    if (role === 'worker') {
-      // --add-dir must come after the task prompt — it greedily consumes the next
-      // positional arg if placed before it, silently dropping the prompt in --print mode.
-      claudeArgs.push('--add-dir', cwd);
     }
     claudeArgs.push(...extraArgs);
     execFileSync('claude', claudeArgs, { stdio: 'inherit' });
