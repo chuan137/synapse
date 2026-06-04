@@ -285,8 +285,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       `cd ${JSON.stringify(projectDir)}`,
       `export SYNAPSE_DB_PATH=${JSON.stringify(dbPath)}`,
       `synapse run --role worker${slotArg} --task-file ${JSON.stringify(taskFile)}`,
-      'echo "[Synapse] Worker task complete. Press Enter to close."',
-      'read _',
     ].join('\n') + '\n', 'utf8');
     chmodSync(launchScript, 0o755);
 

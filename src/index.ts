@@ -202,11 +202,10 @@ program
     if (persistedModel)  claudeArgs.push('--model',  persistedModel);
     if (persistedEffort) claudeArgs.push('--effort', persistedEffort);
     if (role === 'worker') {
-      claudeArgs.push('--print');
       claudeArgs.push('--dangerously-skip-permissions');
       claudeArgs.push('--add-dir', cwd);
       claudeArgs.push('--allowedTools', 'mcp__synapse-bus__read_messages,mcp__synapse-bus__send_message,mcp__synapse-bus__update_status,mcp__synapse-bus__spawn_agent,mcp__synapse-bus__request_approval,mcp__synapse-bus__get_history');
-      // '--' ends option parsing so the task prompt isn't consumed as a tool name
+      // '--' ends option parsing so the task prompt isn't treated as a flag
       claudeArgs.push('--');
     }
     const task = options.task

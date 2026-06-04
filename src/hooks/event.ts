@@ -69,12 +69,28 @@ export async function runEventHook(hookType: string | undefined): Promise<void> 
   process.exit(0);
 }
 
+/** Extract human-readable text from a tool response (string or structured object). */
+function toolResponseText(resp: unknown): string {
+  if (typeof resp === 'string') return resp;
+  if (!resp || typeof resp !== 'object') return String(resp ?? '');
+  const r = resp as Record<string, unknown>;
+  // Claude tool_result shape: { type: 'tool_result', content: [{type:'text', text:'...'}] }
+  if (Array.isArray(r.content)) {
+    return (r.content as any[])
+      .filter((c) => c?.type === 'text')
+      .map((c) => String(c.text ?? ''))
+      .join('\n');
+  }
+  // stdout/stderr shape
+  if (typeof r.stdout === 'string') return r.stdout;
+  // fallback: join any string-valued fields
+  return Object.values(r).filter((v) => typeof v === 'string').join('\n');
+}
+
 /**
  * Emit deck milestones we can observe directly from a hook payload — currently a
  * successful `git commit` seen in a PostToolUse Bash call. The commit hash makes
- * the message self-deduping, so re-runs/retries never double-post. Semantic
- * milestones the hook can't see (decisions, findings) stay the model's job via
- * the milestone contract in the SYNAPSE templates.
+ * the message self-deduping, so re-runs/retries never double-post.
  */
 function emitDeterministicMilestones(hookType: string, sessionId: string, payload: any): void {
   if (hookType !== 'PostToolUse') return;
@@ -84,9 +100,7 @@ function emitDeterministicMilestones(hookType: string, sessionId: string, payloa
   // Only care about commands that actually create a commit (not status/log/diff).
   if (!/\bgit\b[^|&;]*\bcommit\b/.test(cmd)) return;
 
-  const out = typeof payload.tool_response === 'string'
-    ? payload.tool_response
-    : JSON.stringify(payload.tool_response ?? '');
+  const out = toolResponseText(payload.tool_response);
   if (isError(payload.tool_response)) return; // failed commit → nothing to announce
 
   // Pull the short hash + subject git prints, e.g. "[main f29cb5f] Subject line".
