@@ -222,6 +222,23 @@ app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
   if ('model'  in req.body) fields.model  = model  || null;
   if ('effort' in req.body) fields.effort = effort || null;
   updateAgentConfig(agentId, fields);
+
+  // If a new model was set and the agent has a live pane, apply it immediately
+  // by sending the /model slash command and confirming the switch.
+  if (fields.model) {
+    const pane = getTmuxPane(agentId);
+    if (pane) {
+      try {
+        execSync(`tmux send-keys -t ${pane} '/model ${fields.model}' Enter`);
+        // Brief pause for the confirmation prompt to appear, then confirm option 1.
+        setTimeout(() => {
+          try { execSync(`tmux send-keys -t ${pane} '1' Enter`); } catch { /* best-effort */ }
+        }, 800);
+        process.stderr.write(`[Synapse] sent /model ${fields.model} to pane ${pane}\n`);
+      } catch { /* best-effort — agent may not be at a prompt */ }
+    }
+  }
+
   res.json({ ok: true });
 });
 
