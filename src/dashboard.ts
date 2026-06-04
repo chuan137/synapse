@@ -130,21 +130,21 @@ app.post('/api/ping/:agentId', (req: Request, res: Response) => {
 /** Try to raise the terminal window on macOS using AppleScript. Best-effort. */
 function raiseTerminal(): void {
   const TERMINALS = ['iTerm2', 'Terminal', 'Ghostty', 'Warp', 'Alacritty', 'kitty'];
-  let running: string;
+  // Single AppleScript call: detect and activate in one shot to avoid double spawn latency.
+  const script = `
+tell application "System Events"
+  set runningNames to name of every process whose background only is false
+  repeat with appName in {${TERMINALS.map(t => `"${t}"`).join(', ')}}
+    if runningNames contains appName then
+      tell application appName to activate
+      return appName
+    end if
+  end repeat
+end tell`;
   try {
-    running = execSync(
-      `osascript -e 'tell application "System Events" to get name of every process whose background only is false'`,
-      { stdio: 'pipe' }
-    ).toString();
-  } catch { return; }
-  for (const app of TERMINALS) {
-    if (!running.includes(app)) continue;
-    try {
-      execSync(`osascript -e 'tell application "${app}" to activate'`, { stdio: 'pipe' });
-      process.stderr.write(`[Synapse] raised ${app}\n`);
-    } catch { /* AppleScript failed, not fatal */ }
-    return;
-  }
+    const raised = execSync(`osascript -e '${script.replace(/'/g, "'\\''")}'`, { stdio: 'pipe' }).toString().trim();
+    if (raised) process.stderr.write(`[Synapse] raised ${raised}\n`);
+  } catch { /* AppleScript failed, not fatal */ }
 }
 
 app.post('/api/focus/:agentId', (req: Request, res: Response) => {
