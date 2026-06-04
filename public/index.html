@@ -1120,8 +1120,10 @@ input, select, textarea {
       `;
     }
 
-    // Scroll to bottom (newest)
-    messagesList.scrollTop = messagesList.scrollHeight;
+    // Only auto-scroll to bottom if user is already near the bottom (within 100px).
+    // If they've scrolled up to read, don't interrupt them.
+    const nearBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 100;
+    if (nearBottom) messagesList.scrollTop = messagesList.scrollHeight;
   }
 
   // ── Send message ──────────────────────────────────────────────────────────
