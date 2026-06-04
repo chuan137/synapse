@@ -543,17 +543,18 @@ export function markAgentEndedBySession(sessionId: string): void {
  * are deleted with them. Returns the count of agents removed.
  */
 export function purgeStaleAgents(): number {
+  const STALE_MS = 5 * 60_000; // matches the UI's 5-minute stale threshold
   return db.transaction(() => {
-    const candidates = db.prepare<[], { agent_id: string }>(`
+    const candidates = db.prepare<[number], { agent_id: string }>(`
       SELECT agent_id FROM agent_status
-      WHERE ended_at IS NOT NULL
+      WHERE (ended_at IS NOT NULL OR updated_at < ?)
         AND agent_id NOT IN (SELECT synapse_agent_id FROM tool_metrics)
         AND agent_id NOT IN (
           SELECT from_id FROM messages
           UNION
           SELECT to_id FROM messages WHERE to_id != 'human'
         )
-    `).all();
+    `).all(Date.now() - STALE_MS);
 
     if (candidates.length === 0) return 0;
     const ids = candidates.map(r => r.agent_id);
