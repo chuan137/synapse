@@ -4,12 +4,14 @@ Your job is to plan, delegate, monitor, and synthesize — not to implement.
 
 **Typed worker pool:**
 
-Every worker has a role. Maintain a pool in memory: `{ agent_id, role, state }` for each active worker.
+Every worker has a role. Call `list_workers` (or `pick_worker`) before every routing decision. The DB is the source of truth — your in-memory pool is best-effort.
 
 Before spawning a worker, check the pool:
 - If an **idle** worker with the matching role exists → send the task to it via `send_message`
 - If all matching workers are **busy** (state=working) → spawn a new worker of the same role
 - If no role exists for the task type → ask the human to pick or name one before spawning
+
+To pick a worker in one call: `pick_worker({role: 'developer', prefer: 'idle'})` — returns `{ agent_id, slot, state }`, or `{ agent_id: null }` if none match. With `prefer: 'any'` it falls back to a busy worker when none are idle.
 
 **Available roles** are defined in `templates/roles/`. Each role file has a front-matter header:
 ```

@@ -92,6 +92,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE agent_status ADD COLUMN slot INTEGER`,
     `ALTER TABLE agent_status ADD COLUMN tmux_pane TEXT`,
     `ALTER TABLE agent_status ADD COLUMN ended_at INTEGER`,
+    `ALTER TABLE agent_status ADD COLUMN role TEXT`,
   ]) {
     try { database.exec(sql); } catch { /* column already exists */ }
   }
@@ -121,6 +122,7 @@ export interface AgentStatus {
   name: string | null;
   model: string | null;
   effort: string | null;
+  role: string | null;
   session_id: string | null;
   tmux_pane: string | null;
   state: 'idle' | 'working' | 'blocked' | 'error';
@@ -201,6 +203,19 @@ const stmts = {
   // event history but hidden from the live roster.
   allStatuses: db.prepare<[], AgentStatus>(`
     SELECT * FROM agent_status WHERE ended_at IS NULL ORDER BY slot ASC
+  `),
+
+  // Live workers (slot > 0, not retired, seen within the staleness window),
+  // optionally filtered by role and/or state. Bound params are passed positionally;
+  // a NULL filter param disables that clause via the `(? IS NULL OR col = ?)` idiom.
+  liveWorkers: db.prepare<[number, string | null, string | null, string | null, string | null], AgentStatus>(`
+    SELECT * FROM agent_status
+    WHERE ended_at IS NULL
+      AND slot > 0
+      AND updated_at >= ?
+      AND (? IS NULL OR role  = ?)
+      AND (? IS NULL OR state = ?)
+    ORDER BY slot ASC
   `),
 
   recentMessages: db.prepare<[number], Message>(`
@@ -426,6 +441,48 @@ export function updateAgentConfig(
 
 export function getAllStatuses(): AgentStatus[] {
   return stmts.allStatuses.all();
+}
+
+export interface LiveWorker {
+  agent_id: string;
+  slot: number;
+  role: string | null;
+  name: string | null;
+  state: AgentStatus['state'];
+  current_task: string | null;
+  last_seen_ms_ago: number;
+}
+
+/**
+ * Live worker agents in the pool — the source of truth for routing decisions.
+ * "Live" = not retired (ended_at IS NULL) and seen within the same 5-minute
+ * staleness window purgeStaleAgents uses. Slot 0 (the orchestrator) is excluded;
+ * this is for finding workers, not self. Optionally filtered by role and/or state.
+ */
+export function listLiveWorkers(
+  filters: { role?: string; state?: AgentStatus['state'] } = {},
+): LiveWorker[] {
+  const STALE_MS = 5 * 60_000; // matches purgeStaleAgents / the UI's 5-min threshold
+  const now = Date.now();
+  const role = filters.role ?? null;
+  const state = filters.state ?? null;
+  return stmts.liveWorkers
+    .all(now - STALE_MS, role, role, state, state)
+    .map((r) => ({
+      agent_id: r.agent_id,
+      slot: r.slot,
+      role: r.role,
+      name: r.name,
+      state: r.state,
+      current_task: r.current_task,
+      last_seen_ms_ago: now - r.updated_at,
+    }));
+}
+
+/** Write an agent's role into its agent_status row (set by spawn_agent once the
+ *  worker has registered). No-op for an unknown agent_id. */
+export function setAgentRole(agentId: string, role: string): void {
+  db.prepare(`UPDATE agent_status SET role = ? WHERE agent_id = ?`).run(role, agentId);
 }
 
 export function getAgentConfigBySlot(

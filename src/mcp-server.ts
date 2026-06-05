@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
 import { execSync, spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval, getAgentHistory } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, setAgentRole } from './db.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
 
@@ -179,6 +179,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'list_workers',
+      description:
+        'List live worker agents in the pool. Filter by role and/or state. ' +
+        'Use this BEFORE spawning a new worker — if an idle worker with the matching role exists, message it instead of spawning.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          role: {
+            type: 'string',
+            description: 'Only list workers with this role.',
+          },
+          state: {
+            type: 'string',
+            enum: ['idle', 'working', 'blocked', 'error'],
+            description: 'Only list workers in this state.',
+          },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'pick_worker',
+      description:
+        'Convenience: return ONE worker\'s agent_id matching the filters, preferring idle. ' +
+        'Returns null if none match. Saves the orchestrator from filtering manually.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          role: {
+            type: 'string',
+            description: 'Required. The role to match.',
+          },
+          prefer: {
+            type: 'string',
+            enum: ['idle', 'any'],
+            description: "Prefer an idle worker. 'idle' (default) returns null if none are idle; 'any' falls back to the first matching worker.",
+          },
+        },
+        required: ['role'],
+      },
+    },
+    {
       name: 'request_approval',
       description:
         'Ask the human operator for approval before proceeding. ' +
@@ -328,6 +370,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: `Worker spawned in tmux window "${windowName}" but has not registered yet. Check S-Deck.` }] };
     }
 
+    // The worker registers via claimAgentSlot, which doesn't know its role — write
+    // it now so list_workers/pick_worker can find it by role.
+    setAgentRole(worker.agent_id, workerRole);
+
     return {
       content: [
         {
@@ -337,6 +383,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         },
       ],
     };
+  }
+
+  if (name === 'list_workers') {
+    const { role, state } = args as { role?: string; state?: 'idle' | 'working' | 'blocked' | 'error' };
+    const workers = listLiveWorkers({ role, state });
+
+    if (workers.length === 0) {
+      return { content: [{ type: 'text', text: 'No live workers match.' }] };
+    }
+
+    const fmtAge = (ms: number) => {
+      const s = Math.round(ms / 1000);
+      return s < 60 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
+    };
+
+    const rows = workers.map((w) =>
+      `:${w.slot}\t${w.agent_id}\t${w.role ?? '-'}\t${w.name || '-'}\t${w.state}\t${w.current_task ?? '-'}\t${fmtAge(w.last_seen_ms_ago)}`
+    );
+    const header = 'slot\tagent_id\trole\tname\tstate\tcurrent_task\tlast_seen';
+    const text = `${workers.length} live worker(s):\n\n${header}\n${rows.join('\n')}`;
+
+    return { content: [{ type: 'text', text }] };
+  }
+
+  if (name === 'pick_worker') {
+    const { role, prefer = 'idle' } = args as { role: string; prefer?: 'idle' | 'any' };
+    const workers = listLiveWorkers({ role });
+
+    const idle = workers.find((w) => w.state === 'idle');
+    const chosen = idle ?? (prefer === 'any' ? workers[0] : undefined);
+
+    const result = chosen
+      ? { agent_id: chosen.agent_id, slot: chosen.slot, state: chosen.state }
+      : { agent_id: null };
+
+    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   }
 
   if (name === 'request_approval') {
