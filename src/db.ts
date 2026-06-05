@@ -539,6 +539,27 @@ export function attachCommitToCurrentActivity(agentId: string, commitSha: string
   return r.changes > 0;
 }
 
+/**
+ * Attach a commit_sha to the most recent in_progress activity owned by the worker at
+ * the given slot. Used by `synapse worktree merge` to link the integration commit to
+ * the worker's activity. Returns true if a row was updated, false if the slot has no
+ * agent or no matching in_progress activity.
+ */
+export function attachCommitToActivityBySlot(slot: number, commitSha: string): boolean {
+  const agent = getAgentBySlot(slot);
+  if (!agent) return false;
+  const r = db.prepare(`
+    UPDATE activities
+       SET commit_sha = ?
+     WHERE id = (
+       SELECT id FROM activities
+       WHERE agent_id = ? AND status = 'in_progress' AND commit_sha IS NULL
+       ORDER BY started_at DESC LIMIT 1
+     )
+  `).run(commitSha, agent.agent_id);
+  return r.changes > 0;
+}
+
 export function listActivitiesForAgent(agentId: string, limit = 100): Activity[] {
   return db.prepare<[string, number], Activity>(`
     SELECT * FROM activities

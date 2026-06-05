@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync, execSync } from 'child_process';
-import { openDb } from './db.js';
+import { openDb, attachCommitToActivityBySlot } from './db.js';
 
 /** Strip YAML front-matter (---...---) from a role file before injecting into system prompt. */
 function stripFrontMatter(content: string): string {
@@ -397,6 +397,30 @@ function worktreeDirty(wtPath: string): boolean {
   return out.trim().length > 0;
 }
 
+/** Parse the worker slot from a slug of the form `<role>-<slot>-<task>` or `<role>-<slot>`. */
+function slotFromSlug(name: string): number | null {
+  // Non-greedy match on the role (may contain hyphens, e.g. "code-reviewer"),
+  // then a hyphen-delimited run of digits that is the slot.
+  const m = name.match(/^[a-z-]+?-(\d+)(?:-|$)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** After a successful merge, attach the resulting HEAD commit to the worker's activity. */
+function attachMergeCommit(root: string, name: string): void {
+  const slot = slotFromSlug(name);
+  if (slot === null) {
+    process.stderr.write(`[worktree merge] could not parse slot from slug "${name}" — skipping activity attach\n`);
+    return;
+  }
+  try {
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+    const ok = attachCommitToActivityBySlot(slot, headSha);
+    if (ok) process.stderr.write(`[worktree merge] attached ${headSha.slice(0, 7)} to slot :${slot} activity\n`);
+  } catch (e) {
+    process.stderr.write(`[worktree merge] activity attach failed: ${e}\n`);
+  }
+}
+
 const worktree = program
   .command('worktree')
   .description('Manage isolated git worktrees for agent tasks');
@@ -455,7 +479,7 @@ worktree
     // Try ff-only first
     try {
       execFileSync('git', ['merge', '--ff-only', branch], { cwd: root, stdio: 'pipe' });
-      // Prune on success
+      attachMergeCommit(root, name);
       worktreePruneOne(root, name, branch);
       process.stdout.write(`merged: ${name} (ff)\n`);
       return;
@@ -476,6 +500,7 @@ worktree
       cwd: root, stdio: 'inherit',
     });
 
+    attachMergeCommit(root, name);
     worktreePruneOne(root, name, branch);
     process.stdout.write(`merged: ${name} (squash)\n`);
   });
