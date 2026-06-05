@@ -260,6 +260,7 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
     task: restartTask,
     projectDir: process.cwd(),
     dbPath,
+    slot,
   });
 
   if (!worker) {
@@ -267,7 +268,7 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
     return;
   }
 
-  res.json({ ok: true, new_agent_id: worker.agent_id, new_slot: worker.slot });
+  res.json({ ok: true, agent_id: worker.agent_id });
 });
 
 // Update agent config (name, model, effort) from the dashboard

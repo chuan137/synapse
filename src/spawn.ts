@@ -3,7 +3,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdtempSync } from 'fs';
 import { execSync, spawnSync } from 'child_process';
-import { getLatestAgent, setAgentRole } from './db.js';
+import { getLatestAgent, getAgentBySlot, setAgentRole } from './db.js';
 
 export interface SpawnWorkerOptions {
   role: string;
@@ -52,10 +52,19 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
   let worker: SpawnedWorker | null = null;
   for (let i = 0; i < 120; i++) {
     spawnSync('sleep', ['0.5']);
-    const latest = getLatestAgent();
-    if (latest && latest.slot > slotsBefore) {
-      worker = { agent_id: latest.agent_id, slot: latest.slot };
-      break;
+    if (slot !== undefined) {
+      // Forced slot: poll for the specific slot to come alive with a fresh session
+      const agent = getAgentBySlot(slot);
+      if (agent && agent.ended_at === null && agent.session_id !== null) {
+        worker = { agent_id: agent.agent_id, slot: agent.slot };
+        break;
+      }
+    } else {
+      const latest = getLatestAgent();
+      if (latest && latest.slot > slotsBefore) {
+        worker = { agent_id: latest.agent_id, slot: latest.slot };
+        break;
+      }
     }
   }
 

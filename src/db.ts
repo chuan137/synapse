@@ -449,6 +449,12 @@ export function getAgentById(agentId: string): AgentStatus | null {
   ).get(agentId) ?? null;
 }
 
+export function getAgentBySlot(slot: number): AgentStatus | null {
+  return db.prepare<[number], AgentStatus>(
+    `SELECT * FROM agent_status WHERE slot = ? ORDER BY rowid DESC LIMIT 1`
+  ).get(slot) ?? null;
+}
+
 export interface LiveWorker {
   agent_id: string;
   slot: number;

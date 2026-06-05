@@ -331,37 +331,53 @@
       justify-content: space-between;
     }
 
-    .ping-btn {
+    .kebab-btn {
       background: none;
       border: 1px solid var(--border);
       color: var(--muted);
-      font-size: 10px;
-      padding: 2px 7px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-family: inherit;
-      align-self: auto;
-      transition: border-color 0.15s, color 0.15s;
-      white-space: nowrap;
-    }
-
-    .ping-btn:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
-    .ping-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-    .focus-btn, .cfg-btn {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 10px;
-      padding: 2px 7px;
+      font-size: 14px;
+      line-height: 1;
+      padding: 1px 6px 3px;
       border-radius: 3px;
       cursor: pointer;
       font-family: inherit;
       transition: border-color 0.15s, color 0.15s;
       white-space: nowrap;
     }
-    .focus-btn:hover, .cfg-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .focus-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .kebab-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .agent-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      z-index: 100;
+      min-width: 110px;
+      overflow: hidden;
+    }
+    .agent-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 7px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .agent-menu button:hover { background: var(--border); color: var(--accent); }
+    .agent-menu button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .agent-menu button.danger:hover { color: var(--error); }
+    .agent-menu-wrap {
+      position: relative;
+      display: inline-block;
+    }
 
     /* ── Agent config modal ── */
     .modal-backdrop {
@@ -994,15 +1010,19 @@ input, select, textarea {
       const humanName = a.name && a.name !== a.agent_id ? esc(a.name) : '';
       const hasTmux = !!a.tmux_pane;
       const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[a.state] ?? 'var(--muted)';
+      const isOrch = a.slot === 0;
       return `
         <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to select">
           <div class="agent-card-row">
             <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <button class="cfg-btn" data-cfg-id="${esc(a.agent_id)}" title="Configure agent">cfg</button>
-              <button class="focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
-              <button class="ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
-              <button class="restart-btn" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Kill and respawn this worker' : 'No tmux pane'}">restart</button>
+            <div class="agent-menu-wrap">
+              <button class="kebab-btn" data-menu-id="${esc(a.agent_id)}" title="Actions">⋮</button>
+              <div class="agent-menu" id="menu-${esc(a.agent_id)}" style="display:none;">
+                <button class="focus-item" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'}>focus</button>
+                <button class="ping-item" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'}>ping</button>
+                <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
+                ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
+              </div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
@@ -1014,10 +1034,16 @@ input, select, textarea {
       `;
     }).join('');
 
+    // Close all open menus when clicking outside
+    function closeAllMenus() {
+      agentsList.querySelectorAll('.agent-menu').forEach(m => { m.style.display = 'none'; });
+    }
+
     // Wire card click → select agent (original behavior)
     agentsList.querySelectorAll('.agent-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.ping-btn') || e.target.closest('.focus-btn') || e.target.closest('.cfg-btn') || e.target.closest('.restart-btn')) return;
+        if (e.target.closest('.agent-menu-wrap')) return;
+        closeAllMenus();
         selectedAgentId = card.dataset.agentId;
         renderAgents();
         renderMessages();
@@ -1026,17 +1052,26 @@ input, select, textarea {
       });
     });
 
-    // Wire cfg button → open config dialog
-    agentsList.querySelectorAll('.cfg-btn').forEach(btn => {
+    // Wire kebab button → toggle menu
+    agentsList.querySelectorAll('.kebab-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openAgentConfigDialog(btn.dataset.cfgId);
+        const agentId = btn.dataset.menuId;
+        const menu = document.getElementById(`menu-${agentId}`);
+        const isOpen = menu.style.display !== 'none';
+        closeAllMenus();
+        if (!isOpen) menu.style.display = 'block';
       });
     });
 
-    agentsList.querySelectorAll('.focus-btn').forEach(btn => {
+    // Close menus when clicking outside the agents list
+    document.addEventListener('click', closeAllMenus, { capture: false });
+
+    // Wire focus menu item
+    agentsList.querySelectorAll('.focus-item').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        closeAllMenus();
         const agentId = btn.dataset.focusId;
         const card = btn.closest('.agent-card');
         btn.disabled = true;
@@ -1050,9 +1085,11 @@ input, select, textarea {
       });
     });
 
-    agentsList.querySelectorAll('.ping-btn').forEach(btn => {
+    // Wire ping menu item
+    agentsList.querySelectorAll('.ping-item').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        closeAllMenus();
         const agentId = btn.dataset.pingId;
         btn.disabled = true;
         btn.textContent = '…';
@@ -1061,9 +1098,20 @@ input, select, textarea {
       });
     });
 
-    agentsList.querySelectorAll('.restart-btn').forEach(btn => {
+    // Wire cfg menu item → open config dialog
+    agentsList.querySelectorAll('.cfg-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllMenus();
+        openAgentConfigDialog(btn.dataset.cfgId);
+      });
+    });
+
+    // Wire restart menu item
+    agentsList.querySelectorAll('.restart-item').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        closeAllMenus();
         const agentId = btn.dataset.restartId;
         const agentSlot = btn.dataset.restartSlot;
         if (!confirm(`Restart :${agentSlot}? This kills the tmux pane and spawns a fresh worker with the same role.`)) return;
