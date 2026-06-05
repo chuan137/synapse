@@ -325,17 +325,6 @@
       border-color: var(--accent);
       box-shadow: inset 3px 0 0 var(--accent);
     }
-    .stale-badge {
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 1px 5px;
-      line-height: 1.4;
-    }
-
     .agent-card-row {
       display: flex;
       align-items: center;
@@ -782,7 +771,7 @@ input, select, textarea {
   <section id="agents-panel">
     <div class="panel-header">
       <span>Agents</span>
-      <button id="purge-btn" title="Delete ended agents with no real history" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;align-self:auto;transition:border-color 0.15s,color 0.15s;">purge stale</button>
+      <button id="purge-btn" title="Delete ended agents with no message or tool history" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;align-self:auto;transition:border-color 0.15s,color 0.15s;">tidy</button>
     </div>
     <div id="agents-list">
       <div class="empty-state">No agents connected yet.</div>
@@ -985,8 +974,6 @@ input, select, textarea {
     return `${Math.floor(secs/3600)}h ago`;
   }
 
-  const STALE_MS = 5 * 60_000; // 5 minutes without update = stale
-
   function renderAgents() {
     if (agentStatuses.length === 0) {
       agentsList.innerHTML = '<div class="empty-state">No agents connected yet.</div>';
@@ -1001,7 +988,6 @@ input, select, textarea {
     }
 
     agentsList.innerHTML = agentStatuses.map(a => {
-      const stale = (Date.now() - a.updated_at) > STALE_MS;
       const selected = a.agent_id === selectedAgentId;
       const cardClass = ['agent-card', selected ? 'selected' : ''].filter(Boolean).join(' ');
       const slot = `:${a.slot}`;
@@ -1013,7 +999,6 @@ input, select, textarea {
           <div class="agent-card-row">
             <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;">
-              ${stale ? '<span class="stale-badge">stale</span>' : ''}
               <button class="cfg-btn" data-cfg-id="${esc(a.agent_id)}" title="Configure agent">cfg</button>
               <button class="focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
               <button class="ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
@@ -1286,7 +1271,7 @@ input, select, textarea {
     requestAnimationFrame(() => scrollMessagesToBottom());
   }
 
-  // ── Purge stale agents ────────────────────────────────────────────────────
+  // ── Tidy ended agents ────────────────────────────────────────────────────
   const purgeBtn = document.getElementById('purge-btn');
   purgeBtn.addEventListener('click', async () => {
     purgeBtn.disabled = true;
@@ -1299,7 +1284,7 @@ input, select, textarea {
     } catch (err) {
       purgeBtn.textContent = `error: ${err.message}`;
     }
-    setTimeout(() => { purgeBtn.disabled = false; purgeBtn.textContent = 'purge stale'; }, 2000);
+    setTimeout(() => { purgeBtn.disabled = false; purgeBtn.textContent = 'tidy'; }, 2000);
   });
 
   // ── Utils ─────────────────────────────────────────────────────────────────
