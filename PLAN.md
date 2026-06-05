@@ -20,6 +20,7 @@ Living list of pending work. Source of truth for the Plan tab in S-Deck. Edit fr
 - `b459c77` activities lifecycle: commit closes; `finishActivity` merges fields
 - `ea82a06` orchestrator card hides `:0` suffix and shows global activities
 - `e7f603e` drop `:N` suffix from tab headers; add slot tag in :0 global view
+- `63d0544` wrap activity lifecycle in `delegate_task` and `report_done` MCP tools
 
 ### Roles + project name
 
