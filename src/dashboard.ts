@@ -130,17 +130,21 @@ app.post('/api/ping/:agentId', (req: Request, res: Response) => {
 /** Try to raise the terminal window on macOS using AppleScript. Best-effort. */
 function raiseTerminal(): void {
   const TERMINALS = ['iTerm2', 'Terminal', 'Ghostty', 'Warp', 'Alacritty', 'kitty'];
-  // Single AppleScript call: detect and activate in one shot to avoid double spawn latency.
+  // Detect the running terminal via System Events, then activate it in a separate
+  // tell block. Activating inside a System Events context races on iTerm2 — the
+  // nested tell can fire before System Events has fully resolved the process, dropping
+  // the focus request. Two tell blocks, one osascript spawn — still no extra latency.
   const script = `
 tell application "System Events"
   set runningNames to name of every process whose background only is false
-  repeat with appName in {${TERMINALS.map(t => `"${t}"`).join(', ')}}
-    if runningNames contains appName then
-      tell application appName to activate
-      return appName
-    end if
-  end repeat
-end tell`;
+end tell
+repeat with appName in {${TERMINALS.map(t => `"${t}"`).join(', ')}}
+  if runningNames contains appName then
+    set appStr to appName as text
+    tell application appStr to activate
+    return appStr
+  end if
+end repeat`;
   try {
     const raised = execSync(`osascript -e '${script.replace(/'/g, "'\\''")}'`, { stdio: 'pipe' }).toString().trim();
     if (raised) process.stderr.write(`[Synapse] raised ${raised}\n`);
