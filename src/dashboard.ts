@@ -1,8 +1,9 @@
 import express, { Request, Response } from 'express';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync, statSync, watchFile } from 'fs';
+import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync } from 'fs';
 import { execSync, spawnSync } from 'child_process';
+import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import {
   getAllStatuses,
   getRecentMessages,
@@ -27,6 +28,7 @@ import { spawnWorker } from './spawn.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
 const PROJECT_NAME = basename(process.cwd());
+const ROLES_DIR = join(__dirname, '..', 'templates', 'roles');
 
 function readProjectId(): string | null {
   const p = join(process.cwd(), '.synapse', 'settings.json');
@@ -159,6 +161,96 @@ setInterval(() => {
 
 app.get('/api/info', (_req: Request, res: Response) => {
   res.json({ project: PROJECT_NAME, projectId: readProjectId() });
+});
+
+// ── Roles CRUD ───────────────────────────────────────────────────────────────
+// Source of truth = templates/roles/*.md. Read lazily on every request so the
+// MCP server's spawn_agent (which also reads the dir fresh) sees edits immediately.
+
+interface RoleEntry extends Role { file: string }
+
+/** Read + parse every role file. Files without valid front-matter are skipped (warned). */
+function listRoleFiles(): RoleEntry[] {
+  if (!existsSync(ROLES_DIR)) return [];
+  const out: RoleEntry[] = [];
+  for (const f of readdirSync(ROLES_DIR).filter(n => n.endsWith('.md'))) {
+    const file = join(ROLES_DIR, f);
+    const role = parseRoleFile(readFileSync(file, 'utf8'));
+    if (!role) { process.stderr.write(`[Synapse] skipping role file without valid front-matter: ${f}\n`); continue; }
+    out.push({ ...role, file });
+  }
+  return out;
+}
+
+/** Resolve a role by its front-matter slug (not filename). */
+function findRoleBySlug(slug: string): RoleEntry | undefined {
+  return listRoleFiles().find(r => r.name === slug);
+}
+
+/** Coerce a request body into a Role. Accepts raw markdown (`source`) or structured fields. */
+function roleFromBody(body: any): Role | null {
+  if (typeof body?.source === 'string') return parseRoleFile(body.source);
+  if (typeof body?.name !== 'string') return null;
+  return {
+    name: String(body.name).trim(),
+    description: typeof body.description === 'string' ? body.description.trim() : '',
+    capabilities: Array.isArray(body.capabilities) ? body.capabilities.map(String) : [],
+    body: typeof body.body === 'string' ? body.body : '',
+  };
+}
+
+app.get('/api/roles', (_req: Request, res: Response) => {
+  res.json(listRoleFiles().map(({ name, description, capabilities, body }) => ({ name, description, capabilities, body })));
+});
+
+app.get('/api/roles/:name', (req: Request, res: Response) => {
+  const role = findRoleBySlug(String(req.params.name));
+  if (!role) { res.status(404).json({ error: 'Role not found' }); return; }
+  const { name, description, capabilities, body, file } = role;
+  res.json({ name, description, capabilities, body, source: readFileSync(file, 'utf8') });
+});
+
+/** Shared write path for POST (create) and PUT (update). `urlName` is null for create. */
+function writeRole(urlName: string | null, body: any, res: Response): void {
+  const role = roleFromBody(body);
+  if (!role) { res.status(400).json({ error: 'Invalid role: missing name or unparseable source' }); return; }
+  if (!isValidRoleName(role.name)) {
+    res.status(400).json({ error: 'Invalid name: must match [a-z][a-z0-9-]*' });
+    return;
+  }
+  if (!role.description) { res.status(400).json({ error: 'description is required' }); return; }
+
+  const existing = findRoleBySlug(role.name);
+  // Reject if the target slug belongs to a *different* role than the one at :name.
+  if (existing && existing.name !== urlName) {
+    res.status(409).json({ error: `A role named "${role.name}" already exists` });
+    return;
+  }
+
+  const target = join(ROLES_DIR, `${role.name}.md`);
+  writeFileSync(target, serializeRoleFile(role), 'utf8');
+
+  // Rename: slug changed from the URL's :name — remove the old file.
+  if (urlName && urlName !== role.name) {
+    const old = findRoleBySlug(urlName);
+    if (old && old.file !== target && existsSync(old.file)) unlinkSync(old.file);
+  }
+  res.json({ name: role.name, description: role.description, capabilities: role.capabilities, body: role.body });
+}
+
+app.post('/api/roles', (req: Request, res: Response) => {
+  writeRole(null, req.body, res);
+});
+
+app.put('/api/roles/:name', (req: Request, res: Response) => {
+  writeRole(String(req.params.name), req.body, res);
+});
+
+app.delete('/api/roles/:name', (req: Request, res: Response) => {
+  const role = findRoleBySlug(String(req.params.name));
+  if (!role) { res.status(404).json({ error: 'Role not found' }); return; }
+  unlinkSync(role.file);
+  res.json({ ok: true });
 });
 
 function pingAgent(agentId: string): boolean {
