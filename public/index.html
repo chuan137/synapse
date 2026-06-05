@@ -540,6 +540,80 @@
     .activity-row.ok::before  { content: '·'; color: var(--idle);  flex-shrink: 0; }
     .activity-row.evt::before { content: '◇'; color: var(--accent); flex-shrink: 0; }
 
+    /* ── Activity panel tabs ── */
+    .panel-tabs {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+    .panel-tab {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .panel-tab:hover { color: var(--text); background: var(--bg); }
+    .panel-tab.active { color: var(--accent); background: var(--bg); }
+
+    /* ── Task activity rows ── */
+    #task-activity-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .task-activity-row {
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: default;
+    }
+    .task-activity-row:hover { border-color: var(--accent); }
+    .task-activity-row.clickable { cursor: pointer; }
+    .task-activity-title {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .task-activity-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .task-activity-status {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.03em;
+    }
+    .task-activity-status.in_progress { background: rgba(250,204,21,0.15); color: var(--working); }
+    .task-activity-status.completed   { background: rgba(74,222,128,0.12); color: var(--idle); }
+    .task-activity-status.aborted     { background: rgba(248,113,113,0.12); color: var(--error); }
+    .task-activity-sha {
+      font-family: inherit;
+      color: var(--accent);
+      opacity: 0.8;
+    }
+
     /* ── Events status ticker (shown in Messages header when events panel is collapsed) ── */
     .header-status-group {
       display: flex;
@@ -824,14 +898,20 @@ input, select, textarea {
     </div>
   </section>
 
-  <!-- Events feed (tool events) -->
+  <!-- Events / Activities right panel -->
   <section id="activity-panel">
     <div class="panel-header">
-      <span>Events<span id="activity-filter-label" style="text-transform:none;letter-spacing:0;color:var(--accent);"></span></span>
-      <button id="activity-collapse" class="activity-toggle" title="Hide events panel" aria-label="Hide events panel"></button>
+      <div class="panel-tabs">
+        <button id="tab-events" class="panel-tab active">Events<span id="activity-filter-label" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--accent);"></span></button>
+        <button id="tab-activities" class="panel-tab">Activities<span id="activities-filter-label" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--accent);"></span></button>
+      </div>
+      <button id="activity-collapse" class="activity-toggle" title="Hide panel" aria-label="Hide panel"></button>
     </div>
     <div id="activity-list">
       <div class="empty-state">No tool activity yet.</div>
+    </div>
+    <div id="task-activity-list" style="display:none;">
+      <div class="empty-state">No activities recorded yet for this agent.</div>
     </div>
   </section>
 </main>
@@ -872,7 +952,9 @@ input, select, textarea {
   let pendingApprovals = [];
   let recentEvents     = [];
   let toolMetrics      = [];
+  let allActivities    = [];
   let selectedAgentId  = null;
+  let rightPanelTab    = 'events'; // 'events' | 'activities'
 
   // ── Theme ────────────────────────────────────────────────────────────────
   const themeBtn = document.getElementById('theme-btn');
@@ -931,16 +1013,18 @@ input, select, textarea {
     };
 
     es.onmessage = (e) => {
-      const { statuses, messages, approvals, events, metrics } = JSON.parse(e.data);
+      const { statuses, messages, approvals, events, metrics, activities } = JSON.parse(e.data);
       agentStatuses    = statuses;
       allMessages      = messages;
       pendingApprovals = approvals ?? [];
       recentEvents     = events ?? [];
       toolMetrics      = metrics ?? [];
+      allActivities    = activities ?? [];
       renderAgents();
       renderMessages();
       renderApprovals();
       renderActivity();
+      if (rightPanelTab === 'activities') renderTaskActivities();
     };
 
     es.onerror = () => {
@@ -1062,6 +1146,7 @@ input, select, textarea {
         renderAgents();
         renderMessages();
         renderActivity();
+        if (rightPanelTab === 'activities') renderTaskActivities();
         // Agent switch: leave the scroll position as-is — do not force to bottom.
       });
     });
@@ -1225,6 +1310,74 @@ input, select, textarea {
     }
 
     morphdom(activityList, `<div id="activity-list">${activityInnerHtml}</div>`, { childrenOnly: true });
+  }
+
+  // ── Right panel tab switching ────────────────────────────────────────────
+  const tabEvents     = document.getElementById('tab-events');
+  const tabActivities = document.getElementById('tab-activities');
+  const taskActivityList = document.getElementById('task-activity-list');
+  const activitiesFilterLabel = document.getElementById('activities-filter-label');
+
+  function switchRightTab(tab) {
+    rightPanelTab = tab;
+    tabEvents.classList.toggle('active', tab === 'events');
+    tabActivities.classList.toggle('active', tab === 'activities');
+    activityList.style.display = tab === 'events' ? '' : 'none';
+    taskActivityList.style.display = tab === 'activities' ? '' : 'none';
+    if (tab === 'activities') renderTaskActivities();
+  }
+
+  tabEvents.addEventListener('click', () => switchRightTab('events'));
+  tabActivities.addEventListener('click', () => switchRightTab('activities'));
+
+  // ── Task activities rendering ────────────────────────────────────────────
+  function renderTaskActivities() {
+    const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
+    activitiesFilterLabel.textContent = sel ? ` · :${sel.slot}` : '';
+
+    const filtered = selectedAgentId
+      ? allActivities.filter(a => a.agent_id === selectedAgentId)
+      : allActivities;
+
+    let html;
+    if (!filtered.length) {
+      html = '<div class="empty-state">No activities recorded yet for this agent.</div>';
+    } else {
+      html = filtered.map(a => {
+        const startTime = new Date(a.started_at).toLocaleTimeString([], { hour12: false });
+        const endTime = a.finished_at ? new Date(a.finished_at).toLocaleTimeString([], { hour12: false }) : null;
+        const duration = a.finished_at ? `${Math.round((a.finished_at - a.started_at) / 1000)}s` : null;
+        const sha = a.commit_sha ? `<span class="task-activity-sha" title="commit ${esc(a.commit_sha)}">${esc(a.commit_sha.slice(0, 7))}</span>` : '';
+        const timeStr = endTime ? `${startTime} → ${endTime}${duration ? ` (${duration})` : ''}` : `${startTime} …`;
+        const jumpId = a.result_msg_id ?? a.trigger_msg_id;
+        const clickable = jumpId ? 'clickable' : '';
+        const dataJump = jumpId ? `data-jump-msg="${jumpId}"` : '';
+        return `<div class="task-activity-row ${clickable}" id="act-${a.id}" ${dataJump}>
+          <div class="task-activity-title">${esc(a.title)}</div>
+          <div class="task-activity-meta">
+            <span class="task-activity-status ${a.status}">${a.status.replace('_', ' ')}</span>
+            <span>${timeStr}</span>
+            ${sha}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    morphdom(taskActivityList, `<div id="task-activity-list">${html}</div>`, { childrenOnly: true });
+
+    // Wire click → jump to linked message
+    taskActivityList.querySelectorAll('.task-activity-row.clickable').forEach(row => {
+      row.addEventListener('click', () => {
+        const msgId = row.dataset.jumpMsg;
+        if (!msgId) return;
+        const target = document.getElementById(`msg-${msgId}`);
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.style.outline = '1.5px solid var(--accent)';
+        target.style.background = 'rgba(79,126,248,0.08)';
+        setTimeout(() => { target.style.outline = ''; target.style.background = ''; }, 1200);
+      });
+    });
   }
 
   function updateComposePlaceholder() {

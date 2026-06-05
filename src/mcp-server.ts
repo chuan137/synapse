@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startActivity, finishActivity } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -259,6 +259,58 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: [],
       },
     },
+    {
+      name: 'start_activity',
+      description:
+        'Begin tracking a task you\'ve taken on. Call this when you receive a substantive task assignment ' +
+        'from your orchestrator (or, for orchestrators, from the human). The Activity will appear in the ' +
+        'operator\'s S-Deck Activities panel for this agent. Returns an activity_id you must pass to ' +
+        'finish_activity when done. Skip for trivial back-and-forth — only use for tasks worth a recap entry.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Short description of the task (e.g. "Implement worktree CLI subcommands").',
+          },
+          trigger_msg_id: {
+            type: 'number',
+            description: 'Message id of the task assignment that triggered this activity (optional).',
+          },
+        },
+        required: ['title'],
+      },
+    },
+    {
+      name: 'finish_activity',
+      description:
+        'Mark an activity as done. Pass the activity_id from start_activity, status=\'completed\' or \'aborted\', ' +
+        'and optionally result_msg_id (the message id of your DONE/result message — links the activity to its ' +
+        'resolution in the UI).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          activity_id: {
+            type: 'number',
+            description: 'The id returned by start_activity.',
+          },
+          status: {
+            type: 'string',
+            enum: ['completed', 'aborted'],
+            description: '\'completed\' if the task succeeded, \'aborted\' if it was cancelled or failed.',
+          },
+          result_msg_id: {
+            type: 'number',
+            description: 'Message id of the DONE/result message you sent (optional).',
+          },
+          commit_sha: {
+            type: 'string',
+            description: 'Short commit SHA if this activity produced a commit (optional — set automatically by the hook if omitted).',
+          },
+        },
+        required: ['activity_id', 'status'],
+      },
+    },
   ],
 }));
 
@@ -451,6 +503,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       .join('\n\n---\n\n');
 
     return { content: [{ type: 'text', text: `${msgs.length} message(s):\n\n${formatted}` }] };
+  }
+
+  if (name === 'start_activity') {
+    const { title, trigger_msg_id } = args as { title: string; trigger_msg_id?: number };
+    const activityId = startActivity(AGENT_ID, title, trigger_msg_id ?? null);
+    return { content: [{ type: 'text', text: `Activity started (id: ${activityId}).` }] };
+  }
+
+  if (name === 'finish_activity') {
+    const { activity_id, status, result_msg_id, commit_sha } = args as {
+      activity_id: number;
+      status: 'completed' | 'aborted';
+      result_msg_id?: number;
+      commit_sha?: string;
+    };
+    const ok = finishActivity(activity_id, status, result_msg_id ?? null, commit_sha ?? null);
+    return { content: [{ type: 'text', text: ok ? `Activity ${activity_id} marked ${status}.` : `Activity ${activity_id} not found or already finished.` }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);

@@ -82,6 +82,20 @@ export function openDb(dbPath: string): Database.Database {
       FOREIGN KEY (synapse_agent_id) REFERENCES agent_status(agent_id)
     );
     CREATE INDEX IF NOT EXISTS idx_metrics_agent ON tool_metrics(synapse_agent_id, tool);
+
+    CREATE TABLE IF NOT EXISTS activities (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id        TEXT    NOT NULL,
+      title           TEXT    NOT NULL,
+      status          TEXT    NOT NULL CHECK(status IN ('in_progress', 'completed', 'aborted')),
+      started_at      INTEGER NOT NULL,
+      finished_at     INTEGER,
+      trigger_msg_id  INTEGER REFERENCES messages(id),
+      result_msg_id   INTEGER REFERENCES messages(id),
+      commit_sha      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_activities_agent  ON activities(agent_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
   `);
 
   // Migrate existing tables — ignore errors if columns already exist
@@ -456,10 +470,84 @@ export function getAgentById(agentId: string): AgentStatus | null {
   ).get(agentId) ?? null;
 }
 
+export function getAgentIdBySession(sessionId: string): string | null {
+  return stmts.agentBySession.get(sessionId)?.agent_id ?? null;
+}
+
 export function getAgentBySlot(slot: number): AgentStatus | null {
   return db.prepare<[number], AgentStatus>(
     `SELECT * FROM agent_status WHERE slot = ? ORDER BY rowid DESC LIMIT 1`
   ).get(slot) ?? null;
+}
+
+// ── Activities ─────────────────────────────────────────────────────────────
+
+export interface Activity {
+  id: number;
+  agent_id: string;
+  title: string;
+  status: 'in_progress' | 'completed' | 'aborted';
+  started_at: number;
+  finished_at: number | null;
+  trigger_msg_id: number | null;
+  result_msg_id: number | null;
+  commit_sha: string | null;
+}
+
+export function startActivity(
+  agentId: string,
+  title: string,
+  triggerMsgId: number | null,
+): number {
+  const result = db.prepare(`
+    INSERT INTO activities (agent_id, title, status, started_at, trigger_msg_id)
+    VALUES (?, ?, 'in_progress', ?, ?)
+  `).run(agentId, title, Date.now(), triggerMsgId);
+  return Number(result.lastInsertRowid);
+}
+
+export function finishActivity(
+  activityId: number,
+  status: 'completed' | 'aborted',
+  resultMsgId: number | null,
+  commitSha: string | null,
+): boolean {
+  const r = db.prepare(`
+    UPDATE activities
+       SET status = ?, finished_at = ?, result_msg_id = ?, commit_sha = COALESCE(?, commit_sha)
+     WHERE id = ? AND status = 'in_progress'
+  `).run(status, Date.now(), resultMsgId, commitSha, activityId);
+  return r.changes > 0;
+}
+
+export function attachCommitToCurrentActivity(agentId: string, commitSha: string): boolean {
+  const r = db.prepare(`
+    UPDATE activities
+       SET commit_sha = ?
+     WHERE id = (
+       SELECT id FROM activities
+       WHERE agent_id = ? AND status = 'in_progress' AND commit_sha IS NULL
+       ORDER BY started_at DESC LIMIT 1
+     )
+  `).run(commitSha, agentId);
+  return r.changes > 0;
+}
+
+export function listActivitiesForAgent(agentId: string, limit = 100): Activity[] {
+  return db.prepare<[string, number], Activity>(`
+    SELECT * FROM activities
+    WHERE agent_id = ?
+    ORDER BY started_at DESC
+    LIMIT ?
+  `).all(agentId, limit);
+}
+
+export function listAllActivities(limit = 200): Activity[] {
+  return db.prepare<[number], Activity>(`
+    SELECT * FROM activities
+    ORDER BY started_at DESC
+    LIMIT ?
+  `).all(limit);
 }
 
 export interface LiveWorker {

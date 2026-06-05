@@ -12,7 +12,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { ingestEvent, setLivenessBySession, markAgentEndedBySession, postMilestoneOnce } from '../db.js';
+import { ingestEvent, setLivenessBySession, markAgentEndedBySession, postMilestoneOnce, attachCommitToCurrentActivity, getAgentIdBySession } from '../db.js';
 
 const MAX_LEN = 500;
 
@@ -116,6 +116,12 @@ function emitDeterministicMilestones(hookType: string, sessionId: string, payloa
   // Take only the first line of the subject (git may print stats on subsequent lines).
   const firstLine = subject.split(/\\n|\n/)[0].trim();
   postMilestoneOnce(sessionId, `✅ committed ${hash}: ${firstLine}`.slice(0, MAX_LEN));
+
+  // Attach the commit SHA to this agent's current in_progress activity (if any).
+  const agentId = getAgentIdBySession(sessionId);
+  if (agentId) {
+    try { attachCommitToCurrentActivity(agentId, hash); } catch { /* telemetry must not block */ }
+  }
 }
 
 function buildRecord(type: string, payload: any) {

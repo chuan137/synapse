@@ -13,6 +13,8 @@ Synapse is a human-in-the-loop observation layer. A human operator watches all a
 | `read_messages` | Check for messages from the operator or other agents |
 | `send_message` | Send a message to the operator (`human`) or another agent by their agent ID |
 | `update_status` | Report your current state to the dashboard |
+| `start_activity` | Open a task-activity record on S-Deck (call when starting a non-trivial task) |
+| `finish_activity` | Close the activity with `completed` or `aborted` when the task is done |
 | `spawn_agent` | Spawn a new worker agent (orchestrator only) |
 
 ---
@@ -46,6 +48,17 @@ The operator watches the deck, not your scratchpad. The moment one of these happ
 
 The harness auto-posts `COMMIT` for you whenever you `git commit`, so never hand-report commits.
 If a turn produced none of the above, stay silent — milestones are signal, not chatter.
+
+**Rule 4 — Track non-trivial tasks as Activities**
+For any task that will take more than a quick reply — implementing a feature, investigating a bug, running a multi-step workflow — bracket it with activity calls:
+
+```
+start_activity(title="short task description", trigger_msg_id=<id of the message that assigned it>)
+…do the work…
+finish_activity(activity_id=<id from start_activity>, status="completed", result_msg_id=<id of your DONE message>)
+```
+
+Activities appear in the S-Deck Activity Panel so the operator can track what each agent is working on and review outcomes. Skip activity tracking for trivial back-and-forth — only use it for tasks worth a recap entry.
 
 ---
 

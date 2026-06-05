@@ -13,6 +13,7 @@ import {
   getIdleAgentsWithUnreadSignature,
   getRecentEvents,
   getAllToolMetrics,
+  listAllActivities,
   purgeStaleAgents,
   reapGhostAgents,
   updateAgentConfig,
@@ -55,37 +56,42 @@ function broadcast(data: object) {
 }
 
 // Poll DB every 500ms and push state to all connected dashboards
-let lastStatuses  = '';
-let lastMessages  = '';
-let lastApprovals = '';
-let lastEvents    = '';
+let lastStatuses   = '';
+let lastMessages   = '';
+let lastApprovals  = '';
+let lastEvents     = '';
+let lastActivities = '';
 
 // agent_id → newest unread message id we've already nudged about (de-dupe).
 const nudgedMsgId = new Map<string, number>();
 
 setInterval(() => {
-  const statuses  = getAllStatuses();
-  const messages  = getRecentMessages(200);
-  const approvals = getPendingApprovals();
-  const events    = getRecentEvents(200);
-  const metrics   = getAllToolMetrics();
+  const statuses   = getAllStatuses();
+  const messages   = getRecentMessages(200);
+  const approvals  = getPendingApprovals();
+  const events     = getRecentEvents(200);
+  const metrics    = getAllToolMetrics();
+  const activities = listAllActivities(200);
 
-  const statusStr   = JSON.stringify(statuses);
-  const msgStr      = JSON.stringify(messages.map((m) => m.id));
-  const approvalStr = JSON.stringify(approvals.map((a) => a.id));
-  const eventStr    = JSON.stringify(events.map((e) => e.id));
+  const statusStr     = JSON.stringify(statuses);
+  const msgStr        = JSON.stringify(messages.map((m) => m.id));
+  const approvalStr   = JSON.stringify(approvals.map((a) => a.id));
+  const eventStr      = JSON.stringify(events.map((e) => e.id));
+  const activityStr   = JSON.stringify(activities.map((a) => `${a.id}:${a.status}:${a.commit_sha}`));
 
   if (
     statusStr !== lastStatuses ||
     msgStr !== lastMessages ||
     approvalStr !== lastApprovals ||
-    eventStr !== lastEvents
+    eventStr !== lastEvents ||
+    activityStr !== lastActivities
   ) {
-    lastStatuses  = statusStr;
-    lastMessages  = msgStr;
-    lastApprovals = approvalStr;
-    lastEvents    = eventStr;
-    broadcast({ statuses, messages, approvals, events, metrics });
+    lastStatuses   = statusStr;
+    lastMessages   = msgStr;
+    lastApprovals  = approvalStr;
+    lastEvents     = eventStr;
+    lastActivities = activityStr;
+    broadcast({ statuses, messages, approvals, events, metrics, activities });
   }
 
   // Nudge is decoupled from the broadcast: it must NOT re-fire on every event/
@@ -180,6 +186,7 @@ app.get('/api/state', (_req: Request, res: Response) => {
     approvals: getPendingApprovals(),
     events: getRecentEvents(200),
     metrics: getAllToolMetrics(),
+    activities: listAllActivities(200),
   });
 });
 
@@ -314,6 +321,7 @@ app.get('/events', (req: Request, res: Response) => {
     approvals: getPendingApprovals(),
     events: getRecentEvents(200),
     metrics: getAllToolMetrics(),
+    activities: listAllActivities(200),
   });
   res.write(`data: ${initial}\n\n`);
 
