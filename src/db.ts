@@ -514,49 +514,55 @@ export function finishActivity(
 ): boolean {
   const r = db.prepare(`
     UPDATE activities
-       SET status = ?, finished_at = ?, result_msg_id = ?, commit_sha = COALESCE(?, commit_sha)
-     WHERE id = ? AND status = 'in_progress'
+       SET status        = ?,
+           finished_at   = COALESCE(finished_at, ?),
+           result_msg_id = COALESCE(?, result_msg_id),
+           commit_sha    = COALESCE(?, commit_sha)
+     WHERE id = ? AND status != 'aborted'
   `).run(status, Date.now(), resultMsgId, commitSha, activityId);
   return r.changes > 0;
 }
 
 /**
- * Attach a commit SHA to the most recent in-progress activity that has no commit yet.
- * Prefers activities recorded for the committing agent, falls back to the most recently
- * started in-progress activity across all agents. Orchestrators commit before calling
- * finish_activity, so the target activity is still in_progress at attach time.
+ * Attach a commit SHA to the most recent in-progress activity that has no commit yet,
+ * and mark it completed. Prefers activities recorded for the committing agent, falls
+ * back to the most recently started in-progress activity across all agents.
  */
 export function attachCommitToCurrentActivity(agentId: string, commitSha: string): boolean {
   const r = db.prepare(`
     UPDATE activities
-       SET commit_sha = ?
+       SET commit_sha  = ?,
+           status      = 'completed',
+           finished_at = COALESCE(finished_at, ?)
      WHERE id = (
        SELECT id FROM activities
        WHERE status = 'in_progress' AND commit_sha IS NULL
        ORDER BY (agent_id = ?) DESC, started_at DESC LIMIT 1
      )
-  `).run(commitSha, agentId);
+  `).run(commitSha, Date.now(), agentId);
   return r.changes > 0;
 }
 
 /**
  * Attach a commit_sha to the most recent in_progress activity owned by the worker at
- * the given slot. Used by `synapse worktree merge` to link the integration commit to
- * the worker's activity. Returns true if a row was updated, false if the slot has no
- * agent or no matching in_progress activity.
+ * the given slot, and mark it completed. Used by `synapse worktree merge` to link the
+ * integration commit to the worker's activity. Returns true if a row was updated, false
+ * if the slot has no agent or no matching in_progress activity.
  */
 export function attachCommitToActivityBySlot(slot: number, commitSha: string): boolean {
   const agent = getAgentBySlot(slot);
   if (!agent) return false;
   const r = db.prepare(`
     UPDATE activities
-       SET commit_sha = ?
+       SET commit_sha  = ?,
+           status      = 'completed',
+           finished_at = COALESCE(finished_at, ?)
      WHERE id = (
        SELECT id FROM activities
        WHERE agent_id = ? AND status = 'in_progress' AND commit_sha IS NULL
        ORDER BY started_at DESC LIMIT 1
      )
-  `).run(commitSha, agent.agent_id);
+  `).run(commitSha, Date.now(), agent.agent_id);
   return r.changes > 0;
 }
 
