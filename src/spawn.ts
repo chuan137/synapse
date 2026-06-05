@@ -74,12 +74,18 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
     setAgentRole(worker.agent_id, role);
     setAgentName(worker.agent_id, role);
 
-    // Rename the tmux window to <role>--<slot> now that we know the slot.
+    // Rename the tmux window to <Role>--<slot> now that we know the slot.
+    // Disable automatic-rename so tmux doesn't overwrite with the process name.
     const tmuxPane = getAgentBySlot(worker.slot)?.tmux_pane;
     if (tmuxPane) {
+      const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+      const newName = `${cap(role)}--${worker.slot}`;
       try {
-        execFileSync('tmux', ['rename-window', '-t', tmuxPane, `${role}--${worker.slot}`]);
-      } catch { /* best-effort */ }
+        execFileSync('tmux', ['rename-window', '-t', tmuxPane, newName]);
+        execFileSync('tmux', ['set-window-option', '-t', tmuxPane, 'automatic-rename', 'off']);
+      } catch (e) {
+        process.stderr.write(`[spawnWorker] rename failed for pane ${tmuxPane}: ${e}\n`);
+      }
     }
   }
 
