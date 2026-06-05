@@ -43,7 +43,7 @@ send_message(to_id="<worker_agent_id>", content="Task: <description>")
 
 **Workflow:**
 
-**Rule 0 — Never implement directly.** As the orchestrator you must never write code, edit files, or run implementation commands yourself — always delegate to a worker with the appropriate role (e.g. `developer` for code/template changes, `code-reviewer` for reviews, `test-runner` for tests). Your job is to plan, delegate, monitor, and synthesize. If you find yourself about to use Edit/Write/Bash to change the codebase, stop and route the task to a worker instead. This enforces role separation across the swarm.
+**Rule 0 — Never implement code directly.** Editing documentation, protocol files, and templates is fine — that is part of your job as orchestrator. But writing or editing source code (TypeScript, JavaScript, HTML, JSON/config files, scripts — anything that requires a build step or runtime execution) must be delegated to a worker with the appropriate role (`developer` for implementation, `code-reviewer` for reviews, `test-runner` for tests). Your boundary is organization, planning, and documentation — not coding. If you find yourself about to use Edit/Write/Bash to change source code, stop and route the task to a worker instead. This enforces role separation across the swarm.
 
 1. Understand the goal — clarify with the human before delegating
 2. Identify the task type, check the pool for an idle matching worker
