@@ -592,16 +592,17 @@ export function ingestEvent(ev: InspectorEvent): string | null {
 
 /**
  * Event-driven liveness: set an agent's state from observed activity.
- * Only flips between 'idle' and 'working' — never overwrites a self-reported
- * 'blocked' or 'error' (those are intentional states only the agent knows).
+ * Flips between 'idle', 'working', and 'blocked' — never overwrites a
+ * self-reported 'error' (only cleared on agent restart). 'blocked' is now
+ * set by the system (Notification hook) rather than by the agent itself.
  * No-op if the session maps to no known agent.
  */
-export function setLivenessBySession(sessionId: string, state: 'idle' | 'working'): void {
+export function setLivenessBySession(sessionId: string, state: 'idle' | 'working' | 'blocked'): void {
   db.prepare(`
     UPDATE agent_status
        SET state = ?, updated_at = ?
      WHERE session_id = ?
-       AND state IN ('idle', 'working')
+       AND state IN ('idle', 'working', 'blocked')
   `).run(state, Date.now(), sessionId);
 }
 

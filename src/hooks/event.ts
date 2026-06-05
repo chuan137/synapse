@@ -53,7 +53,13 @@ export async function runEventHook(hookType: string | undefined): Promise<void> 
         : (hookType === 'Stop') ? 'idle'
         : null;
       if (live) {
-        try { setLivenessBySession(sessionId, live as 'idle' | 'working'); } catch { /* telemetry must not block */ }
+        try { setLivenessBySession(sessionId, live); } catch { /* telemetry must not block */ }
+      }
+      // Claude Code's permission dialog emits Notification with this exact message
+      // while the multi-option UI is shown to the operator. The next PostToolUse
+      // (approval or denial) will flip back to working via the PreToolUse branch.
+      if (hookType === 'Notification' && payload?.message === 'Claude needs your permission') {
+        try { setLivenessBySession(sessionId, 'blocked'); } catch { /* telemetry must not block */ }
       }
     }
   }
