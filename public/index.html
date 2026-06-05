@@ -36,8 +36,9 @@
       --error:   #dc2626;
       --p0: #dc2626;
       --p0-bg: #fef2f2;
+      --p0-text: #b91c1c;
       --hover: rgba(0,0,0,0.045);
-      --p0-hover-bg: #fee2e2;
+      --p0-hover-bg: rgba(220,38,38,0.06);
     }
 
     :root {
@@ -49,8 +50,9 @@
 
       --p0: #ef4444;
       --p0-bg: #2a1212;
+      --p0-text: #fca5a5;
       --hover: rgba(255,255,255,0.045);
-      --p0-hover-bg: #3a1616;
+      --p0-hover-bg: rgba(248,113,113,0.07);
     }
 
     html, body {
@@ -858,8 +860,8 @@
     .message-row:hover .message-content,
     .message-row.from-human .message-content { color: var(--text); }
 
-    .from-agent.p0 .message-content { color: var(--p0); }
-    .message-row.p0:hover .message-content { color: var(--p0); }
+    .from-agent.p0 .message-content { color: var(--p0-text); }
+    .message-row.p0:hover .message-content { color: var(--p0-text); }
 
     /* Rendered markdown inside message bubbles. marked emits block elements, so
        the container drops pre-wrap and these rules govern spacing/formatting. */
