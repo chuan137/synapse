@@ -37,6 +37,7 @@
       --p0: #dc2626;
       --p0-bg: #fef2f2;
       --p0-text: #b91c1c;
+      --hover-soft: rgba(0,0,0,0.02);
     }
 
     :root {
@@ -49,6 +50,7 @@
       --p0: #ef4444;
       --p0-bg: #2a1212;
       --p0-text: #fca5a5;
+      --hover-soft: rgba(255,255,255,0.02);
     }
 
     html, body {
@@ -795,6 +797,7 @@
       background: rgba(255, 255, 255, 0.02);
     }
 
+    .message-row:hover { background: var(--hover-soft); }
 
     .message-avatar {
       width: 28px;
