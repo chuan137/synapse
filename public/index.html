@@ -125,7 +125,7 @@
     #messages-panel   { grid-column: 2;       grid-row: 2; min-height: 0; }
     #activity-panel   { grid-column: 3;       grid-row: 2; min-height: 0; }
 
-    /* Activity collapse: smoothly animate the column to zero and fade the panel.
+    /* Events collapse: smoothly animate the column to zero and fade the panel.
        No rail — reopening is the same toggle in the Messages header. */
     main { transition: grid-template-columns 0.22s ease; }
     main.activity-collapsed { grid-template-columns: 320px 1fr 0; }
@@ -139,7 +139,7 @@
     }
 
     /* Toggle buttons: quiet ghost buttons with a pure-CSS chevron.
-       #activity-collapse (›) lives in the Activity header, shown when open.
+       #activity-collapse (›) lives in the Events header, shown when open.
        #activity-expand  (‹) lives in the Messages header, shown when collapsed. */
     .activity-toggle {
       background: none;
@@ -185,7 +185,7 @@
       box-shadow: inset -4.5px 0 0 -3px var(--text);
     }
 
-    /* Visibility: one button per state. Open → collapse (in Activity);
+    /* Visibility: one button per state. Open → collapse (in Events);
        collapsed → expand (in Messages). */
     #activity-expand   { display: none; }
     main.activity-collapsed #activity-collapse { display: none; }
@@ -498,7 +498,7 @@
       padding: 32px 16px;
     }
 
-    /* ── Activity panel ── */
+    /* ── Events panel ── */
     #activity-panel {
       display: flex;
       flex-direction: column;
@@ -540,7 +540,7 @@
     .activity-row.ok::before  { content: '·'; color: var(--idle);  flex-shrink: 0; }
     .activity-row.evt::before { content: '◇'; color: var(--accent); flex-shrink: 0; }
 
-    /* ── Activity status ticker (shown in Messages header when activity panel is collapsed) ── */
+    /* ── Events status ticker (shown in Messages header when events panel is collapsed) ── */
     .header-status-group {
       display: flex;
       align-items: center;
@@ -824,11 +824,11 @@ input, select, textarea {
     </div>
   </section>
 
-  <!-- Activity feed (tool events) -->
+  <!-- Events feed (tool events) -->
   <section id="activity-panel">
     <div class="panel-header">
-      <span>Activity<span id="activity-filter-label" style="text-transform:none;letter-spacing:0;color:var(--accent);"></span></span>
-      <button id="activity-collapse" class="activity-toggle" title="Hide activity panel" aria-label="Hide activity panel"></button>
+      <span>Events<span id="activity-filter-label" style="text-transform:none;letter-spacing:0;color:var(--accent);"></span></span>
+      <button id="activity-collapse" class="activity-toggle" title="Hide events panel" aria-label="Hide events panel"></button>
     </div>
     <div id="activity-list">
       <div class="empty-state">No tool activity yet.</div>
