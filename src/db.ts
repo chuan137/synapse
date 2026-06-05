@@ -205,14 +205,13 @@ const stmts = {
     SELECT * FROM agent_status WHERE ended_at IS NULL ORDER BY slot ASC
   `),
 
-  // Live workers (slot > 0, not retired, seen within the staleness window),
-  // optionally filtered by role and/or state. Bound params are passed positionally;
-  // a NULL filter param disables that clause via the `(? IS NULL OR col = ?)` idiom.
-  liveWorkers: db.prepare<[number, string | null, string | null, string | null, string | null], AgentStatus>(`
+  // Live workers (slot > 0, not retired), optionally filtered by role and/or state.
+  // Bound params are passed positionally; a NULL filter param disables that clause
+  // via the `(? IS NULL OR col = ?)` idiom.
+  liveWorkers: db.prepare<[string | null, string | null, string | null, string | null], AgentStatus>(`
     SELECT * FROM agent_status
     WHERE ended_at IS NULL
       AND slot > 0
-      AND updated_at >= ?
       AND (? IS NULL OR role  = ?)
       AND (? IS NULL OR state = ?)
     ORDER BY slot ASC
@@ -455,19 +454,23 @@ export interface LiveWorker {
 
 /**
  * Live worker agents in the pool — the source of truth for routing decisions.
- * "Live" = not retired (ended_at IS NULL) and seen within the same 5-minute
- * staleness window purgeStaleAgents uses. Slot 0 (the orchestrator) is excluded;
- * this is for finding workers, not self. Optionally filtered by role and/or state.
+ * "Live" = not retired (ended_at IS NULL). The session-end hook stamps
+ * ended_at on SessionEnd; claimAgentSlot clears it on a session restart, so a
+ * legitimately restarted agent reappears. Slot 0 (the orchestrator) is
+ * excluded; this is for finding workers, not self. Optionally filtered by
+ * role and/or state.
+ *
+ * `last_seen_ms_ago` is informational only — a long quiet period for an idle
+ * worker is normal, not a signal that the worker is gone.
  */
 export function listLiveWorkers(
   filters: { role?: string; state?: AgentStatus['state'] } = {},
 ): LiveWorker[] {
-  const STALE_MS = 5 * 60_000; // matches purgeStaleAgents / the UI's 5-min threshold
   const now = Date.now();
   const role = filters.role ?? null;
   const state = filters.state ?? null;
   return stmts.liveWorkers
-    .all(now - STALE_MS, role, role, state, state)
+    .all(role, role, state, state)
     .map((r) => ({
       agent_id: r.agent_id,
       slot: r.slot,
