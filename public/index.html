@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>S-Deck — Synapse</title>
+  <!-- Markdown rendering for bus messages. marked parses, DOMPurify sanitizes
+       (marked does NOT sanitize — untrusted agent/operator content is an XSS risk).
+       Pinned to major versions so the CDN doesn't drift. -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -631,6 +636,60 @@
 
     .from-agent.p0 .message-content { color: #fca5a5; }
 
+    /* Rendered markdown inside message bubbles. marked emits block elements, so
+       the container drops pre-wrap and these rules govern spacing/formatting. */
+    .message-content { white-space: normal; }
+    .message-content > :first-child { margin-top: 0; }
+    .message-content > :last-child { margin-bottom: 0; }
+    .message-content p { margin: 0 0 4px; }
+    .message-content code {
+      font-family: inherit;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-size: 11px;
+    }
+    .message-content pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin: 4px 0;
+      overflow-x: auto;
+    }
+    .message-content pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 11px;
+      white-space: pre;
+    }
+    .message-content ul, .message-content ol { margin: 4px 0; padding-left: 20px; }
+    .message-content li { margin: 1px 0; }
+    .message-content blockquote {
+      margin: 4px 0;
+      padding: 1px 10px;
+      border-left: 2px solid var(--border);
+      color: var(--muted);
+    }
+    .message-content a { color: var(--accent); text-decoration: none; }
+    .message-content a:hover { text-decoration: underline; }
+    .message-content strong { font-weight: 700; color: var(--text); }
+    .message-content h1, .message-content h2, .message-content h3,
+    .message-content h4, .message-content h5, .message-content h6 {
+      font-size: 12px;
+      margin: 6px 0 4px;
+    }
+    .message-content table {
+      border-collapse: collapse;
+      margin: 4px 0;
+    }
+    .message-content th, .message-content td {
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+    }
+
 input, select, textarea {
       background: var(--bg);
       border: 1px solid var(--border);
@@ -1115,7 +1174,7 @@ input, select, textarea {
               ${p0badge}
               <span class="message-time">${t}</span>
             </div>
-            <div class="message-content">${esc(m.content)}</div>
+            <div class="message-content">${renderMarkdown(m.content)}</div>
           </div>
         </div>
       `;
@@ -1198,6 +1257,21 @@ input, select, textarea {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  // Open all rendered links in a new tab safely. Runs on every sanitized node.
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A' && node.hasAttribute('href')) {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+
+  // Render bus message content as GitHub-flavored markdown, then sanitize.
+  // marked does NOT sanitize — DOMPurify strips any crafted HTML / javascript: URLs.
+  function renderMarkdown(content) {
+    const html = marked.parse(String(content ?? ''), { gfm: true, breaks: true });
+    return DOMPurify.sanitize(html);
   }
 
   // ── Agent config dialog ────────────────────────────────────────────────────
