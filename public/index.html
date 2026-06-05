@@ -517,6 +517,29 @@
     .activity-row.ok::before  { content: '·'; color: var(--idle);  flex-shrink: 0; }
     .activity-row.evt::before { content: '◇'; color: var(--accent); flex-shrink: 0; }
 
+    /* ── Activity flash label (shown in Messages header when activity panel is collapsed) ── */
+    #activity-latest-flash {
+      display: none;
+      font-size: 11px;
+      color: var(--accent);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    main.activity-collapsed #activity-latest-flash:not(:empty) {
+      display: inline-block;
+    }
+    @keyframes flash-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+    #activity-latest-flash.pulsing {
+      animation: flash-pulse 1.2s ease-in-out infinite;
+    }
+
     /* Per-agent tool metric chips (inside agent cards) */
     .agent-metrics {
       display: flex;
@@ -767,7 +790,7 @@ input, select, textarea {
   <section id="messages-panel">
     <div class="panel-header" id="messages-header">
       <span id="messages-title">Messages</span>
-      <button id="activity-expand" class="activity-toggle" title="Show activity panel" aria-label="Show activity panel"></button>
+      <span id="activity-latest-flash"></span><button id="activity-expand" class="activity-toggle" title="Show activity panel" aria-label="Show activity panel"></button>
     </div>
     <div id="messages-list">
       <div class="empty-state" id="empty-msgs">No messages yet.</div>
@@ -1068,6 +1091,43 @@ input, select, textarea {
   // ── Render activity feed ───────────────────────────────────────────────────
   const activityList  = document.getElementById('activity-list');
   const activityLabel = document.getElementById('activity-filter-label');
+  const activityFlash = document.getElementById('activity-latest-flash');
+
+  let flashPulseTimer = null;
+  let flashDebounceTimer = null;
+  let lastFlashText = '';
+
+  function triggerFlash(text) {
+    if (!text) return;
+    activityFlash.textContent = text;
+    // Debounce: don't re-trigger animation more often than every 300ms
+    if (flashDebounceTimer) return;
+    flashDebounceTimer = setTimeout(() => { flashDebounceTimer = null; }, 300);
+    // Re-trigger animation via reflow trick
+    activityFlash.classList.remove('pulsing');
+    void activityFlash.offsetWidth;
+    activityFlash.classList.add('pulsing');
+    // Stop pulsing after 6s of no new events
+    clearTimeout(flashPulseTimer);
+    flashPulseTimer = setTimeout(() => activityFlash.classList.remove('pulsing'), 6000);
+  }
+
+  function summariseEvent(e) {
+    // Build a short (~40 char) label for the flash strip
+    let payload = {};
+    try { payload = e.payload ? JSON.parse(e.payload) : {}; } catch {}
+    let label;
+    if (e.event.startsWith('tool:after:')) {
+      label = payload.tool ?? e.event.slice('tool:after:'.length);
+    } else if (e.event.startsWith('tool:before:')) {
+      label = payload.tool ?? e.event.slice('tool:before:'.length);
+    } else {
+      label = e.event;
+    }
+    const detail = payload.input ?? payload.prompt ?? payload.message ?? payload.reason ?? '';
+    const combined = detail ? `${label}: ${detail}` : label;
+    return combined.length > 40 ? combined.slice(0, 39) + '…' : combined;
+  }
 
   function renderActivity() {
     // Filter to the selected agent if one is chosen; else show the whole swarm.
@@ -1077,6 +1137,16 @@ input, select, textarea {
 
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
     activityLabel.textContent = sel ? ` · :${sel.slot}` : '';
+
+    // Update flash label from the latest global event (not filtered by agent)
+    const latestGlobal = recentEvents[recentEvents.length - 1];
+    if (latestGlobal) {
+      const text = summariseEvent(latestGlobal);
+      if (text !== lastFlashText) {
+        lastFlashText = text;
+        triggerFlash(text);
+      }
+    }
 
     if (!filtered.length) {
       activityList.innerHTML = '<div class="empty-state">No tool activity yet.</div>';
