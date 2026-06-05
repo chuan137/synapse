@@ -471,6 +471,10 @@ export function getAgentById(agentId: string): AgentStatus | null {
   ).get(agentId) ?? null;
 }
 
+export function markAgentEnded(agentId: string): void {
+  db.prepare('UPDATE agent_status SET ended_at = ? WHERE agent_id = ?').run(Date.now(), agentId);
+}
+
 export function getAgentIdBySession(sessionId: string): string | null {
   return stmts.agentBySession.get(sessionId)?.agent_id ?? null;
 }

@@ -19,6 +19,7 @@ import {
   reapGhostAgents,
   updateAgentConfig,
   getAgentById,
+  markAgentEnded,
   AgentStatus,
   Message,
   ApprovalRequest,
@@ -410,6 +411,29 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
   }
 
   res.json({ ok: true, agent_id: worker.agent_id });
+});
+
+// Kill a worker agent without respawning
+app.post('/api/agents/:agentId/kill', (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId);
+  const agent = getAgentById(agentId);
+
+  if (!agent) { res.status(404).json({ error: 'Agent not found' }); return; }
+  if (agent.slot === 0) { res.status(400).json({ error: 'Cannot kill the orchestrator (slot 0)' }); return; }
+  if (agent.ended_at !== null) { res.status(409).json({ error: 'Agent is already ended' }); return; }
+  if (!agent.tmux_pane) { res.status(409).json({ error: 'Agent has no tmux pane — cannot kill it' }); return; }
+
+  try {
+    execSync(`tmux kill-pane -t ${agent.tmux_pane}`);
+  } catch (e) {
+    process.stderr.write(`[Synapse] kill: kill-pane failed for ${agent.tmux_pane}: ${e}\n`);
+  }
+
+  markAgentEnded(agentId);
+  reapGhostAgents();
+  purgeStaleAgents();
+
+  res.json({ ok: true });
 });
 
 // Update agent config (name, model, effort) from the dashboard

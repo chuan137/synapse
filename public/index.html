@@ -1267,6 +1267,7 @@ input, select, textarea {
                 <div class="agent-menu" id="menu-${esc(a.agent_id)}" style="display:none;">
                   <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
                   ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
+                  ${!isOrch ? `<button class="kill-item danger" data-kill-id="${esc(a.agent_id)}" data-kill-slot="${a.slot}" ${hasTmux ? '' : 'disabled'} style="color:var(--error);">kill</button>` : ''}
                 </div>
               </div>
             </div>
@@ -1370,6 +1371,28 @@ input, select, textarea {
         } catch (err) {
           btn.textContent = `err`;
           setTimeout(() => { btn.disabled = false; btn.textContent = 'restart'; }, 3000);
+        }
+      });
+    });
+
+    // Wire kill menu item
+    agentsList.querySelectorAll('.kill-item').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        closeAllMenus();
+        const agentId = btn.dataset.killId;
+        const agentSlot = btn.dataset.killSlot;
+        if (!confirm(`Kill :${agentSlot}? This terminates the tmux pane permanently — the agent will NOT be respawned.`)) return;
+        btn.disabled = true;
+        btn.textContent = 'killing…';
+        try {
+          const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/kill`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? 'failed');
+          // SSE will refresh the agent list automatically.
+        } catch (err) {
+          btn.textContent = 'err';
+          setTimeout(() => { btn.disabled = false; btn.textContent = 'kill'; }, 3000);
         }
       });
     });
