@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
 import { execSync, spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, setAgentRole } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, setAgentRole, reapGhostAgents, purgeStaleAgents } from './db.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
 
@@ -334,6 +334,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'spawn_agent') {
     const { task, name: workerName, role: workerRole = 'worker', slot: forcedSlot } = args as { task: string; name?: string; role?: string; slot?: number };
+
+    // Reap ghost agents (pane gone without graceful end) then purge retired rows
+    // so stale slot numbers are freed before we claim a new one.
+    const reaped = reapGhostAgents();
+    const purged = purgeStaleAgents();
+    if (reaped > 0 || purged > 0) {
+      console.log(`[spawn_agent] ghost reap: ${reaped} marked ended, ${purged} purged`);
+    }
 
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     const slotsBefore = getLatestAgent()?.slot ?? -1;

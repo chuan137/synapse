@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { execFileSync } from 'node:child_process';
 
 // Project root is one level up from dist/ (where this file compiles to)
 export const SYNAPSE_INSTALL_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -598,23 +599,78 @@ export function markAgentEndedBySession(sessionId: string): void {
 }
 
 /**
- * Hard-delete ended agent rows (ended_at IS NOT NULL) that have no tool_metrics
- * or message history worth preserving. Only session:start/session:end events
- * are deleted with them. Returns the count of agents removed.
+ * Detect "ghost" agents — rows where ended_at IS NULL (so the system
+ * still thinks they're alive) but their tmux pane no longer exists.
+ * This happens when a Claude process is killed without a graceful
+ * SessionEnd: the post-stop hook never fires, ended_at never gets
+ * stamped, and the row would live forever.
+ *
+ * Strategy: list all live tmux pane ids in one shell call, build a Set,
+ * then mark every live agent row whose tmux_pane is NOT in the Set as
+ * ended (stamping ended_at = now). After this runs, purgeStaleAgents()
+ * will sweep the now-retired ghosts on the same pass.
+ *
+ * Returns the count of ghosts marked. Slot 0 (the orchestrator itself)
+ * is excluded — if the orchestrator's pane disappears, the orchestrator
+ * is dead and isn't running this code anyway.
+ *
+ * Tmux is shelled out via `tmux list-panes -aF '#{pane_id}'`. If tmux
+ * is unavailable (no session, binary missing) the call returns 0
+ * without touching the DB — fail-closed.
+ */
+export function reapGhostAgents(): number {
+  let livePaneIds: Set<string>;
+  try {
+    const out = execFileSync('tmux', ['list-panes', '-aF', '#{pane_id}'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    livePaneIds = new Set(out.split('\n').map(s => s.trim()).filter(Boolean));
+  } catch {
+    return 0; // tmux not running, no panes — don't touch anything
+  }
+
+  const now = Date.now();
+  const candidates = db.prepare<[], { agent_id: string; tmux_pane: string | null }>(`
+    SELECT agent_id, tmux_pane FROM agent_status
+    WHERE ended_at IS NULL AND slot > 0 AND tmux_pane IS NOT NULL
+  `).all();
+
+  const ghosts = candidates.filter(c => c.tmux_pane && !livePaneIds.has(c.tmux_pane));
+  if (ghosts.length === 0) return 0;
+
+  const stmt = db.prepare(`UPDATE agent_status SET ended_at = ?, updated_at = ? WHERE agent_id = ?`);
+  const tx = db.transaction(() => {
+    for (const g of ghosts) stmt.run(now, now, g.agent_id);
+  });
+  tx();
+  return ghosts.length;
+}
+
+/**
+ * Hard-delete RETIRED agent rows that have no tool_metrics or message
+ * history worth preserving. "Retired" = ended_at IS NOT NULL — set by
+ * markAgentEndedBySession on SessionEnd, or by reapGhostAgents below
+ * when an agent's tmux pane has vanished without a graceful end.
+ *
+ * Live (ended_at IS NULL) rows are NEVER touched by this function,
+ * regardless of how quiet they have been. A long-idle worker is fine.
+ *
+ * Returns the count of agents removed. Only session:start/session:end
+ * events are deleted with them.
  */
 export function purgeStaleAgents(): number {
-  const STALE_MS = 5 * 60_000; // matches the UI's 5-minute stale threshold
   return db.transaction(() => {
-    const candidates = db.prepare<[number], { agent_id: string }>(`
+    const candidates = db.prepare<[], { agent_id: string }>(`
       SELECT agent_id FROM agent_status
-      WHERE (ended_at IS NOT NULL OR updated_at < ?)
+      WHERE ended_at IS NOT NULL
         AND agent_id NOT IN (SELECT synapse_agent_id FROM tool_metrics)
         AND agent_id NOT IN (
           SELECT from_id FROM messages
           UNION
           SELECT to_id FROM messages WHERE to_id != 'human'
         )
-    `).all(Date.now() - STALE_MS);
+    `).all();
 
     if (candidates.length === 0) return 0;
     const ids = candidates.map(r => r.agent_id);
