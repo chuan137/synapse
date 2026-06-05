@@ -3,7 +3,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdtempSync } from 'fs';
 import { execSync, spawnSync } from 'child_process';
-import { getLatestAgent, getAgentBySlot, setAgentRole } from './db.js';
+import { getLatestAgent, getAgentBySlot, setAgentRole, setAgentName } from './db.js';
 
 export interface SpawnWorkerOptions {
   role: string;
@@ -72,6 +72,7 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
     // claimAgentSlot doesn't know role — write it now so list_workers/pick_worker
     // can find the new agent by role.
     setAgentRole(worker.agent_id, role);
+    setAgentName(worker.agent_id, role);
   }
 
   return worker;

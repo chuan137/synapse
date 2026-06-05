@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -66,6 +66,12 @@ const TMUX_PANE   = process.env.TMUX_PANE ?? null;
 const FORCED_SLOT = process.env.SYNAPSE_SLOT !== undefined ? parseInt(process.env.SYNAPSE_SLOT, 10) : undefined;
 const { agentId: AGENT_ID, slot } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE, FORCED_SLOT);
 let agentName = settings.name ?? '';
+
+// Ensure orchestrator always shows name "orchestrator" unless operator has customized it
+if (slot === 0 && (!agentName || agentName === 'Joker')) {
+  agentName = 'orchestrator';
+  setAgentName(AGENT_ID, 'orchestrator');
+}
 
 // Write agent ID so the PostToolUse hook can look up unread messages.
 writeFileSync(join(SYNAPSE_DIR, 'agent.env'), `SYNAPSE_AGENT_ID=${AGENT_ID}\n`, 'utf8');
@@ -138,10 +144,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           current_task: {
             type: 'string',
             description: 'Short human-readable description of what you are doing',
-          },
-          name: {
-            type: 'string',
-            description: 'Human-readable name for this agent (updates settings.json). Only send when your name changes.',
           },
         },
         required: ['state'],
@@ -309,16 +311,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'update_status') {
-    const { state, current_task, name: newName } = args as {
+    const { state, current_task } = args as {
       state: 'idle' | 'working' | 'blocked' | 'error';
       current_task?: string;
-      name?: string;
     };
-
-    if (newName && newName !== agentName) {
-      agentName = newName;
-      saveSettings({ name: newName });
-    }
 
     updateStatus(AGENT_ID, state, current_task ?? null, agentName || null, null);
 

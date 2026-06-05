@@ -825,10 +825,6 @@ input, select, textarea {
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <h2 id="modal-title">Configure Agent <span id="modal-agent-slot" style="color:var(--accent)"></span></h2>
     <div class="modal-field">
-      <label for="modal-name">Display Name</label>
-      <input id="modal-name" type="text" placeholder="e.g. backend-worker" autocomplete="off" />
-    </div>
-    <div class="modal-field">
       <label for="modal-model">Model</label>
       <select id="modal-model">
         <option value="">— inherit default —</option>
@@ -1383,7 +1379,6 @@ input, select, textarea {
   // ── Agent config dialog ────────────────────────────────────────────────────
   const configBackdrop = document.getElementById('agent-config-backdrop');
   const modalSlot      = document.getElementById('modal-agent-slot');
-  const modalName      = document.getElementById('modal-name');
   const modalModel     = document.getElementById('modal-model');
   const modalEffort    = document.getElementById('modal-effort');
   const modalCancel    = document.getElementById('modal-cancel');
@@ -1396,11 +1391,10 @@ input, select, textarea {
     if (!agent) return;
     configAgentId = agentId;
     modalSlot.textContent = `:${agent.slot}`;
-    modalName.value   = agent.name   && agent.name !== agentId ? agent.name  : '';
     modalModel.value  = agent.model  ?? '';
     modalEffort.value = agent.effort ?? '';
     configBackdrop.classList.remove('hidden');
-    modalName.focus();
+    modalModel.focus();
   }
 
   function closeConfigDialog() {
@@ -1415,9 +1409,8 @@ input, select, textarea {
   modalSave.addEventListener('click', async () => {
     if (!configAgentId) return;
     const body = {
-      name:   modalName.value.trim()   || null,
-      model:  modalModel.value         || null,
-      effort: modalEffort.value        || null,
+      model:  modalModel.value  || null,
+      effort: modalEffort.value || null,
     };
     modalSave.disabled = true;
     modalSave.textContent = '…';
@@ -1433,7 +1426,6 @@ input, select, textarea {
     // Reflect the update locally immediately (SSE will confirm later)
     const agent = agentStatuses.find(a => a.agent_id === savedId);
     if (agent) {
-      agent.name   = body.name;
       agent.model  = body.model;
       agent.effort = body.effort;
     }

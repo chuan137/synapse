@@ -98,6 +98,13 @@ export function openDb(dbPath: string): Database.Database {
     try { database.exec(sql); } catch { /* column already exists */ }
   }
 
+  // Migrate default "Joker" names to role-based names (one-time, idempotent)
+  database.prepare(`
+    UPDATE agent_status
+       SET name = CASE WHEN slot = 0 THEN 'orchestrator' ELSE COALESCE(role, name) END
+     WHERE name = 'Joker'
+  `).run();
+
   return database;
 }
 
@@ -499,6 +506,10 @@ export function listLiveWorkers(
  *  worker has registered). No-op for an unknown agent_id. */
 export function setAgentRole(agentId: string, role: string): void {
   db.prepare(`UPDATE agent_status SET role = ? WHERE agent_id = ?`).run(role, agentId);
+}
+
+export function setAgentName(agentId: string, name: string): void {
+  db.prepare(`UPDATE agent_status SET name = ? WHERE agent_id = ?`).run(name, agentId);
 }
 
 export function getAgentConfigBySlot(
