@@ -1,11 +1,28 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync, execSync } from 'child_process';
 import { openDb } from './db.js';
+
+/** Strip YAML front-matter (---...---) from a role file before injecting into system prompt. */
+function stripFrontMatter(content: string): string {
+  return content.replace(/^---\n[\s\S]*?\n---\n*/, '');
+}
+
+/** Parse role metadata from a role file's front-matter. Returns null if no front-matter. */
+function parseRoleMeta(content: string): { role: string; description: string; capabilities: string[] } | null {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return null;
+  const block = match[1];
+  const role = (block.match(/^role:\s*(.+)$/m) ?? [])[1]?.trim() ?? '';
+  const description = (block.match(/^description:\s*(.+)$/m) ?? [])[1]?.trim() ?? '';
+  const capMatch = block.match(/^capabilities:\s*\[([^\]]*)\]/m);
+  const capabilities = capMatch ? capMatch[1].split(',').map(s => s.trim().replace(/^["']|["']$/g, '')) : [];
+  return { role, description, capabilities };
+}
 
 function buildSystemPrompt(role: string): string {
   const templatesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -21,10 +38,12 @@ function buildSystemPrompt(role: string): string {
     roleInstructions = readFileSync(join(templatesDir, 'SYNAPSE-worker.md'), 'utf8');
     roleLabel = 'worker';
   } else {
-    // Named worker role — base worker instructions + role-specific overlay
+    // Named worker role — base worker instructions + role-specific overlay (front-matter stripped)
     const workerBase = readFileSync(join(templatesDir, 'SYNAPSE-worker.md'), 'utf8');
     const roleFile = join(templatesDir, 'roles', `${role}.md`);
-    const roleOverlay = existsSync(roleFile) ? '\n\n' + readFileSync(roleFile, 'utf8') : '';
+    const roleOverlay = existsSync(roleFile)
+      ? '\n\n' + stripFrontMatter(readFileSync(roleFile, 'utf8'))
+      : '';
     roleInstructions = workerBase + roleOverlay;
     roleLabel = 'worker';
   }
@@ -32,6 +51,19 @@ function buildSystemPrompt(role: string): string {
   return base
     .replace('{ROLE}', roleLabel)
     .replace('{ROLE_INSTRUCTIONS}', roleInstructions);
+}
+
+/** List all available named roles from templates/roles/, returning their metadata. */
+function listAvailableRoles(templatesDir: string): { role: string; description: string; capabilities: string[] }[] {
+  const rolesDir = join(templatesDir, 'roles');
+  if (!existsSync(rolesDir)) return [];
+  return readdirSync(rolesDir)
+    .filter(f => f.endsWith('.md'))
+    .map(f => {
+      const content = readFileSync(join(rolesDir, f), 'utf8');
+      return parseRoleMeta(content);
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null);
 }
 
 const SYNAPSE_INSTALL_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');

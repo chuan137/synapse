@@ -4,12 +4,34 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, chmodSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, mkdtempSync, chmodSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
 import { execSync, spawnSync } from 'child_process';
 import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval, getAgentHistory } from './db.js';
+
+const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
+
+function listAvailableRoles(): string {
+  const rolesDir = join(TEMPLATES_DIR, 'roles');
+  if (!existsSync(rolesDir)) return 'No roles defined yet.';
+  const roles = readdirSync(rolesDir)
+    .filter(f => f.endsWith('.md'))
+    .map(f => {
+      const content = readFileSync(join(rolesDir, f), 'utf8');
+      const match = content.match(/^---\n([\s\S]*?)\n---/);
+      if (!match) return null;
+      const block = match[1];
+      const role = (block.match(/^role:\s*(.+)$/m) ?? [])[1]?.trim() ?? f.replace('.md', '');
+      const description = (block.match(/^description:\s*(.+)$/m) ?? [])[1]?.trim() ?? '';
+      return `- **${role}**: ${description}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+  return roles || 'No roles defined yet.';
+}
 
 // ── Agent identity ─────────────────────────────────────────────────────────
 
@@ -128,9 +150,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'spawn_agent',
       description:
-        'Spawn a new Claude agent in a tmux window to work on a task. ' +
+        'Spawn a new long-lived Claude worker agent in a tmux window. ' +
         'The agent will register itself in Synapse and you can message it via its returned agent_id. ' +
-        'Use this to parallelize work across multiple agents.',
+        'Every worker should have a role — check the pool for an idle matching worker before spawning. ' +
+        `Available roles:\n${listAvailableRoles()}\n` +
+        'If no role fits, ask the human to define one before spawning.',
       inputSchema: {
         type: 'object',
         properties: {

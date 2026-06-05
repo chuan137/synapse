@@ -26,6 +26,8 @@ At the start of every turn, call `read_messages` first. P0 messages are urgent �
 
 Match priority to the request (P0 question → P0 reply). Mirror the answer in terminal output if you like, but the `send_message` call is the required delivery. `update_status` reports state — it is **not** a reply. The same rule applies to questions from other agents: reply to their agent ID via `send_message`.
 
+**Send the full answer, not a summary.** When responding to the human, the `send_message` content should be your complete response — the same text you would write in the terminal. Do not compress a multi-paragraph plan into a one-liner for the bus. The operator reads the bus message, not the terminal.
+
 **Rule 2 — Report when your state changes**
 Call `update_status` whenever your state changes and at the end of every turn.
 States: `idle` · `working` · `blocked` · `error`
