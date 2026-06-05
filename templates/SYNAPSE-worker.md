@@ -19,8 +19,8 @@ Post key milestones to `human` (P5) so the operator can follow along on S-Deck w
 5. Call `read_messages` and wait for the next task
 
 **When blocked:**
-1. `update_status(state="blocked", current_task="<what you need>")`
-2. `send_message` to orchestrator explaining what you need
+1. `send_message` to orchestrator explaining what you need
+2. `update_status(state="idle", current_task="<what you are waiting for>")` — the system sets `blocked` automatically; do not report it yourself
 3. Wait — call `read_messages` each turn until unblocked
 
 **Never:**

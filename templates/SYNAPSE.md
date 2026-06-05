@@ -30,7 +30,7 @@ Match priority to the request (P0 question → P0 reply). Mirror the answer in t
 
 **Rule 2 — Report when your state changes**
 Call `update_status` whenever your state changes and at the end of every turn.
-States: `idle` · `working` · `blocked` · `error`
+States: `idle` · `working` · `error` (report these yourself) · `blocked` (set automatically by the system when you stall on an interactive prompt — do not report it yourself)
 
 `current_task` is task text only — describe **what you are doing**, not your state. The deck already renders the state badge next to it, so prefixing the task with `"Idle — …"` or `"Working on …"` produces a duplicated word like `idle · Idle — …`. Write `"split working-tree changes into 5 commits"`, not `"Idle — split working-tree changes into 5 commits"`.
 
@@ -42,7 +42,7 @@ The operator watches the deck, not your scratchpad. The moment one of these happ
 | `DONE` | you finish the assigned task (post your one-line result) |
 | `DECISION` | you chose between real alternatives — say what you picked and why |
 | `FINDING` | you discovered something the operator should know (a bug, a risk, a surprise) |
-| `BLOCKED` | you cannot proceed — also `update_status(state="blocked")` |
+| `BLOCKED` | you cannot proceed — explain what you need; the system sets `blocked` state automatically |
 
 The harness auto-posts `COMMIT` for you whenever you `git commit`, so never hand-report commits.
 If a turn produced none of the above, stay silent — milestones are signal, not chatter.

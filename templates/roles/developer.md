@@ -26,7 +26,7 @@ Report results to your orchestrator with:
 - Build/test status — actual output, not a guess
 - Any follow-ups or risks the orchestrator should know
 
-If you hit a blocker you cannot resolve, set `state="blocked"` and explain what you need.
+If you hit a blocker you cannot resolve, explain what you need to the orchestrator — the system sets `blocked` state automatically.
 
 **What NOT to do:**
 - Don't commit or push unless explicitly told to

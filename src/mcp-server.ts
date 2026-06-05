@@ -130,16 +130,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'update_status',
       description:
-        'Report your current state to the operator dashboard. ' +
-        'Call this whenever your state changes AND at the END of every turn. ' +
-        'An unreported state makes you invisible to the operator.',
+        'Report your current state to the operator dashboard. Call this whenever your state changes AND at the END of every turn. ' +
+        "State is one of: idle (loop alive, waiting), working (processing a turn), error (unrecoverable failure). " +
+        "'blocked' is set automatically by the system when you stall on an interactive prompt — do not report it yourself.",
       inputSchema: {
         type: 'object',
         properties: {
           state: {
             type: 'string',
-            enum: ['idle', 'working', 'blocked', 'error'],
-            description: 'Your current state',
+            enum: ['idle', 'working', 'error'],
+            description: 'Your current state. Do not report blocked — the system sets it automatically.',
           },
           current_task: {
             type: 'string',
@@ -312,7 +312,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'update_status') {
     const { state, current_task } = args as {
-      state: 'idle' | 'working' | 'blocked' | 'error';
+      state: 'idle' | 'working' | 'error';
       current_task?: string;
     };
 
