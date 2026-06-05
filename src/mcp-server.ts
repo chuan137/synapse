@@ -37,7 +37,6 @@ function listAvailableRoles(): string {
 
 interface Settings {
   projectId: string; // stable per-project, written once
-  name?: string;     // human-readable agent name, mutable
 }
 
 const SYNAPSE_DIR = join(process.cwd(), '.synapse');
@@ -54,10 +53,6 @@ function loadSettings(): Settings {
   return settings;
 }
 
-function saveSettings(patch: Partial<Settings>): void {
-  const current = loadSettings();
-  writeFileSync(SETTINGS_PATH, JSON.stringify({ ...current, ...patch }, null, 2), 'utf8');
-}
 
 const isFirstInit = !existsSync(join(SYNAPSE_DIR, 'settings.json'));
 const settings = loadSettings();
@@ -65,11 +60,10 @@ const SESSION_ID  = process.env.CLAUDE_CODE_SESSION_ID ?? null;
 const TMUX_PANE   = process.env.TMUX_PANE ?? null;
 const FORCED_SLOT = process.env.SYNAPSE_SLOT !== undefined ? parseInt(process.env.SYNAPSE_SLOT, 10) : undefined;
 const { agentId: AGENT_ID, slot } = claimAgentSlot(settings.projectId, SESSION_ID, TMUX_PANE, FORCED_SLOT);
-let agentName = settings.name ?? '';
 
-// Ensure orchestrator always shows name "orchestrator" unless operator has customized it
-if (slot === 0 && (!agentName || agentName === 'Joker')) {
-  agentName = 'orchestrator';
+// Ensure orchestrator always shows name "orchestrator" if not yet set.
+// Workers get their name from setAgentName() called by spawnWorker — never from settings.json.
+if (slot === 0) {
   setAgentName(AGENT_ID, 'orchestrator');
 }
 
@@ -368,7 +362,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       current_task?: string;
     };
 
-    updateStatus(AGENT_ID, state, current_task ?? null, agentName || null, null);
+    updateStatus(AGENT_ID, state, current_task ?? null, null, null);
 
     return {
       content: [

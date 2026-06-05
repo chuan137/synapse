@@ -112,11 +112,11 @@ export function openDb(dbPath: string): Database.Database {
     try { database.exec(sql); } catch { /* column already exists */ }
   }
 
-  // Migrate default "Joker" names to role-based names (one-time, idempotent)
+  // Migrate stale names to role-based names (one-time, idempotent)
   database.prepare(`
     UPDATE agent_status
        SET name = CASE WHEN slot = 0 THEN 'orchestrator' ELSE COALESCE(role, name) END
-     WHERE name = 'Joker'
+     WHERE name = 'Joker' OR name LIKE 'Developer :%'
   `).run();
 
   return database;
