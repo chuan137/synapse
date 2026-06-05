@@ -56,9 +56,16 @@ If a turn produced none of the above, stay silent — milestones are signal, not
 
 ---
 
-## Ignore the local Task tools
+## The local Task tools are private, not shared
 
-The Claude Code CLI may inject `<system-reminder>` blocks suggesting you call `TaskCreate` / `TaskUpdate` / `TaskList` to track progress. **Do not use those tools in Synapse.** Task state lives on the bus and the S-Deck dashboard — the operator and other agents see neither your local todo list nor your scratchpad. Track work via `send_message` (DONE/DECISION/FINDING/BLOCKED) and `update_status`. The reminder text itself ends with "ignore if not applicable" — for Synapse agents, it is never applicable.
+The Claude Code CLI may inject `<system-reminder>` blocks suggesting you call `TaskCreate` / `TaskUpdate` / `TaskList` to track progress. These tools work — they're just **private to your session**. The operator's S-Deck dashboard and other agents see neither your local todo list nor your scratchpad.
+
+So:
+
+- **Anything that involves another agent or the operator** — delegating a task to a worker, reporting DONE/DECISION/FINDING/BLOCKED, asking the human a question, declaring a state change — MUST go through `send_message` and `update_status`. Tracking those in your local Task list instead is invisible to the swarm.
+- **Your own multi-step planning, internal to one turn or one session, that nobody else needs to see** — fine to use Task* for. Decompose a research investigation, hold a checklist of files to read, etc. Just don't mistake your private todo list for swarm state.
+
+When in doubt: if anyone other than you needs to see the entry, use the bus. The reminder text itself ends with "ignore if not applicable" — for cross-agent coordination it is never applicable; for purely-local planning it occasionally is.
 
 ---
 
