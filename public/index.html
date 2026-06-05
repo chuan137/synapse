@@ -470,6 +470,85 @@
     }
     .modal-actions button:hover:not(.primary) { border-color: var(--accent); color: var(--accent); }
     .modal-actions button.primary:hover { opacity: 0.88; }
+    .modal-actions button.danger { color: var(--error); border-color: var(--border); margin-right: auto; }
+    .modal-actions button.danger:hover { border-color: var(--error); color: var(--error); }
+
+    /* Roles modal: wider, two-pane (list | editor). Reuses .modal-backdrop / .modal. */
+    .modal.roles-modal {
+      width: 760px;
+      max-width: 92vw;
+      height: 560px;
+      max-height: 86vh;
+      padding: 20px 22px;
+    }
+    .roles-body {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 16px;
+      flex: 1;
+      min-height: 0;
+    }
+    .roles-list-pane { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+    #roles-list {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .role-row {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .role-row:last-child { border-bottom: none; }
+    .role-row:hover { background: var(--surface); }
+    .role-row.selected { background: var(--surface); border-left: 2px solid var(--accent); }
+    .role-row .role-row-name { font-size: 12px; font-weight: 600; color: var(--text); }
+    .role-row .role-row-desc {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #roles-new-btn {
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #roles-new-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .roles-editor-pane { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+    #roles-editor-header { font-size: 12px; font-weight: 600; color: var(--text); }
+    #roles-editor-header .muted { color: var(--muted); font-weight: 400; }
+    #roles-source {
+      flex: 1;
+      resize: none;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 10px;
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.15s;
+      white-space: pre;
+      overflow: auto;
+    }
+    #roles-source:focus { border-color: var(--accent); }
+    #roles-source:disabled { opacity: 0.5; }
+    #roles-error { font-size: 11px; color: var(--error); min-height: 14px; }
+    .roles-empty { padding: 14px; font-size: 11px; color: var(--muted); text-align: center; }
 
     .agent-name {
       font-size: 13px;
@@ -672,6 +751,24 @@
       gap: 5px;
     }
 
+    #plan-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 18px;
+      line-height: 1.6;
+      font-size: 13px;
+    }
+    #plan-content h1 { font-size: 16px; font-weight: 700; margin: 0 0 10px; }
+    #plan-content h2 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: var(--accent); }
+    #plan-content h3 { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+    #plan-content p  { margin: 0 0 8px; }
+    #plan-content ul, #plan-content ol { margin: 0 0 8px; padding-left: 18px; }
+    #plan-content li { margin-bottom: 3px; }
+    #plan-content code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    #plan-content pre { background: var(--bg); padding: 10px 12px; border-radius: 5px; overflow-x: auto; margin: 0 0 10px; }
+    #plan-content a { color: var(--accent); }
+    #plan-content hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
     /* ── Compose (inside messages panel) ── */
     #compose {
       border-top: 1px solid var(--border);
@@ -865,6 +962,7 @@ input, select, textarea {
   <div class="project-name" id="project-name">—</div>
   <div class="dot-label" id="conn-label">connecting…</div>
   <div class="dot" id="conn-dot" style="background: var(--muted); box-shadow: none;"></div>
+  <button id="roles-btn" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:inherit;" title="View and edit worker roles">Roles</button>
   <button id="theme-btn" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:inherit;" title="Toggle theme">☀</button>
 </header>
 
@@ -884,14 +982,20 @@ input, select, textarea {
     </div>
   </section>
 
-  <!-- Messages -->
+  <!-- Messages / Plan -->
   <section id="messages-panel">
     <div class="panel-header" id="messages-header">
-      <span id="messages-title">Messages</span>
+      <div class="panel-tabs">
+        <button id="tab-messages" class="panel-tab active">Messages</button>
+        <button id="tab-plan" class="panel-tab">Plan</button>
+      </div>
       <span class="header-status-group"><span id="activity-latest-flash"></span><button id="activity-expand" class="activity-toggle" title="Show activity panel" aria-label="Show activity panel"></button></span>
     </div>
     <div id="messages-list">
       <div class="empty-state" id="empty-msgs">No messages yet.</div>
+    </div>
+    <div id="plan-content" style="display:none;">
+      <div id="plan-rendered"></div>
     </div>
     <div id="compose">
       <textarea id="msg-input" rows="4" placeholder="Select an agent… ⌘↵ send · ⌘⇧↵ urgent" disabled></textarea>
@@ -945,6 +1049,29 @@ input, select, textarea {
   </div>
 </div>
 
+<!-- Roles CRUD modal -->
+<div id="roles-backdrop" class="modal-backdrop hidden">
+  <div class="modal roles-modal" role="dialog" aria-modal="true" aria-labelledby="roles-title">
+    <h2 id="roles-title">Worker Roles</h2>
+    <div class="roles-body">
+      <div class="roles-list-pane">
+        <button id="roles-new-btn">+ New role</button>
+        <div id="roles-list"></div>
+      </div>
+      <div class="roles-editor-pane">
+        <div id="roles-editor-header"><span class="muted">Select a role or create a new one.</span></div>
+        <textarea id="roles-source" spellcheck="false" disabled placeholder="Role markdown (front-matter + body)…"></textarea>
+        <div id="roles-error"></div>
+        <div class="modal-actions">
+          <button id="roles-delete" class="danger" disabled>Delete</button>
+          <button id="roles-cancel">Cancel</button>
+          <button id="roles-save" class="primary" disabled>Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   // ── State ────────────────────────────────────────────────────────────────
   let agentStatuses    = [];
@@ -953,8 +1080,10 @@ input, select, textarea {
   let recentEvents     = [];
   let toolMetrics      = [];
   let allActivities    = [];
+  let planContent      = '';
   let selectedAgentId  = null;
-  let rightPanelTab    = 'events'; // 'events' | 'activities'
+  let middlePanelTab   = 'messages'; // 'messages' | 'plan'
+  let rightPanelTab    = 'events';   // 'events'   | 'activities'
 
   // ── Theme ────────────────────────────────────────────────────────────────
   const themeBtn = document.getElementById('theme-btn');
@@ -1013,18 +1142,20 @@ input, select, textarea {
     };
 
     es.onmessage = (e) => {
-      const { statuses, messages, approvals, events, metrics, activities } = JSON.parse(e.data);
+      const { statuses, messages, approvals, events, metrics, activities, plan } = JSON.parse(e.data);
       agentStatuses    = statuses;
       allMessages      = messages;
       pendingApprovals = approvals ?? [];
       recentEvents     = events ?? [];
       toolMetrics      = metrics ?? [];
       allActivities    = activities ?? [];
+      if (plan !== undefined) planContent = plan.content ?? '';
       renderAgents();
       renderMessages();
       renderApprovals();
       renderActivity();
       if (rightPanelTab === 'activities') renderTaskActivities();
+      if (middlePanelTab === 'plan') renderPlan();
     };
 
     es.onerror = () => {
@@ -1311,6 +1442,34 @@ input, select, textarea {
 
     morphdom(activityList, `<div id="activity-list">${activityInnerHtml}</div>`, { childrenOnly: true });
   }
+
+  // ── Middle panel tab switching (Messages / Plan) ─────────────────────────
+  const tabMessages   = document.getElementById('tab-messages');
+  const tabPlan       = document.getElementById('tab-plan');
+  const messagesList  = document.getElementById('messages-list');
+  const planContentEl = document.getElementById('plan-content');
+  const planRendered  = document.getElementById('plan-rendered');
+  const composeEl     = document.getElementById('compose');
+
+  function renderPlan() {
+    const inner = planContent.trim()
+      ? renderMarkdown(planContent)
+      : '<div class="empty-state">No PLAN.md found at project root.</div>';
+    morphdom(planRendered, `<div id="plan-rendered">${inner}</div>`, { childrenOnly: true });
+  }
+
+  function switchMiddleTab(tab) {
+    middlePanelTab = tab;
+    tabMessages.classList.toggle('active', tab === 'messages');
+    tabPlan.classList.toggle('active', tab === 'plan');
+    messagesList.style.display = tab === 'messages' ? '' : 'none';
+    planContentEl.style.display = tab === 'plan' ? '' : 'none';
+    composeEl.style.display = tab === 'messages' ? '' : 'none';
+    if (tab === 'plan') renderPlan();
+  }
+
+  tabMessages.addEventListener('click', () => switchMiddleTab('messages'));
+  tabPlan.addEventListener('click', () => switchMiddleTab('plan'));
 
   // ── Right panel tab switching ────────────────────────────────────────────
   const tabEvents     = document.getElementById('tab-events');
@@ -1599,6 +1758,162 @@ input, select, textarea {
       agent.effort = body.effort;
     }
     renderAgents();
+  });
+
+  // ── Roles modal ────────────────────────────────────────────────────────────
+  const rolesBtn      = document.getElementById('roles-btn');
+  const rolesBackdrop = document.getElementById('roles-backdrop');
+  const rolesListEl   = document.getElementById('roles-list');
+  const rolesNewBtn   = document.getElementById('roles-new-btn');
+  const rolesHeader   = document.getElementById('roles-editor-header');
+  const rolesSource   = document.getElementById('roles-source');
+  const rolesError    = document.getElementById('roles-error');
+  const rolesDelete   = document.getElementById('roles-delete');
+  const rolesCancel   = document.getElementById('roles-cancel');
+  const rolesSave     = document.getElementById('roles-save');
+
+  const NEW_ROLE_TEMPLATE =
+`---
+role: new-role
+description: One-line description here
+capabilities: []
+---
+
+## Role: New Role
+
+Describe the role's responsibilities here.
+`;
+
+  let rolesCache = [];          // [{ name, description, capabilities, body }]
+  let rolesSelected = null;     // slug of the role being edited, or null
+  let rolesCreating = false;    // true when editing an unsaved new role
+
+  function setRolesError(msg) { rolesError.textContent = msg || ''; }
+
+  function renderRolesList() {
+    if (!rolesCache.length) {
+      rolesListEl.innerHTML = '<div class="roles-empty">No roles defined yet.</div>';
+      return;
+    }
+    rolesListEl.innerHTML = rolesCache.map(r => {
+      const sel = (!rolesCreating && r.name === rolesSelected) ? ' selected' : '';
+      return `<div class="role-row${sel}" data-role="${esc(r.name)}">
+        <div class="role-row-name">${esc(r.name)}</div>
+        <div class="role-row-desc">${esc(r.description)}</div>
+      </div>`;
+    }).join('');
+    rolesListEl.querySelectorAll('.role-row').forEach(row => {
+      row.addEventListener('click', () => selectRole(row.dataset.role));
+    });
+  }
+
+  function enableEditor(on) {
+    rolesSource.disabled = !on;
+    rolesSave.disabled   = !on;
+    rolesDelete.disabled = !on || rolesCreating;
+  }
+
+  async function selectRole(slug) {
+    setRolesError('');
+    rolesCreating = false;
+    rolesSelected = slug;
+    enableEditor(true);
+    renderRolesList();
+    rolesHeader.innerHTML = `Editing <span class="muted">${esc(slug)}</span>`;
+    rolesSource.value = 'loading…';
+    try {
+      const res = await fetch(`/api/roles/${encodeURIComponent(slug)}`);
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+      const data = await res.json();
+      rolesSource.value = data.source ?? '';
+    } catch (e) {
+      rolesSource.value = '';
+      setRolesError(String(e.message || e));
+    }
+  }
+
+  function startCreate() {
+    setRolesError('');
+    rolesCreating = true;
+    rolesSelected = null;
+    enableEditor(true);
+    renderRolesList();
+    rolesHeader.innerHTML = 'New role <span class="muted">(unsaved)</span>';
+    rolesSource.value = NEW_ROLE_TEMPLATE;
+    rolesSource.focus();
+  }
+
+  function resetEditor() {
+    rolesCreating = false;
+    rolesSelected = null;
+    rolesHeader.innerHTML = '<span class="muted">Select a role or create a new one.</span>';
+    rolesSource.value = '';
+    setRolesError('');
+    enableEditor(false);
+    rolesDelete.disabled = true;
+  }
+
+  async function loadRoles() {
+    const res = await fetch('/api/roles');
+    rolesCache = res.ok ? await res.json() : [];
+    renderRolesList();
+  }
+
+  async function openRolesModal() {
+    rolesBackdrop.classList.remove('hidden');
+    resetEditor();
+    await loadRoles();
+  }
+
+  function closeRolesModal() {
+    rolesBackdrop.classList.add('hidden');
+  }
+
+  rolesBtn.addEventListener('click', openRolesModal);
+  rolesCancel.addEventListener('click', closeRolesModal);
+  rolesBackdrop.addEventListener('click', (e) => { if (e.target === rolesBackdrop) closeRolesModal(); });
+  rolesNewBtn.addEventListener('click', startCreate);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !rolesBackdrop.classList.contains('hidden')) closeRolesModal();
+  });
+
+  rolesSave.addEventListener('click', async () => {
+    setRolesError('');
+    const source = rolesSource.value;
+    rolesSave.disabled = true;
+    rolesSave.textContent = '…';
+    try {
+      const url = rolesCreating ? '/api/roles' : `/api/roles/${encodeURIComponent(rolesSelected)}`;
+      const method = rolesCreating ? 'POST' : 'PUT';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+      // Auto-close on success and refresh the list.
+      closeRolesModal();
+      await loadRoles();
+    } catch (e) {
+      setRolesError(String(e.message || e));
+    } finally {
+      rolesSave.disabled = false;
+      rolesSave.textContent = 'Save';
+    }
+  });
+
+  rolesDelete.addEventListener('click', async () => {
+    if (rolesCreating || !rolesSelected) return;
+    if (!confirm(`Delete role "${rolesSelected}"? This removes the file on disk.`)) return;
+    setRolesError('');
+    try {
+      const res = await fetch(`/api/roles/${encodeURIComponent(rolesSelected)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+      resetEditor();
+      await loadRoles();
+    } catch (e) {
+      setRolesError(String(e.message || e));
+    }
   });
 </script>
 </body>

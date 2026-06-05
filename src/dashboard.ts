@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, statSync, watchFile } from 'fs';
 import { execSync, spawnSync } from 'child_process';
 import {
   getAllStatuses,
@@ -34,6 +34,43 @@ function readProjectId(): string | null {
   try { return JSON.parse(readFileSync(p, 'utf8')).projectId ?? null; } catch { return null; }
 }
 
+// ── PLAN.md file-watch ────────────────────────────────────────────────────
+
+const PLAN_PATH = join(process.cwd(), 'PLAN.md');
+
+function readPlan(): { content: string; updated_at: number } {
+  try {
+    const content = readFileSync(PLAN_PATH, 'utf8');
+    const updated_at = statSync(PLAN_PATH).mtimeMs;
+    return { content, updated_at };
+  } catch {
+    return { content: '', updated_at: 0 };
+  }
+}
+
+let currentPlan = readPlan();
+
+// Use watchFile (stat-poll) — more reliable than fs.watch across editors/NFS.
+watchFile(PLAN_PATH, { interval: 1500 }, () => {
+  const next = readPlan();
+  if (next.content !== currentPlan.content || next.updated_at !== currentPlan.updated_at) {
+    currentPlan = next;
+    broadcastPlan();
+  }
+});
+
+function broadcastPlan() {
+  broadcast({
+    statuses: getAllStatuses(),
+    messages: getRecentMessages(200),
+    approvals: getPendingApprovals(),
+    events: getRecentEvents(200),
+    metrics: getAllToolMetrics(),
+    activities: listAllActivities(200),
+    plan: currentPlan,
+  });
+}
+
 const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
@@ -61,6 +98,7 @@ let lastMessages   = '';
 let lastApprovals  = '';
 let lastEvents     = '';
 let lastActivities = '';
+let lastPlan       = '';
 
 // agent_id → newest unread message id we've already nudged about (de-dupe).
 const nudgedMsgId = new Map<string, number>();
@@ -78,20 +116,23 @@ setInterval(() => {
   const approvalStr   = JSON.stringify(approvals.map((a) => a.id));
   const eventStr      = JSON.stringify(events.map((e) => e.id));
   const activityStr   = JSON.stringify(activities.map((a) => `${a.id}:${a.status}:${a.commit_sha}`));
+  const planStr       = `${currentPlan.updated_at}`;
 
   if (
     statusStr !== lastStatuses ||
     msgStr !== lastMessages ||
     approvalStr !== lastApprovals ||
     eventStr !== lastEvents ||
-    activityStr !== lastActivities
+    activityStr !== lastActivities ||
+    planStr !== lastPlan
   ) {
     lastStatuses   = statusStr;
     lastMessages   = msgStr;
     lastApprovals  = approvalStr;
     lastEvents     = eventStr;
     lastActivities = activityStr;
-    broadcast({ statuses, messages, approvals, events, metrics, activities });
+    lastPlan       = planStr;
+    broadcast({ statuses, messages, approvals, events, metrics, activities, plan: currentPlan });
   }
 
   // Nudge is decoupled from the broadcast: it must NOT re-fire on every event/
@@ -187,6 +228,7 @@ app.get('/api/state', (_req: Request, res: Response) => {
     events: getRecentEvents(200),
     metrics: getAllToolMetrics(),
     activities: listAllActivities(200),
+    plan: currentPlan,
   });
 });
 
@@ -322,6 +364,7 @@ app.get('/events', (req: Request, res: Response) => {
     events: getRecentEvents(200),
     metrics: getAllToolMetrics(),
     activities: listAllActivities(200),
+    plan: currentPlan,
   });
   res.write(`data: ${initial}\n\n`);
 
