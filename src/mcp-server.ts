@@ -117,6 +117,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: [0, 5],
             description: '0 = urgent (P0), 5 = normal (P5). Default: 5.',
           },
+          report_file: {
+            type: 'boolean',
+            description: 'If true and to_id is "human", write the full content to .synapse/reports/<timestamp>-<slug>.md and send a truncated summary with the file path instead. Use when the message is longer than ~20 lines.',
+            default: false,
+          },
         },
         required: ['to_id', 'content'],
       },
@@ -343,6 +348,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           orchestrator_id: { type: 'string', description: 'Your orchestrator agent_id (usually <projectId>:0)' },
           content: { type: 'string', description: 'Full DONE report — files changed, results, caveats. Sent to orchestrator.' },
           milestone: { type: 'string', description: 'Optional one-line milestone for the human bus. Defaults to a truncation of content.' },
+          report_file: {
+            type: 'boolean',
+            description: 'If true, write the full DONE report to .synapse/reports/<timestamp>-<slug>.md and send a short summary with file path to the human instead of the full content.',
+            default: false,
+          },
         },
         required: ['orchestrator_id', 'content'],
       },
@@ -383,11 +393,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'send_message') {
-    const { to_id, content, priority = 5 } = args as {
+    const { to_id, content, priority = 5, report_file = false } = args as {
       to_id: string;
       content: string;
       priority?: number;
+      report_file?: boolean;
     };
+
+    if (report_file && to_id === 'human') {
+      const reportsDir = join(process.cwd(), '.synapse', 'reports');
+      mkdirSync(reportsDir, { recursive: true });
+      const slug = content.split('\n')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+      const filename = `${Date.now()}-${slug}.md`;
+      writeFileSync(join(reportsDir, filename), content, 'utf8');
+      const lines = content.split('\n');
+      const summary = lines.slice(0, 10).join('\n');
+      const shortMsg = `${summary}${lines.length > 10 ? '\n…' : ''}\n\n[Full report: .synapse/reports/${filename}]`;
+      sendMessage(AGENT_ID, to_id, shortMsg, priority);
+      return { content: [{ type: 'text', text: 'Message sent (report filed).' }] };
+    }
 
     sendMessage(AGENT_ID, to_id, content, priority);
 
@@ -588,17 +612,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'report_done') {
-    const { orchestrator_id, content, milestone } = args as {
+    const { orchestrator_id, content, milestone, report_file = false } = args as {
       orchestrator_id: string;
       content: string;
       milestone?: string;
+      report_file?: boolean;
     };
+    // Full content always goes to orchestrator
     const orchMsgId = sendMessage(AGENT_ID, orchestrator_id, content, 5);
-    const summary = milestone
-      ?? (content.length > 200
+    // Human message: file it or summarize inline
+    let humanMsg: string;
+    if (report_file) {
+      const reportsDir = join(process.cwd(), '.synapse', 'reports');
+      mkdirSync(reportsDir, { recursive: true });
+      const slug = content.split('\n')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+      const filename = `${Date.now()}-${slug}.md`;
+      writeFileSync(join(reportsDir, filename), content, 'utf8');
+      const lines = content.split('\n');
+      const preview = lines.slice(0, 5).join('\n');
+      humanMsg = milestone ?? `DONE — ${preview}${lines.length > 5 ? '\n…' : ''}\n\n[Full report: .synapse/reports/${filename}]`;
+    } else {
+      humanMsg = milestone ?? (content.length > 200
         ? `DONE — ${content.slice(0, 200).split('\n')[0]}`
         : `DONE — ${content.split('\n')[0]}`);
-    sendMessage(AGENT_ID, 'human', summary, 5);
+    }
+    sendMessage(AGENT_ID, 'human', humanMsg, 5);
     const myActivity = getMostRecentInProgressActivity(AGENT_ID);
     if (myActivity) {
       finishActivity(myActivity.id, 'completed', orchMsgId, null);
