@@ -518,6 +518,13 @@
     .activity-row.evt::before { content: '◇'; color: var(--accent); flex-shrink: 0; }
 
     /* ── Activity status ticker (shown in Messages header when activity panel is collapsed) ── */
+    .header-status-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      min-width: 0;
+    }
     #activity-latest-flash {
       display: none;
       font-size: 11px;
@@ -526,8 +533,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      margin-right: 4px;
-      flex-shrink: 1;
       min-width: 0;
     }
     main.activity-collapsed #activity-latest-flash:not(:empty) {
@@ -785,7 +790,7 @@ input, select, textarea {
   <section id="messages-panel">
     <div class="panel-header" id="messages-header">
       <span id="messages-title">Messages</span>
-      <span id="activity-latest-flash"></span><button id="activity-expand" class="activity-toggle" title="Show activity panel" aria-label="Show activity panel"></button>
+      <span class="header-status-group"><span id="activity-latest-flash"></span><button id="activity-expand" class="activity-toggle" title="Show activity panel" aria-label="Show activity panel"></button></span>
     </div>
     <div id="messages-list">
       <div class="empty-state" id="empty-msgs">No messages yet.</div>
@@ -1112,9 +1117,9 @@ input, select, textarea {
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
     activityLabel.textContent = sel ? ` · :${sel.slot}` : '';
 
-    // Update ticker from the selected agent's latest event (CSS truncates + ellipsis)
-    const latestFiltered = filtered[filtered.length - 1];
-    activityFlash.textContent = latestFiltered ? summariseEvent(latestFiltered) : '';
+    // Ticker shows latest global event (swarm-wide) so it always has fresh content
+    const latestGlobal = recentEvents[recentEvents.length - 1];
+    activityFlash.textContent = latestGlobal ? summariseEvent(latestGlobal) : '';
 
     if (!filtered.length) {
       activityList.innerHTML = '<div class="empty-state">No tool activity yet.</div>';
