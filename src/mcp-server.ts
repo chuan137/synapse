@@ -322,6 +322,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           title: { type: 'string', description: 'One-line activity title (visible in S-Deck Activities tab)' },
           content: { type: 'string', description: 'The full task message body sent to the worker' },
           priority: { type: 'number', enum: [0, 5], default: 5, description: '0 = urgent, 5 = normal' },
+          task_file: {
+            type: 'boolean',
+            description: 'If true, write the task content to .synapse/tasks/<activityId>.md and send a short reference message instead of the full content inline. Use for large task specs (>~300 tokens).',
+            default: false,
+          },
         },
         required: ['to_id', 'title', 'content'],
       },
@@ -554,13 +559,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'delegate_task') {
-    const { to_id, title, content, priority = 5 } = args as {
+    const { to_id, title, content, priority = 5, task_file = false } = args as {
       to_id: string;
       title: string;
       content: string;
       priority?: number;
+      task_file?: boolean;
     };
-    const messageId = sendMessage(AGENT_ID, to_id, content, priority);
+    let outboundContent = content;
+    // For large specs, stage the brief to a file and send a short pointer message.
+    // We need the activityId for the filename, so start the activity with null trigger first,
+    // then send the message and record it via the existing trigger_msg_id path.
+    if (task_file) {
+      // Start activity without trigger so we have an id for the filename
+      const activityId = startActivity(to_id, title, null);
+      const tasksDir = join(process.cwd(), '.synapse', 'tasks');
+      mkdirSync(tasksDir, { recursive: true });
+      writeFileSync(join(tasksDir, `${activityId}.md`), content, 'utf8');
+      const lines = content.split('\n');
+      const preview = lines.slice(0, 3).join('\n');
+      outboundContent = `Task brief at .synapse/tasks/${activityId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
+      const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
+      return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${activityId}` }] };
+    }
+    const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
     const activityId = startActivity(to_id, title, messageId);
     return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${activityId}` }] };
   }
