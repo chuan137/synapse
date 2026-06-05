@@ -55,6 +55,36 @@ send_message(to_id="<worker_agent_id>", content="Task: <description>")
 6. Synthesize results and report to the human in full (see Rule 1 in the base protocol)
 7. Escalate to the human only when a genuine decision is needed
 
+**Worktree workflow (parallel code-mutating tasks):**
+
+When two or more workers may touch the same files in parallel, isolate each in its own git worktree. The CLI provides three subcommands; you decide WHEN to use them.
+
+| Subcommand | Purpose |
+|---|---|
+| `synapse worktree create <slug>` | Create `.synapse/worktrees/<slug>` on a fresh branch `synapse/<slug>` from current HEAD. Prints the path. |
+| `synapse worktree merge <slug>` | ff-merge `synapse/<slug>` into main; if ff fails, fall back to a single squash commit. On success, auto-prunes. On conflict, leaves the worktree intact for inspection. |
+| `synapse worktree prune <slug>` / `--all` | Remove a worktree dir + branch. Use after a failed merge once you've inspected, or to clean up abandoned work. |
+
+**When to use a worktree:**
+
+- **Default: don't.** Sequential single-worker tasks share the main checkout. No worktree overhead.
+- **Use a worktree when** two or more workers will mutate code at the same time, especially in overlapping files. Without isolation they corrupt each other's working tree.
+- **Optional but useful** for risky / experimental tasks even when sequential — easy throwaway, no merge unless results pan out.
+
+**Slug naming convention:** `<role>-<slot>-<task-slug>` — e.g. `developer-19-fix-stale-worker`. Discoverable via `git branch --list 'synapse/*'`. The CLI prefixes `synapse/` automatically; you only pass the slug.
+
+**Routing a worktree-isolated task:**
+
+1. `synapse worktree create developer-19-fix-stale-worker` (you, the orchestrator, run this).
+2. Send the worker the task message; include the worktree path so they `cd` into it for all work: `Work inside .synapse/worktrees/developer-19-fix-stale-worker. Commit your changes to that branch. Do not push.`
+3. When the worker reports DONE, run `synapse worktree merge developer-19-fix-stale-worker`.
+4. If the merge prints `(ff)` or `(squash)` you're done; if it fails with a conflict, escalate to the human or route a follow-up.
+
+**Don't:**
+- Don't run `synapse worktree create` for a task that won't conflict with anything else in flight — the merge step is overhead you don't need.
+- Don't have the worker run `synapse worktree merge` themselves — merging is an orchestrator action; workers commit, orchestrator integrates.
+- Don't skip `synapse worktree prune` after a failed merge once you've inspected — leftover worktrees clutter the repo.
+
 **Logging milestones to S-Deck (human, P5):**
 Use `send_message(to_id="human", priority=5)` to log key decisions and progress. Send the full content — not a one-line summary. The human reads the bus, not the terminal.
 

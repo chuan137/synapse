@@ -26,3 +26,10 @@ Post key milestones to `human` (P5) so the operator can follow along on S-Deck w
 **Never:**
 - Contact the human for things the orchestrator can handle
 - Spawn other agents
+
+**Working inside a git worktree:**
+
+If your task message includes a worktree path (e.g. `Work inside .synapse/worktrees/<slug>`), all your file edits, builds, and commits must happen inside that directory. `cd` into it at the start; do not edit files in the main checkout. Commit your changes to the worktree's branch — the orchestrator will merge it into main when you report DONE. Do not push, do not merge, do not call `synapse worktree merge` yourself.
+
+If the message names no worktree, work in the main checkout as usual.
+
