@@ -9,6 +9,8 @@
        Pinned to major versions so the CDN doesn't drift. -->
   <script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <!-- morphdom: in-place DOM diffing — keeps existing nodes stable across polls. Pinned @2. -->
+  <script src="https://cdn.jsdelivr.net/npm/morphdom@2/dist/morphdom-umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -572,7 +574,6 @@
       display: flex;
       flex-direction: column;
       gap: 5px;
-      overflow-anchor: none; /* disable browser scroll-anchor so our manual scrollTop is sole authority */
     }
 
     /* ── Compose (inside messages panel) ── */
@@ -1122,39 +1123,41 @@ input, select, textarea {
     const latestFiltered = filtered[0];
     activityFlash.textContent = latestFiltered ? summariseEvent(latestFiltered) : '';
 
+    let activityInnerHtml;
     if (!filtered.length) {
-      activityList.innerHTML = '<div class="empty-state">No tool activity yet.</div>';
-      return;
+      activityInnerHtml = '<div class="empty-state">No tool activity yet.</div>';
+    } else {
+      activityInnerHtml = filtered.map(e => {
+        let payload = {};
+        try { payload = e.payload ? JSON.parse(e.payload) : {}; } catch {}
+        const t = new Date(e.timestamp).toLocaleTimeString([], { hour12: false });
+
+        // tool:after:* → status + duration; tool:before:* → skip (noise); other → generic event
+        if (e.event.startsWith('tool:after:')) {
+          const tool = payload.tool ?? e.event.slice('tool:after:'.length);
+          const ok = (payload.status ?? 'ok') !== 'error';
+          const detail = esc(payload.input ?? '');
+          const dur = e.duration_ms != null ? `${e.duration_ms}ms` : '';
+          return `<div id="evt-${e.id}" class="activity-row ${ok ? 'ok' : 'err'}">
+            <span class="activity-time">${t}</span>
+            <span class="activity-tool">${esc(tool)}</span>
+            <span class="activity-detail">${detail}</span>
+            <span class="activity-dur">${dur}</span>
+          </div>`;
+        }
+        if (e.event.startsWith('tool:before:')) return ''; // collapse before-events
+
+        // lifecycle / non-tool events (user:prompt, session:*, agent:stop, subagent:*, context:compact)
+        const summary = esc(payload.prompt ?? payload.message ?? payload.reason ?? payload.source ?? payload.trigger ?? payload.stopReason ?? payload.agentType ?? '');
+        return `<div id="evt-${e.id}" class="activity-row evt">
+          <span class="activity-time">${t}</span>
+          <span class="activity-tool">${esc(e.event)}</span>
+          <span class="activity-detail">${summary}</span>
+        </div>`;
+      }).join('');
     }
 
-    activityList.innerHTML = filtered.map(e => {
-      let payload = {};
-      try { payload = e.payload ? JSON.parse(e.payload) : {}; } catch {}
-      const t = new Date(e.timestamp).toLocaleTimeString([], { hour12: false });
-
-      // tool:after:* → status + duration; tool:before:* → skip (noise); other → generic event
-      if (e.event.startsWith('tool:after:')) {
-        const tool = payload.tool ?? e.event.slice('tool:after:'.length);
-        const ok = (payload.status ?? 'ok') !== 'error';
-        const detail = esc(payload.input ?? '');
-        const dur = e.duration_ms != null ? `${e.duration_ms}ms` : '';
-        return `<div class="activity-row ${ok ? 'ok' : 'err'}">
-          <span class="activity-time">${t}</span>
-          <span class="activity-tool">${esc(tool)}</span>
-          <span class="activity-detail">${detail}</span>
-          <span class="activity-dur">${dur}</span>
-        </div>`;
-      }
-      if (e.event.startsWith('tool:before:')) return ''; // collapse before-events
-
-      // lifecycle / non-tool events (user:prompt, session:*, agent:stop, subagent:*, context:compact)
-      const summary = esc(payload.prompt ?? payload.message ?? payload.reason ?? payload.source ?? payload.trigger ?? payload.stopReason ?? payload.agentType ?? '');
-      return `<div class="activity-row evt">
-        <span class="activity-time">${t}</span>
-        <span class="activity-tool">${esc(e.event)}</span>
-        <span class="activity-detail">${summary}</span>
-      </div>`;
-    }).join('');
+    morphdom(activityList, `<div id="activity-list">${activityInnerHtml}</div>`, { childrenOnly: true });
   }
 
   function updateComposePlaceholder() {
@@ -1195,70 +1198,56 @@ input, select, textarea {
       .filter(m => !selectedAgentId || m.from_id === selectedAgentId || m.to_id === selectedAgentId)
       .sort((a, b) => a.created_at - b.created_at);
 
-    // Capture scroll intent BEFORE we blow away the DOM — userScrolledUp reflects the
-    // user's last interaction state, which is the only reliable signal at this point.
-    const wasAtBottom = !userScrolledUp;
-
+    let innerHtml;
     if (msgs.length === 0) {
-      messagesList.innerHTML = '<div class="empty-state">No messages for this agent yet.</div>';
-      return;
-    }
-
-    messagesList.innerHTML = msgs.map(m => {
-      const isP0      = m.priority === 0;
-      const fromHuman = m.from_id === 'human';
-      const cls = [isP0 ? 'p0' : '', fromHuman ? 'from-human' : 'from-agent'].filter(Boolean).join(' ');
-      const t = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const senderId = fromHuman ? 'human' : m.from_id;
-      const agent = agentStatuses.find(a => a.agent_id === senderId);
-      const senderLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}${agent.name && agent.name !== agent.agent_id ? ' ' + agent.name : ''}` : senderId);
-      const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
-      const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
-      return `
-        <div class="message-row ${cls}">
-          <div class="message-avatar">${esc(avatarLabel)}</div>
-          <div class="message-body">
-            <div class="message-header">
-              ${p0badge}
-              <span class="message-time">${t}</span>
+      innerHtml = '<div class="empty-state">No messages for this agent yet.</div>';
+    } else {
+      innerHtml = msgs.map(m => {
+        const isP0      = m.priority === 0;
+        const fromHuman = m.from_id === 'human';
+        const cls = [isP0 ? 'p0' : '', fromHuman ? 'from-human' : 'from-agent'].filter(Boolean).join(' ');
+        const t = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const senderId = fromHuman ? 'human' : m.from_id;
+        const agent = agentStatuses.find(a => a.agent_id === senderId);
+        const senderLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}${agent.name && agent.name !== agent.agent_id ? ' ' + agent.name : ''}` : senderId);
+        const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
+        const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
+        return `
+          <div id="msg-${m.id}" class="message-row ${cls}">
+            <div class="message-avatar">${esc(avatarLabel)}</div>
+            <div class="message-body">
+              <div class="message-header">
+                ${p0badge}
+                <span class="message-time">${t}</span>
+              </div>
+              <div class="message-content">${renderMarkdown(m.content)}</div>
             </div>
-            <div class="message-content">${renderMarkdown(m.content)}</div>
           </div>
-        </div>
-      `;
-    }).join('');
+        `;
+      }).join('');
 
-    // Append current status at the bottom of the chat
-    if (selectedAgent) {
-      const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[selectedAgent.state] ?? 'var(--muted)';
-      const task = selectedAgent.current_task ? esc(selectedAgent.current_task) : '';
-      messagesList.innerHTML += `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 0 2px;opacity:0.6;">
-          <div style="flex:1;height:1px;background:var(--border);"></div>
-          <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);white-space:nowrap;">
-            <span style="width:5px;height:5px;border-radius:50%;background:${stateColor};"></span>
-            <span style="color:${stateColor};">${esc(selectedAgent.state)}</span>
-            ${task ? `<span>·</span><span>${task}</span>` : ''}
-          </span>
-          <div style="flex:1;height:1px;background:var(--border);"></div>
-        </div>
-      `;
+      if (selectedAgent) {
+        const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[selectedAgent.state] ?? 'var(--muted)';
+        const task = selectedAgent.current_task ? esc(selectedAgent.current_task) : '';
+        innerHtml += `
+          <div id="msg-status-row" style="display:flex;align-items:center;gap:8px;padding:8px 0 2px;opacity:0.6;">
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+            <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);white-space:nowrap;">
+              <span style="width:5px;height:5px;border-radius:50%;background:${stateColor};"></span>
+              <span style="color:${stateColor};">${esc(selectedAgent.state)}</span>
+              ${task ? `<span>·</span><span>${task}</span>` : ''}
+            </span>
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+          </div>
+        `;
+      }
     }
 
-    // Scroll after layout settles. Double-rAF: first frame triggers sync layout,
-    // second frame runs after the browser has painted + async content (markdown
-    // blocks, variable-height elements) has finalized their heights.
-    if (wasAtBottom) {
-      requestAnimationFrame(() => {
-        messagesList.scrollTop = messagesList.scrollHeight;
-        requestAnimationFrame(() => {
-          messagesList.scrollTop = messagesList.scrollHeight;
-        });
-      });
-    }
-    // If !wasAtBottom: leave scrollTop alone. The browser preserves the numeric
-    // value through innerHTML reassignment; it may drift slightly for variable-
-    // height content but is the best we can do without a full diff render.
+    // morphdom diffs children in-place — existing nodes stay put, preserving scroll
+    // position, text selection, and preventing markdown re-render blink.
+    morphdom(messagesList, `<div id="messages-list">${innerHtml}</div>`, { childrenOnly: true });
+
+    if (!userScrolledUp) messagesList.scrollTop = messagesList.scrollHeight;
   }
 
   // ── Send message ──────────────────────────────────────────────────────────
