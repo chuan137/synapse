@@ -433,8 +433,9 @@ export function sendMessage(
   toId: string,
   content: string,
   priority: number = 5
-): void {
-  stmts.insertMessage.run(fromId, toId, content, priority, Date.now());
+): number {
+  const r = stmts.insertMessage.run(fromId, toId, content, priority, Date.now());
+  return Number(r.lastInsertRowid);
 }
 
 export function updateStatus(
@@ -521,6 +522,14 @@ export function finishActivity(
      WHERE id = ? AND status != 'aborted'
   `).run(status, Date.now(), resultMsgId, commitSha, activityId);
   return r.changes > 0;
+}
+
+export function getMostRecentInProgressActivity(agentId: string): { id: number } | null {
+  return db.prepare<[string], { id: number }>(`
+    SELECT id FROM activities
+     WHERE agent_id = ? AND status = 'in_progress'
+     ORDER BY started_at DESC LIMIT 1
+  `).get(agentId) ?? null;
 }
 
 /**

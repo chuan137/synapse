@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startActivity, finishActivity } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startActivity, finishActivity, getMostRecentInProgressActivity } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -309,6 +309,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['activity_id', 'status'],
       },
     },
+    {
+      name: 'delegate_task',
+      description:
+        'Send a task to a worker and record the activity in one call. ' +
+        'Use this instead of separate send_message + start_activity when delegating a substantive task. ' +
+        'Returns { message_id, activity_id }. Skip for trivial messages (clarifications, status checks).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          to_id: { type: 'string', description: 'Worker agent_id (e.g. cec50b17:3)' },
+          title: { type: 'string', description: 'One-line activity title (visible in S-Deck Activities tab)' },
+          content: { type: 'string', description: 'The full task message body sent to the worker' },
+          priority: { type: 'number', enum: [0, 5], default: 5, description: '0 = urgent, 5 = normal' },
+        },
+        required: ['to_id', 'title', 'content'],
+      },
+    },
+    {
+      name: 'report_done',
+      description:
+        'Wrap up a task you finished. Sends the full DONE message to the orchestrator, posts a one-liner milestone to human, ' +
+        'and closes your most recent in-progress activity. ' +
+        'Replaces the previous send_message + send_message + finish_activity sequence.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          orchestrator_id: { type: 'string', description: 'Your orchestrator agent_id (usually <projectId>:0)' },
+          content: { type: 'string', description: 'Full DONE report — files changed, results, caveats. Sent to orchestrator.' },
+          milestone: { type: 'string', description: 'Optional one-line milestone for the human bus. Defaults to a truncation of content.' },
+        },
+        required: ['orchestrator_id', 'content'],
+      },
+    },
   ],
 }));
 
@@ -518,6 +551,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
     const ok = finishActivity(activity_id, status, result_msg_id ?? null, commit_sha ?? null);
     return { content: [{ type: 'text', text: ok ? `Activity ${activity_id} marked ${status}.` : `Activity ${activity_id} not found or already finished.` }] };
+  }
+
+  if (name === 'delegate_task') {
+    const { to_id, title, content, priority = 5 } = args as {
+      to_id: string;
+      title: string;
+      content: string;
+      priority?: number;
+    };
+    const messageId = sendMessage(AGENT_ID, to_id, content, priority);
+    const activityId = startActivity(to_id, title, messageId);
+    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${activityId}` }] };
+  }
+
+  if (name === 'report_done') {
+    const { orchestrator_id, content, milestone } = args as {
+      orchestrator_id: string;
+      content: string;
+      milestone?: string;
+    };
+    const orchMsgId = sendMessage(AGENT_ID, orchestrator_id, content, 5);
+    const summary = milestone
+      ?? (content.length > 200
+        ? `DONE — ${content.slice(0, 200).split('\n')[0]}`
+        : `DONE — ${content.split('\n')[0]}`);
+    sendMessage(AGENT_ID, 'human', summary, 5);
+    const myActivity = getMostRecentInProgressActivity(AGENT_ID);
+    if (myActivity) {
+      finishActivity(myActivity.id, 'completed', orchMsgId, null);
+    }
+    return { content: [{ type: 'text', text: `Reported done. orch_msg=${orchMsgId} activity_closed=${myActivity?.id ?? 'none'}` }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);

@@ -15,6 +15,8 @@ Synapse is a human-in-the-loop observation layer. A human operator watches all a
 | `update_status` | Report your current state to the dashboard |
 | `start_activity` | Open a task-activity record on S-Deck (call when starting a non-trivial task) |
 | `finish_activity` | Close the activity with `completed` or `aborted` when the task is done |
+| `delegate_task` | Send a task to a worker AND record the activity in one call (orchestrator only) |
+| `report_done` | Finish a task: sends DONE to orchestrator, milestone to human, closes activity (worker only) |
 | `spawn_agent` | Spawn a new worker agent (orchestrator only) |
 
 ---

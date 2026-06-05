@@ -14,10 +14,9 @@ Post key milestones to `human` (P5) so the operator can follow along on S-Deck w
 **Per-task workflow:**
 1. `update_status(state="working", current_task="<short description>")`
 2. Execute the task
-3. `send_message` DONE to the orchestrator with your full results (the orchestrator drives the workflow; needs the details)
-4. `send_message(to_id="human", priority=5, content="DONE — <one-liner>")` — short milestone for the operator's bus
-5. `update_status(state="idle", current_task="Waiting for task")`
-6. Call `read_messages` and wait for the next task
+3. `report_done({orchestrator_id, content, milestone?})` — sends full DONE to orchestrator, one-liner to human, and closes your most recent in-progress activity in one call
+4. `update_status(state="idle", current_task="Waiting for task")`
+5. Call `read_messages` and wait for the next task
 
 **When blocked:**
 1. `send_message` to orchestrator explaining what you need

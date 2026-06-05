@@ -87,13 +87,13 @@ When two or more workers may touch the same files in parallel, isolate each in i
 
 **Recording task activities:**
 
-When delegating a substantive task to a worker, wrap the assignment with activity tracking so the operator sees it in S-Deck:
+When delegating a substantive task to a worker, use `delegate_task` to send the message and open the activity in one call:
 
-1. `send_message` the task to the worker. Note the message id returned by the bus.
-2. `start_activity({agent_id: '<worker_id>', title: '<one-liner>', trigger_msg_id: <id from step 1>})` → returns activity_id.
-3. Monitor for the worker's DONE message via `read_messages`.
-4. `git commit` to integrate the worker's diff (if any). The post-commit hook attaches the commit SHA to the activity automatically.
-5. `finish_activity({activity_id, status: 'completed', result_msg_id: <id of DONE message>})`.
+1. `delegate_task({to_id: '<worker_id>', title: '<one-liner>', content: '<full task body>'})` → returns `{ message_id, activity_id }`.
+2. Monitor for the worker's DONE message via `read_messages`. (The worker calls `report_done`, which sends a full result to your inbox and closes its activity.)
+3. `git commit` to integrate the worker's diff (if any). The post-commit hook attaches the commit SHA and marks the activity completed automatically.
+4. `finish_activity({activity_id, status: 'completed', result_msg_id: <id of DONE message>})` — sets `result_msg_id` on the row (status is already completed; this is a metadata update).
+5. **Update PLAN.md** if this commit closes or opens a planned item — include in the same commit if small, or a follow-up commit if larger.
 
 For self-driven work (e.g. doc edits you do yourself), call `start_activity` without an `agent_id` (defaults to the orchestrator) and follow the same commit-before-finish order. Trivial back-and-forth doesn't need an activity entry.
 
