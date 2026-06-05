@@ -1118,8 +1118,8 @@ input, select, textarea {
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
     activityLabel.textContent = sel ? ` · :${sel.slot}` : '';
 
-    // Ticker mirrors the activity list: same filtered view, latest event
-    const latestFiltered = filtered[filtered.length - 1];
+    // Ticker mirrors the activity list: same filtered view, newest event (index 0 = newest-first)
+    const latestFiltered = filtered[0];
     activityFlash.textContent = latestFiltered ? summariseEvent(latestFiltered) : '';
 
     if (!filtered.length) {
