@@ -68,9 +68,13 @@ function listAvailableRoles(templatesDir: string): { role: string; description: 
 
 const SYNAPSE_INSTALL_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-function synapseInit(projectRoot: string, silent = false): boolean {
+function synapseInit(projectRoot: string, silent = false, update = false): boolean {
   const synapseDir = join(projectRoot, '.synapse');
-  const isNew = !existsSync(join(synapseDir, 'synapse.db'));
+  // Determine newness from a file synapseInit itself writes (the copied protocol
+  // template), captured BEFORE the copy loop below recreates it. The DB and
+  // .synapse/settings.json are created lazily by the bus/dashboard, not here, so
+  // they are not reliable signals of prior initialization.
+  const isNew = !existsSync(join(synapseDir, 'SYNAPSE.md'));
 
   mkdirSync(synapseDir, { recursive: true });
 
@@ -96,6 +100,11 @@ function synapseInit(projectRoot: string, silent = false): boolean {
   const synapseBlock = `\n## Synapse\n\nThis project uses Synapse for multi-agent orchestration.\nRead \`.synapse/SYNAPSE.md\` for the agent protocol.\nIf your slot is \`:0\`, also read \`.synapse/SYNAPSE-orchestrator.md\`.\nIf your slot is \`:1\` or higher, also read \`.synapse/SYNAPSE-worker.md\`.\n`;
   if (!claudeContent.includes('## Synapse')) {
     writeFileSync(claudeMd, claudeContent + synapseBlock, 'utf8');
+  } else if (update) {
+    // Replace the existing Synapse block (from "## Synapse" to the next top-level
+    // heading or EOF) with the current block, so updated wording propagates.
+    const refreshed = claudeContent.replace(/\n?## Synapse\n[\s\S]*?(?=\n## |$)/, synapseBlock.replace(/\n$/, ''));
+    writeFileSync(claudeMd, refreshed, 'utf8');
   }
 
   // Register the synapse-bus MCP server in .mcp.json (idempotent).
@@ -165,7 +174,9 @@ function synapseInit(projectRoot: string, silent = false): boolean {
   if (!silent) {
     process.stdout.write(isNew
       ? `[Synapse] Initialized at ${projectRoot}\n`
-      : `[Synapse] Already initialized at ${projectRoot}\n`
+      : update
+        ? `[Synapse] Updated templates and config at ${projectRoot}\n`
+        : `[Synapse] Already initialized at ${projectRoot}\n`
     );
   }
 
@@ -206,8 +217,9 @@ program
 program
   .command('init [path]')
   .description('Initialize Synapse in a project directory')
-  .action((targetPath) => {
-    synapseInit(resolve(targetPath ?? '.'), false);
+  .option('-u, --update', 're-apply latest templates and refresh CLAUDE.md in an existing project')
+  .action((targetPath, options) => {
+    synapseInit(resolve(targetPath ?? '.'), false, options.update ?? false);
   });
 
 program
