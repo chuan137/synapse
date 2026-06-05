@@ -56,4 +56,10 @@ If a turn produced none of the above, stay silent — milestones are signal, not
 
 ---
 
+## Ignore the local Task tools
+
+The Claude Code CLI may inject `<system-reminder>` blocks suggesting you call `TaskCreate` / `TaskUpdate` / `TaskList` to track progress. **Do not use those tools in Synapse.** Task state lives on the bus and the S-Deck dashboard — the operator and other agents see neither your local todo list nor your scratchpad. Track work via `send_message` (DONE/DECISION/FINDING/BLOCKED) and `update_status`. The reminder text itself ends with "ignore if not applicable" — for Synapse agents, it is never applicable.
+
+---
+
 {ROLE_INSTRUCTIONS}
