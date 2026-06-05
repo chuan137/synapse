@@ -1404,7 +1404,7 @@ input, select, textarea {
       : recentEvents;
 
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
-    activityLabel.textContent = sel ? ` · :${sel.slot}` : '';
+    activityLabel.textContent = sel && sel.slot !== 0 ? ` · :${sel.slot}` : '';
 
     // Ticker mirrors the activity list: same filtered view, newest event (index 0 = newest-first)
     const latestFiltered = filtered[0];
@@ -1496,9 +1496,10 @@ input, select, textarea {
   // ── Task activities rendering ────────────────────────────────────────────
   function renderTaskActivities() {
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
-    activitiesFilterLabel.textContent = sel ? ` · :${sel.slot}` : '';
+    activitiesFilterLabel.textContent = sel && sel.slot !== 0 ? ` · :${sel.slot}` : '';
 
-    const filtered = selectedAgentId
+    const isOrchestrator = sel?.slot === 0;
+    const filtered = (sel && !isOrchestrator)
       ? allActivities.filter(a => a.agent_id === selectedAgentId)
       : allActivities;
 
