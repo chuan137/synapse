@@ -517,32 +517,21 @@
     .activity-row.ok::before  { content: '·'; color: var(--idle);  flex-shrink: 0; }
     .activity-row.evt::before { content: '◇'; color: var(--accent); flex-shrink: 0; }
 
-    /* ── Activity flash label (shown in Messages header when activity panel is collapsed) ── */
+    /* ── Activity status ticker (shown in Messages header when activity panel is collapsed) ── */
     #activity-latest-flash {
       display: none;
       font-size: 11px;
       color: var(--muted);
-      opacity: 0.55;
-      max-width: 200px;
+      max-width: 380px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      vertical-align: middle;
       margin-right: 4px;
-      transition: opacity 0.4s ease;
+      flex-shrink: 1;
+      min-width: 0;
     }
     main.activity-collapsed #activity-latest-flash:not(:empty) {
       display: inline-block;
-    }
-    @keyframes flash-pulse {
-      0%, 100% { opacity: 0.55; }
-      50%       { opacity: 0.2; }
-    }
-    #activity-latest-flash.pulsing {
-      animation: flash-pulse 1.2s ease-in-out infinite;
-    }
-    #activity-latest-flash.faded {
-      opacity: 0;
     }
 
     /* Per-agent tool metric chips (inside agent cards) */
@@ -1099,39 +1088,7 @@ input, select, textarea {
   const activityLabel = document.getElementById('activity-filter-label');
   const activityFlash = document.getElementById('activity-latest-flash');
 
-  let flashPulseTimer = null;
-  let flashDebounceTimer = null;
-  let lastFlashText = '';
-
-  function triggerFlash(text) {
-    if (!text) return;
-    // Cancel any in-progress fade so new event restores visibility
-    activityFlash.classList.remove('faded');
-    activityFlash.textContent = text;
-    // Debounce: don't re-trigger animation more often than every 300ms
-    if (flashDebounceTimer) return;
-    flashDebounceTimer = setTimeout(() => { flashDebounceTimer = null; }, 300);
-    // Re-trigger pulse animation via reflow trick
-    activityFlash.classList.remove('pulsing');
-    void activityFlash.offsetWidth;
-    activityFlash.classList.add('pulsing');
-    // After 6s: stop pulsing, then fade out and clear
-    clearTimeout(flashPulseTimer);
-    flashPulseTimer = setTimeout(() => {
-      activityFlash.classList.remove('pulsing');
-      activityFlash.classList.add('faded');
-      // On fade end: clear text so :not(:empty) hides the element
-      activityFlash.addEventListener('transitionend', function clearAfterFade() {
-        activityFlash.removeEventListener('transitionend', clearAfterFade);
-        activityFlash.textContent = '';
-        lastFlashText = '';
-        activityFlash.classList.remove('faded');
-      });
-    }, 6000);
-  }
-
   function summariseEvent(e) {
-    // Build a short (~40 char) label for the flash strip
     let payload = {};
     try { payload = e.payload ? JSON.parse(e.payload) : {}; } catch {}
     let label;
@@ -1143,8 +1100,7 @@ input, select, textarea {
       label = e.event;
     }
     const detail = payload.input ?? payload.prompt ?? payload.message ?? payload.reason ?? '';
-    const combined = detail ? `${label}: ${detail}` : label;
-    return combined.length > 40 ? combined.slice(0, 39) + '…' : combined;
+    return detail ? `${label}: ${detail}` : label;
   }
 
   function renderActivity() {
@@ -1156,15 +1112,9 @@ input, select, textarea {
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
     activityLabel.textContent = sel ? ` · :${sel.slot}` : '';
 
-    // Update flash label from the latest global event (not filtered by agent)
-    const latestGlobal = recentEvents[recentEvents.length - 1];
-    if (latestGlobal) {
-      const text = summariseEvent(latestGlobal);
-      if (text !== lastFlashText) {
-        lastFlashText = text;
-        triggerFlash(text);
-      }
-    }
+    // Update ticker from the selected agent's latest event (CSS truncates + ellipsis)
+    const latestFiltered = filtered[filtered.length - 1];
+    activityFlash.textContent = latestFiltered ? summariseEvent(latestFiltered) : '';
 
     if (!filtered.length) {
       activityList.innerHTML = '<div class="empty-state">No tool activity yet.</div>';
