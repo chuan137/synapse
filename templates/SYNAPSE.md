@@ -52,15 +52,19 @@ The harness auto-posts `COMMIT` for you whenever you `git commit`, so never hand
 If a turn produced none of the above, stay silent — milestones are signal, not chatter.
 
 **Rule 4 — Track non-trivial tasks as Activities**
-For any task that will take more than a quick reply — implementing a feature, investigating a bug, running a multi-step workflow — bracket it with activity calls:
+Activities appear in the S-Deck Activity Panel so the operator can track what each agent is working on and review outcomes.
+
+**Workers:** do NOT call `start_activity` or `delegate_task`. When the orchestrator uses `delegate_task`, it opens the activity automatically. Your only calls are: `update_status` → execute → `report_done` → `update_status` → `read_messages`.
+
+**Orchestrators:** the canonical delegated-task sequence is strictly ordered — do not skip or reorder steps:
 
 ```
-start_activity(title="short task description", trigger_msg_id=<id of the message that assigned it>)
-…do the work…
-finish_activity(activity_id=<id from start_activity>, status="completed", result_msg_id=<id of your DONE message>)
+delegate_task  →  wait for DONE (read_messages)  →  git commit  →  finish_activity
 ```
 
-Activities appear in the S-Deck Activity Panel so the operator can track what each agent is working on and review outcomes. Skip activity tracking for trivial back-and-forth — only use it for tasks worth a recap entry.
+Do NOT commit before the worker replies. Do NOT call `finish_activity` before committing (the commit hook sets the SHA). For self-driven work, use `start_activity` / `finish_activity` with the same commit-before-finish order.
+
+Skip activity tracking for trivial back-and-forth — only use it for tasks worth a recap entry.
 
 ---
 

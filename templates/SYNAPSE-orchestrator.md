@@ -85,17 +85,22 @@ When two or more workers may touch the same files in parallel, isolate each in i
 - Don't have the worker run `synapse worktree merge` themselves — merging is an orchestrator action; workers commit, orchestrator integrates.
 - Don't skip `synapse worktree prune` after a failed merge once you've inspected — leftover worktrees clutter the repo.
 
-**Recording task activities:**
+**Canonical per-task workflow — follow this sequence exactly:**
 
-When delegating a substantive task to a worker, use `delegate_task` to send the message and open the activity in one call:
+```
+1. Plan          — clarify the task; decide role, worktree needs, file-brief vs inline
+2. delegate_task — opens activity + sends task to worker in one call
+                   • large spec (>~300 tokens): pass task_file: true
+                     → brief written to .synapse/tasks/<activityId>.md
+                     → worker receives short pointer; reads the file before starting
+3. Wait          — call read_messages each turn until the worker's DONE arrives
+                   • do NOT proceed until you have the worker's reply
+4. git commit    — integrate the worker's diff; post-commit hook closes the activity
+5. finish_activity(activity_id, status='completed', result_msg_id=<DONE msg id>)
+6. Update PLAN.md if this commit closes or opens a planned item
+```
 
-1. `delegate_task({to_id: '<worker_id>', title: '<one-liner>', content: '<full task body>'})` → returns `{ message_id, activity_id }`.
-2. Monitor for the worker's DONE message via `read_messages`. (The worker calls `report_done`, which sends a full result to your inbox and closes its activity.)
-3. `git commit` to integrate the worker's diff (if any). The post-commit hook attaches the commit SHA and marks the activity completed automatically.
-4. `finish_activity({activity_id, status: 'completed', result_msg_id: <id of DONE message>})` — sets `result_msg_id` on the row (status is already completed; this is a metadata update).
-5. **Update PLAN.md** if this commit closes or opens a planned item — include in the same commit if small, or a follow-up commit if larger.
-
-For self-driven work (e.g. doc edits you do yourself), call `start_activity` without an `agent_id` (defaults to the orchestrator) and follow the same commit-before-finish order. Trivial back-and-forth doesn't need an activity entry.
+For self-driven work (doc edits, investigations you run yourself): use `start_activity` before starting and `finish_activity` after committing. Same commit-before-finish order.
 
 **Logging milestones to S-Deck (human, P5):**
 Use `send_message(to_id="human", priority=5)` to log key decisions and progress. Send the full content — not a one-line summary. The human reads the bus, not the terminal.
