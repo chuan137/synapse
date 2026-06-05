@@ -572,6 +572,7 @@
       display: flex;
       flex-direction: column;
       gap: 5px;
+      overflow-anchor: none; /* disable browser scroll-anchor so our manual scrollTop is sole authority */
     }
 
     /* ── Compose (inside messages panel) ── */
@@ -1194,6 +1195,10 @@ input, select, textarea {
       .filter(m => !selectedAgentId || m.from_id === selectedAgentId || m.to_id === selectedAgentId)
       .sort((a, b) => a.created_at - b.created_at);
 
+    // Capture scroll intent BEFORE we blow away the DOM — userScrolledUp reflects the
+    // user's last interaction state, which is the only reliable signal at this point.
+    const wasAtBottom = !userScrolledUp;
+
     if (msgs.length === 0) {
       messagesList.innerHTML = '<div class="empty-state">No messages for this agent yet.</div>';
       return;
@@ -1240,9 +1245,20 @@ input, select, textarea {
       `;
     }
 
-    // Auto-scroll to the newest message unless the user has scrolled up to read
-    // history (tracked by the scroll listener above). This keeps their position.
-    if (!userScrolledUp) messagesList.scrollTop = messagesList.scrollHeight;
+    // Scroll after layout settles. Double-rAF: first frame triggers sync layout,
+    // second frame runs after the browser has painted + async content (markdown
+    // blocks, variable-height elements) has finalized their heights.
+    if (wasAtBottom) {
+      requestAnimationFrame(() => {
+        messagesList.scrollTop = messagesList.scrollHeight;
+        requestAnimationFrame(() => {
+          messagesList.scrollTop = messagesList.scrollHeight;
+        });
+      });
+    }
+    // If !wasAtBottom: leave scrollTop alone. The browser preserves the numeric
+    // value through innerHTML reassignment; it may drift slightly for variable-
+    // height content but is the best we can do without a full diff render.
   }
 
   // ── Send message ──────────────────────────────────────────────────────────
