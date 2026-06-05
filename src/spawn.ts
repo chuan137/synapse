@@ -2,7 +2,7 @@ import { writeFileSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdtempSync } from 'fs';
-import { execSync, spawnSync } from 'child_process';
+import { execSync, execFileSync, spawnSync } from 'child_process';
 import { getLatestAgent, getAgentBySlot, setAgentRole, setAgentName } from './db.js';
 
 export interface SpawnWorkerOptions {
@@ -73,6 +73,14 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
     // can find the new agent by role.
     setAgentRole(worker.agent_id, role);
     setAgentName(worker.agent_id, role);
+
+    // Rename the tmux window to <role>--<slot> now that we know the slot.
+    const tmuxPane = getAgentBySlot(worker.slot)?.tmux_pane;
+    if (tmuxPane) {
+      try {
+        execFileSync('tmux', ['rename-window', '-t', tmuxPane, `${role}--${worker.slot}`]);
+      } catch { /* best-effort */ }
+    }
   }
 
   return worker;
