@@ -358,4 +358,172 @@ program
     await startDashboard(Number(options.port));
   });
 
+// ── worktree subcommands ────────────────────────────────────────────────────
+
+/** Return the main (primary) git worktree root — never a secondary worktree path. */
+function gitRoot(): string {
+  // `git worktree list --porcelain` lists the main worktree first.
+  const out = execFileSync('git', ['worktree', 'list', '--porcelain'], { encoding: 'utf8' });
+  const firstLine = out.split('\n').find(l => l.startsWith('worktree '));
+  if (!firstLine) throw new Error('Could not determine git repo root');
+  return firstLine.slice('worktree '.length).trim();
+}
+
+/** Return the default branch name tracked by origin/HEAD, falling back to 'main'. */
+function defaultBranch(root: string): string {
+  try {
+    const ref = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
+      cwd: root, encoding: 'utf8',
+    }).trim(); // e.g. "refs/remotes/origin/main"
+    return ref.replace('refs/remotes/origin/', '');
+  } catch {
+    return 'main';
+  }
+}
+
+function worktreePath(root: string, name: string): string {
+  return join(root, '.synapse', 'worktrees', name);
+}
+
+function branchName(name: string): string {
+  return `synapse/${name}`;
+}
+
+/** Return true if the worktree at `path` has a dirty working tree. */
+function worktreeDirty(wtPath: string): boolean {
+  const out = execFileSync('git', ['status', '--porcelain'], {
+    cwd: wtPath, encoding: 'utf8',
+  });
+  return out.trim().length > 0;
+}
+
+const worktree = program
+  .command('worktree')
+  .description('Manage isolated git worktrees for agent tasks');
+
+worktree
+  .command('create <name>')
+  .description('Create a worktree + branch for a task (branch: synapse/<name>)')
+  .action((name: string) => {
+    const root = gitRoot();
+    const wtPath = worktreePath(root, name);
+    const branch = branchName(name);
+
+    if (existsSync(wtPath)) {
+      process.stderr.write(`error: worktree path already exists: ${wtPath}\n`);
+      process.exit(1);
+    }
+
+    // Verify branch doesn't already exist
+    try {
+      execFileSync('git', ['rev-parse', '--verify', branch], { cwd: root, stdio: 'pipe' });
+      process.stderr.write(`error: branch already exists: ${branch}\n`);
+      process.exit(1);
+    } catch { /* branch absent — good */ }
+
+    mkdirSync(join(root, '.synapse', 'worktrees'), { recursive: true });
+    execFileSync('git', ['worktree', 'add', wtPath, '-b', branch, 'HEAD'], {
+      cwd: root, stdio: 'inherit',
+    });
+    process.stdout.write(`${wtPath}\n`);
+  });
+
+worktree
+  .command('merge <name>')
+  .description('Merge synapse/<name> into the default branch, then prune')
+  .action((name: string) => {
+    const root = gitRoot();
+    const wtPath = worktreePath(root, name);
+    const branch = branchName(name);
+    const main = defaultBranch(root);
+
+    if (!existsSync(wtPath)) {
+      process.stderr.write(`error: worktree not found: ${wtPath}\n`);
+      process.exit(1);
+    }
+
+    if (worktreeDirty(wtPath)) {
+      process.stderr.write(`error: uncommitted changes in worktree; commit or stash before merging\n`);
+      process.exit(1);
+    }
+
+    // Fetch to bring origin up to date (best-effort — don't fail if offline)
+    try {
+      execFileSync('git', ['fetch', 'origin', main], { cwd: root, stdio: 'pipe' });
+    } catch { /* offline or no remote — proceed with local state */ }
+
+    // Try ff-only first
+    try {
+      execFileSync('git', ['merge', '--ff-only', branch], { cwd: root, stdio: 'pipe' });
+      // Prune on success
+      worktreePruneOne(root, name, branch);
+      process.stdout.write(`merged: ${name} (ff)\n`);
+      return;
+    } catch { /* ff not possible — try squash */ }
+
+    // Squash fallback
+    try {
+      execFileSync('git', ['merge', '--squash', branch], { cwd: root, stdio: 'pipe' });
+    } catch (e) {
+      process.stderr.write(`error: squash merge failed with conflicts; resolve manually in ${wtPath}\n`);
+      // Abort the partial merge state
+      try { execFileSync('git', ['merge', '--abort'], { cwd: root, stdio: 'pipe' }); } catch { /* reset might be needed */ }
+      try { execFileSync('git', ['reset', '--merge'], { cwd: root, stdio: 'pipe' }); } catch { /* best-effort */ }
+      process.exit(1);
+    }
+
+    execFileSync('git', ['commit', '-m', `synapse worktree: ${name}`], {
+      cwd: root, stdio: 'inherit',
+    });
+
+    worktreePruneOne(root, name, branch);
+    process.stdout.write(`merged: ${name} (squash)\n`);
+  });
+
+worktree
+  .command('prune [name]')
+  .description('Remove worktree dir and branch. Use --all to prune every synapse worktree.')
+  .option('--all', 'prune all worktrees under .synapse/worktrees/')
+  .action((name: string | undefined, opts: { all?: boolean }) => {
+    const root = gitRoot();
+    if (opts.all) {
+      const wtRoot = join(root, '.synapse', 'worktrees');
+      if (!existsSync(wtRoot)) {
+        process.stdout.write('nothing to prune\n');
+        return;
+      }
+      const entries = readdirSync(wtRoot);
+      if (!entries.length) {
+        process.stdout.write('nothing to prune\n');
+        return;
+      }
+      for (const entry of entries) {
+        worktreePruneOne(root, entry, branchName(entry));
+      }
+    } else {
+      if (!name) {
+        process.stderr.write('error: provide a name or --all\n');
+        process.exit(1);
+      }
+      worktreePruneOne(root, name, branchName(name));
+    }
+  });
+
+function worktreePruneOne(root: string, name: string, branch: string): void {
+  const wtPath = worktreePath(root, name);
+  // Remove the worktree (idempotent — ignore errors if already gone)
+  try {
+    execFileSync('git', ['worktree', 'remove', '--force', wtPath], {
+      cwd: root, stdio: 'pipe',
+    });
+  } catch { /* already removed or not a registered worktree */ }
+
+  // Delete the branch if it still exists
+  try {
+    execFileSync('git', ['branch', '-D', branch], { cwd: root, stdio: 'pipe' });
+  } catch { /* branch already gone */ }
+
+  process.stdout.write(`pruned: ${name}\n`);
+}
+
 program.parse(process.argv);
