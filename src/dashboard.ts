@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import {
   getAllStatuses,
   getRecentMessages,
@@ -14,11 +14,14 @@ import {
   getRecentEvents,
   getAllToolMetrics,
   purgeStaleAgents,
+  reapGhostAgents,
   updateAgentConfig,
+  getAgentById,
   AgentStatus,
   Message,
   ApprovalRequest,
 } from './db.js';
+import { spawnWorker } from './spawn.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
@@ -215,6 +218,56 @@ app.post('/api/messages', (req: Request, res: Response) => {
 app.post('/api/agents/purge', (_req: Request, res: Response) => {
   const count = purgeStaleAgents();
   res.json({ ok: true, purged: count });
+});
+
+// Kill + respawn a worker agent in the same role (restart)
+app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId);
+  const agent = getAgentById(agentId);
+
+  if (!agent) { res.status(404).json({ error: 'Agent not found' }); return; }
+  if (agent.slot === 0) { res.status(400).json({ error: 'Cannot restart the orchestrator (slot 0)' }); return; }
+  if (agent.ended_at !== null) { res.status(409).json({ error: 'Agent is already ended' }); return; }
+  if (!agent.tmux_pane) { res.status(409).json({ error: 'Agent has no tmux pane — cannot kill it' }); return; }
+
+  const { slot, role, name, tmux_pane } = agent;
+
+  try {
+    execSync(`tmux kill-pane -t ${tmux_pane}`);
+  } catch (e) {
+    process.stderr.write(`[Synapse] restart: kill-pane failed for ${tmux_pane}: ${e}\n`);
+    // Pane may already be gone — continue so reap cleans up the row
+  }
+
+  // Brief wait for pane death and any post-stop hooks to fire
+  spawnSync('sleep', ['0.25']);
+
+  // Reap ghost + purge so the old slot row is tidied before we claim a new one
+  const reaped = reapGhostAgents();
+  const purged = purgeStaleAgents();
+  process.stderr.write(`[Synapse] restart reap: ${reaped} marked ended, ${purged} purged\n`);
+
+  const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
+  const workerRole = role ?? 'worker';
+  const restartTask =
+    `You are a long-lived ${workerRole} worker (restarted). Your orchestrator is cec50b17:0. ` +
+    `Loop waiting for task messages on the Synapse bus. Your previous slot was :${slot}; ` +
+    `the orchestrator may or may not have queued work for you while you were offline — read_messages first.`;
+
+  const worker = spawnWorker({
+    role: workerRole,
+    name: name ?? undefined,
+    task: restartTask,
+    projectDir: process.cwd(),
+    dbPath,
+  });
+
+  if (!worker) {
+    res.status(500).json({ error: 'Worker spawned but did not register within 60s' });
+    return;
+  }
+
+  res.json({ ok: true, new_agent_id: worker.agent_id, new_slot: worker.slot });
 });
 
 // Update agent config (name, model, effort) from the dashboard

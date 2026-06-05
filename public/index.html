@@ -1002,6 +1002,7 @@ input, select, textarea {
               <button class="cfg-btn" data-cfg-id="${esc(a.agent_id)}" title="Configure agent">cfg</button>
               <button class="focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
               <button class="ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
+              <button class="restart-btn" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Kill and respawn this worker' : 'No tmux pane'}">restart</button>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
@@ -1016,7 +1017,7 @@ input, select, textarea {
     // Wire card click → select agent (original behavior)
     agentsList.querySelectorAll('.agent-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.ping-btn') || e.target.closest('.focus-btn') || e.target.closest('.cfg-btn')) return;
+        if (e.target.closest('.ping-btn') || e.target.closest('.focus-btn') || e.target.closest('.cfg-btn') || e.target.closest('.restart-btn')) return;
         selectedAgentId = card.dataset.agentId;
         renderAgents();
         renderMessages();
@@ -1057,6 +1058,26 @@ input, select, textarea {
         btn.textContent = '…';
         await fetch(`/api/ping/${encodeURIComponent(agentId)}`, { method: 'POST' });
         setTimeout(() => { btn.disabled = false; btn.textContent = 'ping'; }, 1500);
+      });
+    });
+
+    agentsList.querySelectorAll('.restart-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const agentId = btn.dataset.restartId;
+        const agentSlot = btn.dataset.restartSlot;
+        if (!confirm(`Restart :${agentSlot}? This kills the tmux pane and spawns a fresh worker with the same role.`)) return;
+        btn.disabled = true;
+        btn.textContent = 'restarting…';
+        try {
+          const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/restart`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? 'failed');
+          // SSE will refresh the agent list automatically — no manual reset needed.
+        } catch (err) {
+          btn.textContent = `err`;
+          setTimeout(() => { btn.disabled = false; btn.textContent = 'restart'; }, 3000);
+        }
       });
     });
 

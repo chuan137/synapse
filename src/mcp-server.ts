@@ -4,13 +4,13 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, mkdtempSync, chmodSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
-import { execSync, spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, getLatestAgent, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, setAgentRole, reapGhostAgents, purgeStaleAgents } from './db.js';
+import { spawnSync } from 'child_process';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents } from './db.js';
+import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
 
@@ -344,43 +344,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
-    const slotsBefore = getLatestAgent()?.slot ?? -1;
     const windowName = (workerName ?? workerRole).replace(/[^a-zA-Z0-9_-]/g, '-');
 
-    // Write task to a temp file to avoid shell quoting issues with complex prompts
-    const tmpDir = mkdtempSync(join(tmpdir(), 'synapse-'));
-    const taskFile = join(tmpDir, 'task.txt');
-    writeFileSync(taskFile, task, 'utf8');
-
-    // Write a launcher script — cd to project dir, run worker with task
-    const projectDir = process.cwd();
-    const launchScript = join(tmpDir, 'launch.sh');
-    const slotArg = forcedSlot !== undefined ? ` --slot ${forcedSlot}` : '';
-    writeFileSync(launchScript, [
-      '#!/bin/sh',
-      `cd ${JSON.stringify(projectDir)}`,
-      `export SYNAPSE_DB_PATH=${JSON.stringify(dbPath)}`,
-      `synapse run --role ${JSON.stringify(workerRole)}${slotArg} --task-file ${JSON.stringify(taskFile)}`,
-    ].join('\n') + '\n', 'utf8');
-    chmodSync(launchScript, 0o755);
-
-    execSync(`tmux new-window -d -n ${JSON.stringify(windowName)} ${JSON.stringify(launchScript)}`);
-
-    // Poll until the worker claims its slot (max 60s)
-    let worker = null;
-    for (let i = 0; i < 120; i++) {
-      spawnSync('sleep', ['0.5']);
-      const latest = getLatestAgent();
-      if (latest && latest.slot > slotsBefore) { worker = latest; break; }
-    }
+    const worker = spawnWorker({
+      role: workerRole,
+      name: workerName,
+      slot: forcedSlot,
+      task,
+      projectDir: process.cwd(),
+      dbPath,
+    });
 
     if (!worker) {
       return { content: [{ type: 'text', text: `Worker spawned in tmux window "${windowName}" but has not registered yet. Check S-Deck.` }] };
     }
-
-    // The worker registers via claimAgentSlot, which doesn't know its role — write
-    // it now so list_workers/pick_worker can find it by role.
-    setAgentRole(worker.agent_id, workerRole);
 
     return {
       content: [

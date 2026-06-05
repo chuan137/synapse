@@ -443,6 +443,12 @@ export function getAllStatuses(): AgentStatus[] {
   return stmts.allStatuses.all();
 }
 
+export function getAgentById(agentId: string): AgentStatus | null {
+  return db.prepare<[string], AgentStatus>(
+    `SELECT * FROM agent_status WHERE agent_id = ?`
+  ).get(agentId) ?? null;
+}
+
 export interface LiveWorker {
   agent_id: string;
   slot: number;
