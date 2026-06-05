@@ -951,8 +951,7 @@ input, select, textarea {
         renderAgents();
         renderMessages();
         renderActivity();
-        // Agent switch: always jump to the latest messages for the new agent.
-        scrollMessagesToBottom();
+        // Agent switch: leave the scroll position as-is — do not force to bottom.
       });
     });
 
