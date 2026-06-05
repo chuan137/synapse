@@ -672,6 +672,9 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 5px;
     }
     .task-activity-meta {
       display: flex;
@@ -695,6 +698,16 @@
       font-family: inherit;
       color: var(--accent);
       opacity: 0.8;
+    }
+    .activity-slot-tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
     }
 
     /* ── Events status ticker (shown in Messages header when events panel is collapsed) ── */
@@ -1010,8 +1023,8 @@ input, select, textarea {
   <section id="activity-panel">
     <div class="panel-header">
       <div class="panel-tabs">
-        <button id="tab-events" class="panel-tab active">Events<span id="activity-filter-label" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--accent);"></span></button>
-        <button id="tab-activities" class="panel-tab">Activities<span id="activities-filter-label" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--accent);"></span></button>
+        <button id="tab-events" class="panel-tab active">Events</button>
+        <button id="tab-activities" class="panel-tab">Activities</button>
       </div>
       <button id="activity-collapse" class="activity-toggle" title="Hide panel" aria-label="Hide panel"></button>
     </div>
@@ -1379,7 +1392,6 @@ input, select, textarea {
 
   // ── Render activity feed ───────────────────────────────────────────────────
   const activityList  = document.getElementById('activity-list');
-  const activityLabel = document.getElementById('activity-filter-label');
   const activityFlash = document.getElementById('activity-latest-flash');
 
   function summariseEvent(e) {
@@ -1402,9 +1414,6 @@ input, select, textarea {
     const filtered = selectedAgentId
       ? recentEvents.filter(e => e.synapse_agent_id === selectedAgentId)
       : recentEvents;
-
-    const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
-    activityLabel.textContent = sel && sel.slot !== 0 ? ` · :${sel.slot}` : '';
 
     // Ticker mirrors the activity list: same filtered view, newest event (index 0 = newest-first)
     const latestFiltered = filtered[0];
@@ -1479,7 +1488,6 @@ input, select, textarea {
   const tabEvents     = document.getElementById('tab-events');
   const tabActivities = document.getElementById('tab-activities');
   const taskActivityList = document.getElementById('task-activity-list');
-  const activitiesFilterLabel = document.getElementById('activities-filter-label');
 
   function switchRightTab(tab) {
     rightPanelTab = tab;
@@ -1496,8 +1504,6 @@ input, select, textarea {
   // ── Task activities rendering ────────────────────────────────────────────
   function renderTaskActivities() {
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
-    activitiesFilterLabel.textContent = sel && sel.slot !== 0 ? ` · :${sel.slot}` : '';
-
     const isOrchestrator = sel?.slot === 0;
     const filtered = (sel && !isOrchestrator)
       ? allActivities.filter(a => a.agent_id === selectedAgentId)
@@ -1516,8 +1522,12 @@ input, select, textarea {
         const jumpId = a.result_msg_id ?? a.trigger_msg_id;
         const clickable = jumpId ? 'clickable' : '';
         const dataJump = jumpId ? `data-jump-msg="${jumpId}"` : '';
+        const ownerSlot = agentStatuses.find(s => s.agent_id === a.agent_id)?.slot;
+        const slotTag = isOrchestrator && ownerSlot != null
+          ? `<span class="activity-slot-tag">:${ownerSlot}</span>`
+          : '';
         return `<div class="task-activity-row ${clickable}" id="act-${a.id}" ${dataJump}>
-          <div class="task-activity-title">${esc(a.title)}</div>
+          <div class="task-activity-title">${slotTag}${esc(a.title)}</div>
           <div class="task-activity-meta">
             <span class="task-activity-status ${a.status}">${a.status.replace('_', ' ')}</span>
             <span>${timeStr}</span>
