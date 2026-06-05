@@ -911,6 +911,8 @@ input, select, textarea {
     // Auto-select first agent if none selected
     if (!selectedAgentId && agentStatuses.length > 0) {
       selectedAgentId = agentStatuses[0].agent_id;
+      // Initial load: ensure the freshly-selected agent's messages start at the bottom.
+      requestAnimationFrame(scrollMessagesToBottom);
     }
 
     agentsList.innerHTML = agentStatuses.map(a => {
@@ -949,6 +951,8 @@ input, select, textarea {
         renderAgents();
         renderMessages();
         renderActivity();
+        // Agent switch: always jump to the latest messages for the new agent.
+        scrollMessagesToBottom();
       });
     });
 
@@ -1066,6 +1070,21 @@ input, select, textarea {
   // ── Render messages ───────────────────────────────────────────────────────
   const messagesList = document.getElementById('messages-list');
 
+  // Track whether the user has scrolled up to read history. When false (user is
+  // at/near the bottom), new messages auto-scroll into view; when true, we leave
+  // their reading position alone. Reset to false on initial load and agent switch.
+  let userScrolledUp = false;
+  messagesList.addEventListener('scroll', () => {
+    const nearBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 50;
+    userScrolledUp = !nearBottom;
+  });
+
+  /** Jump the message list to the bottom and re-enable auto-scroll. */
+  function scrollMessagesToBottom() {
+    userScrolledUp = false;
+    messagesList.scrollTop = messagesList.scrollHeight;
+  }
+
   function renderMessages() {
     const selectedAgent = agentStatuses.find(a => a.agent_id === selectedAgentId);
 
@@ -1120,10 +1139,9 @@ input, select, textarea {
       `;
     }
 
-    // Only auto-scroll to bottom if user is already near the bottom (within 100px).
-    // If they've scrolled up to read, don't interrupt them.
-    const nearBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 100;
-    if (nearBottom) messagesList.scrollTop = messagesList.scrollHeight;
+    // Auto-scroll to the newest message unless the user has scrolled up to read
+    // history (tracked by the scroll listener above). This keeps their position.
+    if (!userScrolledUp) messagesList.scrollTop = messagesList.scrollHeight;
   }
 
   // ── Send message ──────────────────────────────────────────────────────────
