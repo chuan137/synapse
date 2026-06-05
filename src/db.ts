@@ -520,14 +520,20 @@ export function finishActivity(
   return r.changes > 0;
 }
 
+/**
+ * Attach a commit SHA to the most recent in-progress activity that has no commit yet.
+ * Prefers activities recorded for the committing agent, falls back to the most recently
+ * started in-progress activity across all agents. Orchestrators commit before calling
+ * finish_activity, so the target activity is still in_progress at attach time.
+ */
 export function attachCommitToCurrentActivity(agentId: string, commitSha: string): boolean {
   const r = db.prepare(`
     UPDATE activities
        SET commit_sha = ?
      WHERE id = (
        SELECT id FROM activities
-       WHERE agent_id = ? AND status = 'in_progress' AND commit_sha IS NULL
-       ORDER BY started_at DESC LIMIT 1
+       WHERE status = 'in_progress' AND commit_sha IS NULL
+       ORDER BY (agent_id = ?) DESC, started_at DESC LIMIT 1
      )
   `).run(commitSha, agentId);
   return r.changes > 0;

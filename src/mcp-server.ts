@@ -271,6 +271,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'number',
             description: 'Message id of the task assignment that triggered this activity (optional).',
           },
+          agent_id: {
+            type: 'string',
+            description: 'The agent this activity is for. Defaults to the calling agent (self-driven). Orchestrators pass the worker agent_id when assigning a task.',
+          },
         },
         required: ['title'],
       },
@@ -500,8 +504,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'start_activity') {
-    const { title, trigger_msg_id } = args as { title: string; trigger_msg_id?: number };
-    const activityId = startActivity(AGENT_ID, title, trigger_msg_id ?? null);
+    const { title, trigger_msg_id, agent_id } = args as { title: string; trigger_msg_id?: number; agent_id?: string };
+    const activityId = startActivity(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null);
     return { content: [{ type: 'text', text: `Activity started (id: ${activityId}).` }] };
   }
 

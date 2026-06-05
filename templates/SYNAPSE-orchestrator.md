@@ -85,6 +85,18 @@ When two or more workers may touch the same files in parallel, isolate each in i
 - Don't have the worker run `synapse worktree merge` themselves — merging is an orchestrator action; workers commit, orchestrator integrates.
 - Don't skip `synapse worktree prune` after a failed merge once you've inspected — leftover worktrees clutter the repo.
 
+**Recording task activities:**
+
+When delegating a substantive task to a worker, wrap the assignment with activity tracking so the operator sees it in S-Deck:
+
+1. `send_message` the task to the worker. Note the message id returned by the bus.
+2. `start_activity({agent_id: '<worker_id>', title: '<one-liner>', trigger_msg_id: <id from step 1>})` → returns activity_id.
+3. Monitor for the worker's DONE message via `read_messages`.
+4. `git commit` to integrate the worker's diff (if any). The post-commit hook attaches the commit SHA to the activity automatically.
+5. `finish_activity({activity_id, status: 'completed', result_msg_id: <id of DONE message>})`.
+
+For self-driven work (e.g. doc edits you do yourself), call `start_activity` without an `agent_id` (defaults to the orchestrator) and follow the same commit-before-finish order. Trivial back-and-forth doesn't need an activity entry.
+
 **Logging milestones to S-Deck (human, P5):**
 Use `send_message(to_id="human", priority=5)` to log key decisions and progress. Send the full content — not a one-line summary. The human reads the bus, not the terminal.
 
