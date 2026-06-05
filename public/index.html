@@ -331,6 +331,21 @@
       justify-content: space-between;
     }
 
+    .surface-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .surface-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .surface-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
     .kebab-btn {
       background: none;
       border: 1px solid var(--border);
@@ -464,6 +479,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       margin-bottom: 4px;
+      text-transform: capitalize;
     }
 
     .agent-session {
@@ -1011,13 +1027,15 @@ input, select, textarea {
         <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to select">
           <div class="agent-card-row">
             <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
-            <div class="agent-menu-wrap">
-              <button class="kebab-btn" data-menu-id="${esc(a.agent_id)}" title="Actions">⋮</button>
-              <div class="agent-menu" id="menu-${esc(a.agent_id)}" style="display:none;">
-                <button class="focus-item" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'}>focus</button>
-                <button class="ping-item" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'}>ping</button>
-                <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
-                ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button class="surface-btn focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
+              <button class="surface-btn ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
+              <div class="agent-menu-wrap">
+                <button class="kebab-btn" data-menu-id="${esc(a.agent_id)}" title="More actions">⋮</button>
+                <div class="agent-menu" id="menu-${esc(a.agent_id)}" style="display:none;">
+                  <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
+                  ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
+                </div>
               </div>
             </div>
           </div>
@@ -1038,7 +1056,7 @@ input, select, textarea {
     // Wire card click → select agent (original behavior)
     agentsList.querySelectorAll('.agent-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.agent-menu-wrap')) return;
+        if (e.target.closest('.agent-menu-wrap') || e.target.closest('.focus-btn') || e.target.closest('.ping-btn')) return;
         closeAllMenus();
         selectedAgentId = card.dataset.agentId;
         renderAgents();
@@ -1063,11 +1081,10 @@ input, select, textarea {
     // Close menus when clicking outside the agents list
     document.addEventListener('click', closeAllMenus, { capture: false });
 
-    // Wire focus menu item
-    agentsList.querySelectorAll('.focus-item').forEach(btn => {
+    // Wire focus surface button
+    agentsList.querySelectorAll('.focus-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        closeAllMenus();
         const agentId = btn.dataset.focusId;
         const card = btn.closest('.agent-card');
         btn.disabled = true;
@@ -1081,11 +1098,10 @@ input, select, textarea {
       });
     });
 
-    // Wire ping menu item
-    agentsList.querySelectorAll('.ping-item').forEach(btn => {
+    // Wire ping surface button
+    agentsList.querySelectorAll('.ping-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        closeAllMenus();
         const agentId = btn.dataset.pingId;
         btn.disabled = true;
         btn.textContent = '…';
