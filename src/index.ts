@@ -4,7 +4,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { execFileSync, execSync } from 'child_process';
+import { exec, execFileSync, execSync } from 'child_process';
 import { openDb, attachCommitToActivityBySlot } from './db.js';
 
 /** Strip YAML front-matter (---...---) from a role file before injecting into system prompt. */
@@ -223,6 +223,13 @@ program
   });
 
 program
+  .command('update [path]')
+  .description('Re-apply latest templates and refresh CLAUDE.md in an existing project')
+  .action((targetPath) => {
+    synapseInit(resolve(targetPath ?? '.'), true);
+  });
+
+program
   .command('run')
   .description('Start a Claude session with Synapse system prompt injected')
   .option('--role <role>', 'Agent role: orchestrator or worker', 'orchestrator')
@@ -340,7 +347,7 @@ program
       ].join('\n') + '\n', 'utf8');
       chmodSync(launchScript, 0o755);
 
-      execSync(`tmux new-window -d -c ${JSON.stringify(cwd)} -n orchestrator ${JSON.stringify(launchScript)}`);
+      execSync(`tmux new-window -d -c ${JSON.stringify(cwd)} -n ORCH ${JSON.stringify(launchScript)}`);
       process.stderr.write('[Synapse] Launched orchestrator in tmux window "orchestrator" (slot :0).\n');
     }
 
@@ -355,7 +362,10 @@ program
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 
-    await startDashboard(Number(options.port));
+    const actualPort = await startDashboard(Number(options.port));
+    const url = `http://localhost:${actualPort}`;
+    const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    exec(`${opener} ${url}`);
   });
 
 // ── worktree subcommands ────────────────────────────────────────────────────
