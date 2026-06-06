@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join, resolve, dirname } from 'path';
+import { join, resolve, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { exec, execFileSync, execSync } from 'child_process';
 import { openDb, attachCommitToTaskBySlot } from './db.js';
@@ -316,6 +316,10 @@ program
   .option('-p, --port <number>', 'Dashboard port (0 = random free port)', '0')
   .action(async (options) => {
     const cwd = process.cwd();
+
+    // Rename the current tmux window to the project name
+    try { execSync(`tmux rename-window ${JSON.stringify(basename(cwd))}`); } catch { /* not in tmux */ }
+
     const isNew = synapseInit(cwd, true);
     if (isNew) process.stderr.write(`[Synapse] Initialized project at ${cwd}\n`);
 
