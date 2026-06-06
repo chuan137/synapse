@@ -119,6 +119,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE messages ADD COLUMN approved_at INTEGER`,
     `ALTER TABLE messages ADD COLUMN request_options TEXT`,
     `ALTER TABLE messages ADD COLUMN selected_option INTEGER`,
+    `ALTER TABLE messages ADD COLUMN task_id INTEGER`,
     // Safety: if the prior bug left rows in a stale activities table, rescue them.
     `INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha) SELECT id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha FROM activities`,
   ]) {
@@ -153,6 +154,7 @@ export interface Message {
   approved_at: number | null;
   request_options: string | null;
   selected_option: number | null;
+  task_id: number | null;
 }
 
 export interface AgentStatus {
@@ -218,9 +220,9 @@ const stmts = {
     UPDATE messages SET read_at = ? WHERE to_id = ? AND read_at IS NULL
   `),
 
-  insertMessage: db.prepare<[string, string, string, number, number, number, string | null]>(`
-    INSERT INTO messages (from_id, to_id, content, priority, created_at, needs_approval, request_options)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+  insertMessage: db.prepare<[string, string, string, number, number, number, string | null, number | null]>(`
+    INSERT INTO messages (from_id, to_id, content, priority, created_at, needs_approval, request_options, task_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `),
 
   insertAgent: db.prepare<[string, number, number], void>(`
@@ -453,8 +455,9 @@ export function sendMessage(
   priority: number = 5,
   needsApproval: boolean = false,
   options?: string[],
+  taskId?: number | null,
 ): number {
-  const r = stmts.insertMessage.run(fromId, toId, content, priority, Date.now(), needsApproval ? 1 : 0, options ? JSON.stringify(options) : null);
+  const r = stmts.insertMessage.run(fromId, toId, content, priority, Date.now(), needsApproval ? 1 : 0, options ? JSON.stringify(options) : null, taskId ?? null);
   return Number(r.lastInsertRowid);
 }
 
@@ -915,7 +918,7 @@ export function postMilestoneOnce(sessionId: string, content: string, priority =
     `SELECT 1 FROM messages WHERE from_id = ? AND to_id = 'human' AND content = ? LIMIT 1`
   ).get(agent.agent_id, content);
   if (dup) return;
-  stmts.insertMessage.run(agent.agent_id, 'human', content, priority, Date.now(), 0, null);
+  stmts.insertMessage.run(agent.agent_id, 'human', content, priority, Date.now(), 0, null, null);
 }
 
 export function getRecentEvents(limit = 200): EventRow[] {

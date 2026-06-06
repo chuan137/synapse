@@ -6,6 +6,7 @@ export interface TrajectoryCase {
   id: number;
   label: 'good' | 'bad';
   task: Record<string, unknown>;
+  linked_msg_ids: number[];
   messages: Record<string, unknown>[];
   tool_metrics: Record<string, unknown>[];
   metrics: {
@@ -27,10 +28,15 @@ export function extractCases(dbPath: string, outDir: string, limit = 20): Trajec
   `).all(limit) as any[];
 
   const cases: TrajectoryCase[] = tasks.map(task => {
-    const msgIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean);
-    const messages: Record<string, unknown>[] = msgIds.length > 0
-      ? (db.prepare(`SELECT * FROM messages WHERE id IN (${msgIds.join(',')})`).all() as Record<string, unknown>[])
-      : [];
+    const linkedIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean);
+
+    const messages: Record<string, unknown>[] = (db.prepare(`
+      SELECT * FROM messages
+      WHERE created_at >= ?
+        AND created_at <= COALESCE(?, 9999999999999)
+        AND (from_id = ? OR to_id = ?)
+      ORDER BY created_at
+    `).all(task.started_at, task.finished_at, task.agent_id, task.agent_id) as Record<string, unknown>[]);
 
     const tool_metrics = db.prepare(`
       SELECT * FROM tool_metrics
@@ -51,6 +57,7 @@ export function extractCases(dbPath: string, outDir: string, limit = 20): Trajec
       id: task.id,
       label: 'good' as const,
       task,
+      linked_msg_ids: linkedIds,
       messages,
       tool_metrics,
       metrics: {
