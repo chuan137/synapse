@@ -116,6 +116,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE activities RENAME TO tasks`,
     `ALTER TABLE tasks ADD COLUMN source_msg_id INTEGER REFERENCES messages(id)`,
     `ALTER TABLE messages ADD COLUMN needs_approval INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE messages ADD COLUMN approved_at INTEGER`,
     // Safety: if the prior bug left rows in a stale activities table, rescue them.
     `INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha) SELECT id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha FROM activities`,
   ]) {
@@ -147,6 +148,7 @@ export interface Message {
   created_at: number;
   read_at: number | null;
   needs_approval: number;
+  approved_at: number | null;
 }
 
 export interface AgentStatus {
@@ -451,6 +453,10 @@ export function sendMessage(
   return Number(r.lastInsertRowid);
 }
 
+export function approveMessage(id: number): void {
+  db.prepare(`UPDATE messages SET approved_at = ? WHERE id = ?`).run(Date.now(), id);
+}
+
 export function updateStatus(
   agentId: string,
   state: AgentStatus['state'],
@@ -511,6 +517,7 @@ export interface Task {
   result_msg_id: number | null;
   source_msg_id: number | null;
   commit_sha: string | null;
+  tool_calls: number;
 }
 
 export function startTask(
@@ -596,17 +603,27 @@ export function attachCommitToTaskBySlot(slot: number, commitSha: string): boole
 
 export function listTasksForAgent(agentId: string, limit = 100): Task[] {
   return db.prepare<[string, number], Task>(`
-    SELECT * FROM tasks
-    WHERE agent_id = ?
-    ORDER BY started_at DESC
+    SELECT t.*,
+           (SELECT COUNT(*) FROM tool_metrics tm
+            WHERE tm.synapse_agent_id = t.agent_id
+              AND tm.timestamp >= t.started_at
+              AND tm.timestamp <= COALESCE(t.finished_at, 9999999999999)) AS tool_calls
+    FROM tasks t
+    WHERE t.agent_id = ?
+    ORDER BY t.started_at DESC
     LIMIT ?
   `).all(agentId, limit);
 }
 
 export function listAllTasks(limit = 200): Task[] {
   return db.prepare<[number], Task>(`
-    SELECT * FROM tasks
-    ORDER BY started_at DESC
+    SELECT t.*,
+           (SELECT COUNT(*) FROM tool_metrics tm
+            WHERE tm.synapse_agent_id = t.agent_id
+              AND tm.timestamp >= t.started_at
+              AND tm.timestamp <= COALESCE(t.finished_at, 9999999999999)) AS tool_calls
+    FROM tasks t
+    ORDER BY t.started_at DESC
     LIMIT ?
   `).all(limit);
 }

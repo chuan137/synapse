@@ -846,6 +846,22 @@
     .task-status.in_progress { background: rgba(250,204,21,0.15); color: var(--working); }
     .task-status.completed   { background: rgba(74,222,128,0.12); color: var(--idle); }
     .task-status.aborted     { background: rgba(248,113,113,0.12); color: var(--error); }
+    .task-id-badge {
+      font-size: 9px;
+      font-weight: 700;
+      font-family: monospace;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+    .task-tool-calls {
+      color: var(--accent);
+      opacity: 0.75;
+    }
     .task-sha {
       font-family: inherit;
       color: var(--accent);
@@ -1273,6 +1289,7 @@ input, select, textarea {
     }
     .msg-approve-btn:hover:not(:disabled) { border-color: var(--idle); color: var(--idle); opacity: 1; }
     .msg-approve-btn:disabled { opacity: 0.5; cursor: default; }
+    .msg-approved-badge { font-size: 10px; color: var(--muted); opacity: 0.6; }
 
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 5px; }

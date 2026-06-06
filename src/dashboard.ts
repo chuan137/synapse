@@ -8,6 +8,7 @@ import {
   getAllStatuses,
   getRecentMessages,
   sendMessage,
+  approveMessage,
   getTmuxPane,
   getPendingApprovals,
   resolveApproval,
@@ -353,6 +354,14 @@ app.post('/api/messages', (req: Request, res: Response) => {
   const p = priority ?? 5;
   sendMessage('human', to_id, content, p);
   if (p === 0) pingAgent(to_id);
+  res.json({ ok: true });
+});
+
+// Mark a message as approved in-place
+app.post('/api/messages/:id/approve', (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }
+  approveMessage(id);
   res.json({ ok: true });
 });
 

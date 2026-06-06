@@ -491,14 +491,17 @@
         const clickable = jumpId ? 'clickable' : '';
         const dataJump = jumpId ? `data-jump-msg="${jumpId}"` : '';
         const ownerSlot = agentStatuses.find(s => s.agent_id === a.agent_id)?.slot;
-        const slotTag = isOrchestrator && ownerSlot != null
+        const slotMeta = isOrchestrator && ownerSlot != null
           ? `<span class="activity-slot-tag">:${ownerSlot}</span>`
           : '';
+        const toolCallsStr = a.tool_calls > 0 ? `<span class="task-tool-calls">${a.tool_calls} calls</span>` : '';
         return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump} data-agent-id="${esc(a.agent_id ?? '')}">
-          <div class="task-title">${slotTag}${esc(a.title)}</div>
+          <div class="task-title"><span class="task-id-badge">#${a.id}</span>${esc(a.title)}</div>
           <div class="task-meta">
             <span class="task-status ${a.status}">${a.status.replace('_', ' ')}</span>
+            ${slotMeta}
             <span>${timeStr}</span>
+            ${toolCallsStr}
             ${sha}
           </div>
         </div>`;
@@ -595,6 +598,15 @@
     userScrolledUp = !nearBottom;
   });
 
+  // Delegated approve button handler — wired once, not inside renderMessages
+  messagesList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.msg-approve-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = '✓ approved';
+    await fetch(`/api/messages/${btn.dataset.msgId}/approve`, { method: 'POST' });
+  });
+
   /** Jump the message list to the bottom and re-enable auto-scroll. */
   function scrollMessagesToBottom() {
     userScrolledUp = false;
@@ -624,9 +636,9 @@
         const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
         const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
         const approveBtn = (!fromHuman && m.needs_approval)
-          ? `<div class="message-actions">
-               <button class="msg-approve-btn" data-to="${esc(m.from_id)}" data-msg-id="${m.id}" data-priority="${m.priority}">✓ approve</button>
-             </div>`
+          ? (m.approved_at
+              ? `<div class="message-actions"><span class="msg-approved-badge">✓ approved</span></div>`
+              : `<div class="message-actions"><button class="msg-approve-btn" data-msg-id="${m.id}">✓ approve</button></div>`)
           : '';
         return `
           <div id="msg-${m.id}" class="message-row ${cls}">
@@ -649,21 +661,6 @@
     // position, text selection, and preventing markdown re-render blink.
     morphdom(messagesList, `<div id="messages-list">${innerHtml}</div>`, { childrenOnly: true });
     renderStatusRow();
-
-    // Wire approve quick-reply buttons
-    messagesList.querySelectorAll('.msg-approve-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const toId = btn.dataset.to;
-        const priority = parseInt(btn.dataset.priority ?? '5', 10);
-        btn.disabled = true;
-        btn.textContent = '✓ sent';
-        await fetch('/api/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to_id: toId, content: 'Approved.', priority }),
-        });
-      });
-    });
 
     if (!userScrolledUp) messagesList.scrollTop = messagesList.scrollHeight;
   }
