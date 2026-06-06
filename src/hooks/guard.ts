@@ -122,8 +122,8 @@ async function guard(payload: any): Promise<void> {
 }
 
 function looksLikeApprovalRequest(content: string): boolean {
-  if (/\?/.test(content)) return true;
-  return /\b(shall I|should I|want me to|do you want|proceed|confirm|approve)\b/i.test(content);
+  if (/\w\?(\s|$)/.test(content)) return true;
+  return /\b(shall I|should I|want me to|do you want)\b/i.test(content);
 }
 
 function guardReason(tool: string, input: any): string | null {
