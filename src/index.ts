@@ -674,7 +674,7 @@ program
   });
 
 program
-  .command('eval apply <proposal-file>')
+  .command('eval-apply <proposal-file>')
   .description('Apply a gate-approved proposal patch to the target rule file, commit, and reset the failure counter')
   .action((proposalFile: string) => {
     const proposalPath = resolve(proposalFile);
