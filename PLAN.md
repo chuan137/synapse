@@ -9,8 +9,21 @@ Living list of pending work. Source of truth for the Plan tab in S-Deck. Edit fr
 - **Restart bootstrap orchestrator id** — known limitation: hardcoded `cec50b17:0` in the restart task message. Should look up the live slot-0 agent_id at restart time.
 - **Workers not posting DONE to human** — protocol fix shipped in `60d7a9c` re-emphasizes the human milestone. Existing running workers won't pick it up until restarted; only future-spawned workers see the new doc at boot.
 - **Custom orchestrator name preserved across restart** — slot-0 boot path now unconditionally writes `name='orchestrator'`. If operator wants a custom name to survive, add a "skip if a non-default name is already set" guard.
+- **Plan-guard harness step** — intercept `delegate_task` in the PreToolUse guard hook; deny with feedback if PLAN.md hasn't been touched recently. Needs a freshness window decision and a `skip_plan` escape hatch for trivial tasks. Deferred: add to protocol text first, consider harness enforcement later.
 
 ## Done
+
+### Frontend structure
+
+- `fa3d850` extract inline CSS/JS to public/style.css and public/app.js (index.html 137 lines)
+
+### Theme polish (continued)
+
+- `170ffd6` light theme: message text #1a1d24 → #333538 (dark grey); remove message-row hover effect
+
+### Rename activities → tasks
+
+- `3fc137c` rename: activities → tasks (UI labels, TS symbols, SSE key; MCP tool names + DB table unchanged)
 
 ### Activity panel + ledger
 
