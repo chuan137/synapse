@@ -806,10 +806,28 @@
 
     .message-row.from-agent {
       background: rgba(255, 255, 255, 0.025);
+      transition: background 0.15s, border-left-color 0.15s, box-shadow 0.15s;
+    }
+
+    .message-row.from-agent:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-left-color: rgba(112, 145, 245, 0.5);
+      box-shadow: inset 0 0 0 1px rgba(112, 145, 245, 0.1);
+    }
+
+    .message-row.from-agent:hover .message-content {
+      color: var(--text);
     }
 
     :root.bright .message-row.from-agent {
       background: rgba(0, 0, 0, 0.02);
+      transition: background 0.15s, border-left-color 0.15s, box-shadow 0.15s;
+    }
+
+    :root.bright .message-row.from-agent:hover {
+      background: rgba(64, 96, 200, 0.05);
+      border-left-color: rgba(64, 96, 200, 0.38);
+      box-shadow: inset 0 0 0 1px rgba(64, 96, 200, 0.08);
     }
 
 
