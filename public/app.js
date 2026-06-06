@@ -622,7 +622,16 @@
     if (!btn) return;
     btn.disabled = true;
     btn.textContent = '✓ approved';
+    const input = btn.closest('.message-actions').querySelector('.approval-reply-input');
+    const replyText = input ? input.value.trim() : '';
     await fetch(`/api/messages/${btn.dataset.msgId}/approve`, { method: 'POST' });
+    if (replyText) {
+      await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to_id: btn.dataset.fromId, content: replyText, priority: Number(btn.dataset.priority) }),
+      });
+    }
   });
 
   /** Jump the message list to the bottom and re-enable auto-scroll. */
@@ -656,7 +665,7 @@
         const approveBtn = (!fromHuman && m.needs_approval)
           ? (m.approved_at
               ? `<div class="message-actions"><span class="msg-approved-badge">✓ approved</span></div>`
-              : `<div class="message-actions"><button class="msg-approve-btn" data-msg-id="${m.id}">✓ approve</button></div>`)
+              : `<div class="message-actions"><input class="approval-reply-input" type="text" placeholder="reply (optional)" /><button class="msg-approve-btn" data-msg-id="${m.id}" data-from-id="${m.from_id}" data-priority="${m.priority}">✓ approve</button></div>`)
           : '';
         return `
           <div id="msg-${m.id}" class="message-row ${cls}">
