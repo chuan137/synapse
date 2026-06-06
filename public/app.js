@@ -466,7 +466,7 @@
         const duration = a.finished_at ? `${Math.round((a.finished_at - a.started_at) / 1000)}s` : null;
         const sha = a.commit_sha ? `<span class="task-sha diff-trigger" data-sha="${esc(a.commit_sha)}" title="View diff for ${esc(a.commit_sha.slice(0, 7))}">${esc(a.commit_sha.slice(0, 7))}</span>` : '';
         const timeStr = endTime ? `${startTime} → ${endTime}${duration ? ` (${duration})` : ''}` : `${startTime} …`;
-        const jumpId = a.result_msg_id ?? a.trigger_msg_id;
+        const jumpId = a.trigger_msg_id ?? a.result_msg_id;
         const clickable = jumpId ? 'clickable' : '';
         const dataJump = jumpId ? `data-jump-msg="${jumpId}"` : '';
         const ownerSlot = agentStatuses.find(s => s.agent_id === a.agent_id)?.slot;
