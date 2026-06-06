@@ -568,4 +568,21 @@ function worktreePruneOne(root: string, name: string, branch: string): void {
   process.stdout.write(`pruned: ${name}\n`);
 }
 
+program
+  .command('eval')
+  .description('Extract and evaluate agent trajectory cases')
+  .action(async () => {
+    const { extractCases } = await import('./eval/extract.js');
+    const { join } = await import('path');
+    const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
+    const outDir = join(process.cwd(), 'tests', 'cases');
+    const cases = extractCases(dbPath, outDir);
+    cases.forEach(c => {
+      const t = c.task as any;
+      process.stdout.write(`[${c.label.toUpperCase()}] #${c.id} ${t.title?.slice(0, 50)}\n`);
+      process.stdout.write(`  calls=${c.metrics.tool_calls} dur=${Math.round((c.metrics.duration_ms ?? 0)/1000)}s missing=${c.metrics.traceability_score} commit=${c.metrics.has_commit}\n`);
+    });
+    process.stdout.write(`\nWrote ${cases.length} cases to ${outDir}\n`);
+  });
+
 program.parse(process.argv);
