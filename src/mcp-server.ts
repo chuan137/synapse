@@ -128,7 +128,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           needs_approval: {
             type: 'boolean',
-            description: 'If true, shows an Approve button on the message in S-Deck. Use when you need explicit operator sign-off before proceeding.',
+            description: 'Required when to_id is "human". Set true if this message requires operator action (shows an Approve button in S-Deck); set false for informational messages.',
             default: false,
           },
         },
