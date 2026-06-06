@@ -13,7 +13,7 @@ Synapse is a human-in-the-loop observation layer. A human operator watches all a
 | `read_messages` | Check for messages from the operator or other agents |
 | `send_message` | Send a message to the operator (`human`) or another agent by their agent ID |
 | `update_status` | Report your current state to the dashboard |
-| `start_activity` | Open a task-activity record on S-Deck (call when starting a non-trivial task) |
+| `start_task` | Open a task-activity record on S-Deck (call when starting a non-trivial task) |
 | `finish_activity` | Close the activity with `completed` or `aborted` when the task is done |
 | `delegate_task` | Send a task to a worker AND record the activity in one call (orchestrator only) |
 | `report_done` | Finish a task: sends DONE to orchestrator, milestone to human, closes activity (worker only) |
@@ -54,7 +54,7 @@ If a turn produced none of the above, stay silent — milestones are signal, not
 **Rule 4 — Track non-trivial tasks as Activities**
 Activities appear in the S-Deck Activity Panel so the operator can track what each agent is working on and review outcomes.
 
-**Workers:** do NOT call `start_activity` or `delegate_task`. When the orchestrator uses `delegate_task`, it opens the activity automatically. Your only calls are: `update_status` → execute → `report_done` → `update_status` → `read_messages`.
+**Workers:** do NOT call `start_task` or `delegate_task`. When the orchestrator uses `delegate_task`, it opens the activity automatically. Your only calls are: `update_status` → execute → `report_done` → `update_status` → `read_messages`.
 
 **Orchestrators:** the canonical delegated-task sequence is strictly ordered — do not skip or reorder steps:
 
@@ -62,7 +62,7 @@ Activities appear in the S-Deck Activity Panel so the operator can track what ea
 delegate_task  →  wait for DONE (read_messages)  →  git commit  →  finish_activity
 ```
 
-Do NOT commit before the worker replies. Do NOT call `finish_activity` before committing (the commit hook sets the SHA). For self-driven work, use `start_activity` / `finish_activity` with the same commit-before-finish order.
+Do NOT commit before the worker replies. Do NOT call `finish_activity` before committing (the commit hook sets the SHA). For self-driven work, use `start_task` / `finish_activity` with the same commit-before-finish order.
 
 Skip activity tracking for trivial back-and-forth — only use it for tasks worth a recap entry.
 

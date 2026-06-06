@@ -23,7 +23,7 @@ Post key milestones to `human` (P5) so the operator can follow along on S-Deck w
 6. Read          — read_messages and wait for the next task
 ```
 
-You do NOT call `start_activity` — the orchestrator opens it via `delegate_task`. You do NOT plan, delegate, or spawn agents. Your only job is read → execute → report.
+You do NOT call `start_task` — the orchestrator opens it via `delegate_task`. You do NOT plan, delegate, or spawn agents. Your only job is read → execute → report.
 
 **When blocked:**
 1. `send_message` to orchestrator explaining what you need

@@ -268,7 +268,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'start_activity',
+      name: 'start_task',
       description:
         'Begin tracking a task you\'ve taken on. Call this when you receive a substantive task assignment ' +
         'from your orchestrator (or, for orchestrators, from the human). The Task will appear in the ' +
@@ -296,7 +296,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'finish_activity',
       description:
-        'Mark a task as done. Pass the activity_id from start_activity, status=\'completed\' or \'aborted\', ' +
+        'Mark a task as done. Pass the activity_id from start_task, status=\'completed\' or \'aborted\', ' +
         'and optionally result_msg_id (the message id of your DONE/result message — links the task to its ' +
         'resolution in the UI).',
       inputSchema: {
@@ -304,7 +304,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           activity_id: {
             type: 'number',
-            description: 'The id returned by start_activity.',
+            description: 'The id returned by start_task.',
           },
           status: {
             type: 'string',
@@ -327,7 +327,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'delegate_task',
       description:
         'Send a task to a worker and record the activity in one call. ' +
-        'Use this instead of separate send_message + start_activity when delegating a substantive task. ' +
+        'Use this instead of separate send_message + start_task when delegating a substantive task. ' +
         'Returns { message_id, activity_id }. Skip for trivial messages (clarifications, status checks).',
       inputSchema: {
         type: 'object',
@@ -579,7 +579,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return { content: [{ type: 'text', text: `${msgs.length} message(s):\n\n${formatted}` }] };
   }
 
-  if (name === 'start_activity') {
+  if (name === 'start_task') {
     const { title, trigger_msg_id, agent_id } = args as { title: string; trigger_msg_id?: number; agent_id?: string };
     const taskId = startTask(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null);
     return { content: [{ type: 'text', text: `Task started (id: ${taskId}).` }] };
