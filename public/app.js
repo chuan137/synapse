@@ -335,6 +335,7 @@
     });
 
     updateComposePlaceholder();
+    renderStatusRow();
   }
 
   // ── Tool metric chips (per agent card) ─────────────────────────────────────
@@ -559,6 +560,30 @@
   // Re-render agents every 5s so timeAgo and stale state stay current
   setInterval(renderAgents, 5_000);
 
+  // ── Status row (pinned below message list) ────────────────────────────────
+  const msgStatusRow   = document.getElementById('msg-status-row');
+  const msgStatusDot   = document.getElementById('msg-status-dot');
+  const msgStatusState = document.getElementById('msg-status-state');
+  const msgStatusSep   = document.getElementById('msg-status-sep');
+  const msgStatusTask  = document.getElementById('msg-status-task');
+
+  function renderStatusRow() {
+    const agent = agentStatuses.find(a => a.agent_id === selectedAgentId);
+    if (!agent) {
+      msgStatusRow.style.display = 'none';
+      return;
+    }
+    const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[agent.state] ?? 'var(--muted)';
+    msgStatusDot.setAttribute('data-state', agent.state);
+    msgStatusDot.style.background = stateColor;
+    msgStatusState.textContent = agent.state;
+    msgStatusState.style.color = stateColor;
+    const task = agent.current_task ?? '';
+    msgStatusTask.textContent = task;
+    msgStatusSep.style.display = task ? '' : 'none';
+    msgStatusRow.style.display = '';
+  }
+
   // ── Render messages ───────────────────────────────────────────────────────
 
   // Track whether the user has scrolled up to read history. When false (user is
@@ -612,26 +637,12 @@
         `;
       }).join('');
 
-      if (selectedAgent) {
-        const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[selectedAgent.state] ?? 'var(--muted)';
-        const task = selectedAgent.current_task ? esc(selectedAgent.current_task) : '';
-        innerHtml += `
-          <div id="msg-status-row">
-            <div class="msg-status-line"></div>
-            <div class="msg-status-badge">
-              <span class="msg-status-dot" data-state="${esc(selectedAgent.state)}" style="background:${stateColor};"></span>
-              <span class="msg-status-state" style="color:${stateColor};">${esc(selectedAgent.state)}</span>
-              ${task ? `<span class="msg-status-sep">·</span><span class="msg-status-task">${task}</span>` : ''}
-            </div>
-            <div class="msg-status-line"></div>
-          </div>
-        `;
-      }
     }
 
     // morphdom diffs children in-place — existing nodes stay put, preserving scroll
     // position, text selection, and preventing markdown re-render blink.
     morphdom(messagesList, `<div id="messages-list">${innerHtml}</div>`, { childrenOnly: true });
+    renderStatusRow();
 
     if (!userScrolledUp) messagesList.scrollTop = messagesList.scrollHeight;
   }
