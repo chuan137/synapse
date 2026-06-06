@@ -340,7 +340,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           source_msg_id: {
             type: 'number',
-            description: 'Optional: the ID of the human→orchestrator message that originated this task — links the task back to its root cause in the message history.',
+            description: 'Optional: the ID of the human→orchestrator message that originated this task — links the task back to its root cause in the message history. Get the ID from the `[id=N]` tag in the `read_messages` output.',
           },
         },
         required: ['to_id', 'title', 'content'],
@@ -388,7 +388,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       .map((m) => {
         const ts = new Date(m.created_at).toISOString();
         const label = m.priority === 0 ? '[P0 — URGENT]' : '[P5]';
-        return `${label} From: ${m.from_id} at ${ts}\n${m.content}`;
+        return `${label} [id=${m.id}] From: ${m.from_id} at ${ts}\n${m.content}`;
       })
       .join('\n\n---\n\n');
 
