@@ -318,7 +318,10 @@ program
     const cwd = process.cwd();
 
     // Rename the current tmux window to the project name
-    try { execSync(`tmux rename-window ${JSON.stringify(basename(cwd))}`); } catch { /* not in tmux */ }
+    const settingsPath = join(cwd, '.synapse', 'settings.json');
+    const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
+    const windowName = settings.name ?? basename(cwd);
+    try { execFileSync('tmux', ['rename-window', windowName]); } catch { /* not in tmux */ }
 
     const isNew = synapseInit(cwd, true);
     if (isNew) process.stderr.write(`[Synapse] Initialized project at ${cwd}\n`);
