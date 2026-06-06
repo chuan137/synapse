@@ -75,6 +75,21 @@ async function guard(payload: any): Promise<void> {
     return allow();
   }
 
+  // Lint check: send_message to human that looks like an approval request must set needs_approval
+  if (tool === 'mcp__synapse-bus__send_message') {
+    const toId = String(input.to_id ?? '');
+    const content = String(input.content ?? '');
+    const needsApproval = input.needs_approval === true;
+
+    if (toId === 'human' && !needsApproval && looksLikeApprovalRequest(content)) {
+      return deny(
+        'This message to the human appears to be asking for a decision or approval, ' +
+        'but needs_approval is not set. Pass needs_approval: true so the operator sees an approve button.'
+      );
+    }
+    return allow();
+  }
+
   const reason = guardReason(tool, input);
   if (!reason) return allow();
 
@@ -104,6 +119,11 @@ async function guard(payload: any): Promise<void> {
     }
   }
   return deny('No operator response within 10 minutes — blocked by Synapse guard (fail-safe).');
+}
+
+function looksLikeApprovalRequest(content: string): boolean {
+  if (/\?/.test(content)) return true;
+  return /\b(shall I|should I|want me to|do you want|proceed|confirm|approve)\b/i.test(content);
 }
 
 function guardReason(tool: string, input: any): string | null {
