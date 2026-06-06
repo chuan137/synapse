@@ -176,8 +176,8 @@
           <div class="agent-card-body">
             <div class="agent-card-header">
               <div class="agent-card-identity">
-                <span class="agent-slot">${esc(slot)}</span>
                 <span class="agent-name">${humanName || 'agent'}</span>
+                <span class="agent-slot">${esc(slot)}</span>
               </div>
               <div class="agent-card-actions">
                 <button class="agent-icon-btn focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} data-tip="Focus tmux pane">⊙</button>
