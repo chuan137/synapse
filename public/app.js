@@ -8,7 +8,7 @@
   let planContent      = '';
   let selectedAgentId  = null;
   let middlePanelTab   = 'messages'; // 'messages' | 'plan'
-  let rightPanelTab    = 'events';   // 'events'   | 'tasks'
+  let rightPanelTab    = 'tasks';    // 'events'   | 'tasks'
 
   // ── Theme ────────────────────────────────────────────────────────────────
   const themeBtn = document.getElementById('theme-btn');
