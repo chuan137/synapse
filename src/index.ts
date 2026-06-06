@@ -571,7 +571,8 @@ function worktreePruneOne(root: string, name: string, branch: string): void {
 program
   .command('eval')
   .description('Extract and evaluate agent trajectory cases')
-  .action(async () => {
+  .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')
+  .action(async (options) => {
     const { extractCases } = await import('./eval/extract.js');
     const { evaluateCases } = await import('./eval/evaluator.js');
     const { writeFileSync } = await import('fs');
@@ -585,20 +586,34 @@ program
 
     process.stdout.write('\nEvaluating trajectories...\n');
     const results = evaluateCases(casesDir);
-    const passed = results.filter(r => r.pass);
-    const failed = results.filter(r => !r.pass);
+    const passed = results.filter((r: any) => r.pass);
+    const failed = results.filter((r: any) => !r.pass);
 
     process.stdout.write(`\n=== EVAL REPORT ===\nPASS: ${passed.length}/${results.length}\n`);
-    failed.forEach(r => {
+    failed.forEach((r: any) => {
       process.stdout.write(`  FAIL [${r.label.toUpperCase()}] #${r.id} ${r.title.slice(0, 45)}\n`);
-      r.failures.forEach(f => process.stdout.write(`    - ${f}\n`));
+      r.failures.forEach((f: string) => process.stdout.write(`    - ${f}\n`));
     });
-    passed.forEach(r => {
+    passed.forEach((r: any) => {
       process.stdout.write(`  PASS [${r.label.toUpperCase()}] #${r.id} ${r.title.slice(0, 45)}\n`);
     });
 
     writeFileSync(reportPath, JSON.stringify(results, null, 2));
     process.stdout.write(`\nWrote ${results.length} results to ${reportPath}\n`);
+
+    if (options.critic) {
+      const { runCritic } = await import('./eval/critic.js');
+      const rulesFile = join(process.cwd(), 'templates', 'SYNAPSE-orchestrator.md');
+      const patchDir = join(process.cwd(), 'tests', 'patches');
+      process.stdout.write(`\nRunning critic on ${failed.length} failed trajectories...\n`);
+      for (const r of failed) {
+        const caseFile = join(casesDir, `task_${r.id}_${r.label}.json`);
+        process.stdout.write(`  Critic analyzing #${r.id}...\n`);
+        const patch = await runCritic(caseFile, rulesFile, patchDir);
+        process.stdout.write(`  → ${patch.slice(0, 100).replace(/\n/g, ' ')}...\n`);
+      }
+      process.stdout.write(`\nPatches written to tests/patches/\n`);
+    }
   });
 
 program.parse(process.argv);

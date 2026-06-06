@@ -16,6 +16,7 @@
     "dev:dashboard": "tsx src/dashboard.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.101.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "better-sqlite3": "^11.10.0",
     "commander": "^15.0.0",
