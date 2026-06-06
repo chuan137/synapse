@@ -646,12 +646,13 @@
               : `<div class="message-actions"><button class="msg-approve-btn" data-msg-id="${m.id}">✓ approve</button></div>`)
           : '';
         return `
-          <div id="msg-${m.id}" class="message-row ${cls}" title="msg #${m.id}">
+          <div id="msg-${m.id}" class="message-row ${cls}">
             <div class="message-avatar">${esc(avatarLabel)}</div>
             <div class="message-body">
               <div class="message-header">
                 ${p0badge}
                 <span class="message-time">${t}</span>
+                <span class="msg-id-label">#${m.id}</span>
               </div>
               <div class="message-content">${renderMarkdown(m.content)}</div>
               ${approveBtn}

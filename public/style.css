@@ -1123,6 +1123,14 @@
       font-size: 10px;
       color: var(--muted);
     }
+    .msg-id-label {
+      font-size: 9px;
+      color: var(--muted);
+      opacity: 0;
+      letter-spacing: 0.02em;
+      transition: opacity 0.15s;
+    }
+    .message-row:hover .msg-id-label { opacity: 0.55; }
 
     .message-content {
       font-size: 12px;
