@@ -332,6 +332,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: 'If true, write the task content to .synapse/tasks/<activityId>.md and send a short reference message instead of the full content inline. Use for large task specs (>~300 tokens).',
             default: false,
           },
+          source_msg_id: {
+            type: 'number',
+            description: 'Optional: the ID of the human→orchestrator message that originated this task — links the task back to its root cause in the message history.',
+          },
         },
         required: ['to_id', 'title', 'content'],
       },
@@ -585,12 +589,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'delegate_task') {
-    const { to_id, title, content, priority = 5, task_file = false } = args as {
+    const { to_id, title, content, priority = 5, task_file = false, source_msg_id } = args as {
       to_id: string;
       title: string;
       content: string;
       priority?: number;
       task_file?: boolean;
+      source_msg_id?: number;
     };
     let outboundContent = content;
     // For large specs, stage the brief to a file and send a short pointer message.
@@ -598,7 +603,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // then send the message and record it via the existing trigger_msg_id path.
     if (task_file) {
       // Start task without trigger so we have an id for the filename
-      const taskId = startTask(to_id, title, null);
+      const taskId = startTask(to_id, title, null, source_msg_id ?? null);
       const tasksDir = join(process.cwd(), '.synapse', 'tasks');
       mkdirSync(tasksDir, { recursive: true });
       writeFileSync(join(tasksDir, `${taskId}.md`), content, 'utf8');
@@ -609,7 +614,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${taskId}` }] };
     }
     const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
-    const taskId = startTask(to_id, title, messageId);
+    const taskId = startTask(to_id, title, messageId, source_msg_id ?? null);
     return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${taskId}` }] };
   }
 

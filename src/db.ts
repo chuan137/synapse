@@ -83,7 +83,7 @@ export function openDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_metrics_agent ON tool_metrics(synapse_agent_id, tool);
 
-    CREATE TABLE IF NOT EXISTS activities (
+    CREATE TABLE IF NOT EXISTS tasks (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
       agent_id        TEXT    NOT NULL,
       title           TEXT    NOT NULL,
@@ -92,10 +92,11 @@ export function openDb(dbPath: string): Database.Database {
       finished_at     INTEGER,
       trigger_msg_id  INTEGER REFERENCES messages(id),
       result_msg_id   INTEGER REFERENCES messages(id),
+      source_msg_id   INTEGER REFERENCES messages(id),
       commit_sha      TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_activities_agent  ON activities(agent_id, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
+    CREATE INDEX IF NOT EXISTS idx_activities_agent  ON tasks(agent_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activities_status ON tasks(status);
   `);
 
   // Migrate existing tables — ignore errors if columns already exist
@@ -109,8 +110,10 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE agent_status ADD COLUMN ended_at INTEGER`,
     `ALTER TABLE agent_status ADD COLUMN role TEXT`,
     `ALTER TABLE agent_status ADD COLUMN boot_task TEXT`,
+    `ALTER TABLE activities RENAME TO tasks`,
+    `ALTER TABLE tasks ADD COLUMN source_msg_id INTEGER REFERENCES messages(id)`,
   ]) {
-    try { database.exec(sql); } catch { /* column already exists */ }
+    try { database.exec(sql); } catch { /* column already exists or table already renamed */ }
   }
 
   // Migrate stale names to role-based names (one-time, idempotent)
@@ -498,6 +501,7 @@ export interface Task {
   finished_at: number | null;
   trigger_msg_id: number | null;
   result_msg_id: number | null;
+  source_msg_id: number | null;
   commit_sha: string | null;
 }
 
@@ -505,11 +509,12 @@ export function startTask(
   agentId: string,
   title: string,
   triggerMsgId: number | null,
+  sourceMsgId: number | null = null,
 ): number {
   const result = db.prepare(`
-    INSERT INTO activities (agent_id, title, status, started_at, trigger_msg_id)
-    VALUES (?, ?, 'in_progress', ?, ?)
-  `).run(agentId, title, Date.now(), triggerMsgId);
+    INSERT INTO tasks (agent_id, title, status, started_at, trigger_msg_id, source_msg_id)
+    VALUES (?, ?, 'in_progress', ?, ?, ?)
+  `).run(agentId, title, Date.now(), triggerMsgId, sourceMsgId);
   return Number(result.lastInsertRowid);
 }
 
@@ -520,7 +525,7 @@ export function finishTask(
   commitSha: string | null,
 ): boolean {
   const r = db.prepare(`
-    UPDATE activities
+    UPDATE tasks
        SET status        = ?,
            finished_at   = COALESCE(finished_at, ?),
            result_msg_id = COALESCE(?, result_msg_id),
@@ -532,7 +537,7 @@ export function finishTask(
 
 export function getMostRecentInProgressTask(agentId: string): { id: number } | null {
   return db.prepare<[string], { id: number }>(`
-    SELECT id FROM activities
+    SELECT id FROM tasks
      WHERE agent_id = ? AND status = 'in_progress'
      ORDER BY started_at DESC LIMIT 1
   `).get(agentId) ?? null;
@@ -545,12 +550,12 @@ export function getMostRecentInProgressTask(agentId: string): { id: number } | n
  */
 export function attachCommitToCurrentTask(agentId: string, commitSha: string): boolean {
   const r = db.prepare(`
-    UPDATE activities
+    UPDATE tasks
        SET commit_sha  = ?,
            status      = 'completed',
            finished_at = COALESCE(finished_at, ?)
      WHERE id = (
-       SELECT id FROM activities
+       SELECT id FROM tasks
        WHERE status = 'in_progress' AND commit_sha IS NULL
        ORDER BY (agent_id = ?) DESC, started_at DESC LIMIT 1
      )
@@ -568,12 +573,12 @@ export function attachCommitToTaskBySlot(slot: number, commitSha: string): boole
   const agent = getAgentBySlot(slot);
   if (!agent) return false;
   const r = db.prepare(`
-    UPDATE activities
+    UPDATE tasks
        SET commit_sha  = ?,
            status      = 'completed',
            finished_at = COALESCE(finished_at, ?)
      WHERE id = (
-       SELECT id FROM activities
+       SELECT id FROM tasks
        WHERE agent_id = ? AND status = 'in_progress' AND commit_sha IS NULL
        ORDER BY started_at DESC LIMIT 1
      )
@@ -583,7 +588,7 @@ export function attachCommitToTaskBySlot(slot: number, commitSha: string): boole
 
 export function listTasksForAgent(agentId: string, limit = 100): Task[] {
   return db.prepare<[string, number], Task>(`
-    SELECT * FROM activities
+    SELECT * FROM tasks
     WHERE agent_id = ?
     ORDER BY started_at DESC
     LIMIT ?
@@ -592,7 +597,7 @@ export function listTasksForAgent(agentId: string, limit = 100): Task[] {
 
 export function listAllTasks(limit = 200): Task[] {
   return db.prepare<[number], Task>(`
-    SELECT * FROM activities
+    SELECT * FROM tasks
     ORDER BY started_at DESC
     LIMIT ?
   `).all(limit);
