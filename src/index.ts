@@ -422,7 +422,7 @@ function slotFromSlug(name: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-/** After a successful merge, attach the resulting HEAD commit to the worker's activity. */
+/** After a successful merge, attach the resulting HEAD commit to the worker's task. */
 function attachMergeCommit(root: string, name: string): void {
   const slot = slotFromSlug(name);
   if (slot === null) {
@@ -434,7 +434,7 @@ function attachMergeCommit(root: string, name: string): void {
     const ok = attachCommitToTaskBySlot(slot, headSha);
     if (ok) process.stderr.write(`[worktree merge] attached ${headSha.slice(0, 7)} to slot :${slot} task\n`);
   } catch (e) {
-    process.stderr.write(`[worktree merge] activity attach failed: ${e}\n`);
+    process.stderr.write(`[worktree merge] task attach failed: ${e}\n`);
   }
 }
 

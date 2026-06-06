@@ -278,8 +278,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description:
         'Begin tracking a task you\'ve taken on. Call this when you receive a substantive task assignment ' +
         'from your orchestrator (or, for orchestrators, from the human). The Task will appear in the ' +
-        'operator\'s S-Deck Tasks panel for this agent. Returns an activity_id you must pass to ' +
-        'finish_activity when done. Skip for trivial back-and-forth — only use for tasks worth a recap entry.',
+        'operator\'s S-Deck Tasks panel for this agent. Returns a task_id you must pass to ' +
+        'finish_task when done. Skip for trivial back-and-forth — only use for tasks worth a recap entry.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -289,26 +289,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           trigger_msg_id: {
             type: 'number',
-            description: 'Message id of the task assignment that triggered this activity (optional).',
+            description: 'Message id of the task assignment that triggered this task (optional).',
           },
           agent_id: {
             type: 'string',
-            description: 'The agent this activity is for. Defaults to the calling agent (self-driven). Orchestrators pass the worker agent_id when assigning a task.',
+            description: 'The agent this task is for. Defaults to the calling agent (self-driven). Orchestrators pass the worker agent_id when assigning a task.',
           },
         },
         required: ['title'],
       },
     },
     {
-      name: 'finish_activity',
+      name: 'finish_task',
       description:
-        'Mark a task as done. Pass the activity_id from start_task, status=\'completed\' or \'aborted\', ' +
+        'Mark a task as done. Pass the task_id from start_task, status=\'completed\' or \'aborted\', ' +
         'and optionally result_msg_id (the message id of your DONE/result message — links the task to its ' +
         'resolution in the UI).',
       inputSchema: {
         type: 'object',
         properties: {
-          activity_id: {
+          task_id: {
             type: 'number',
             description: 'The id returned by start_task.',
           },
@@ -323,10 +323,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           commit_sha: {
             type: 'string',
-            description: 'Short commit SHA if this activity produced a commit (optional — set automatically by the hook if omitted).',
+            description: 'Short commit SHA if this task produced a commit (optional — set automatically by the hook if omitted).',
           },
         },
-        required: ['activity_id', 'status'],
+        required: ['task_id', 'status'],
       },
     },
     {
@@ -334,7 +334,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description:
         'Send a task to a worker and record the activity in one call. ' +
         'Use this instead of separate send_message + start_task when delegating a substantive task. ' +
-        'Returns { message_id, activity_id }. Skip for trivial messages (clarifications, status checks).',
+        'Returns { message_id, task_id }. Skip for trivial messages (clarifications, status checks).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -344,7 +344,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           priority: { type: 'number', enum: [0, 5], default: 5, description: '0 = urgent, 5 = normal' },
           task_file: {
             type: 'boolean',
-            description: 'If true, write the task content to .synapse/tasks/<activityId>.md and send a short reference message instead of the full content inline. Use for large task specs (>~300 tokens).',
+            description: 'If true, write the task content to .synapse/tasks/<taskId>.md and send a short reference message instead of the full content inline. Use for large task specs (>~300 tokens).',
             default: false,
           },
           source_msg_id: {
@@ -359,8 +359,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'report_done',
       description:
         'Wrap up a task you finished. Sends the full DONE message to the orchestrator, posts a one-liner milestone to human, ' +
-        'and closes your most recent in-progress activity. ' +
-        'Replaces the previous send_message + send_message + finish_activity sequence.',
+        'and closes your most recent in-progress task. ' +
+        'Replaces the previous send_message + send_message + finish_task sequence.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -592,15 +592,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return { content: [{ type: 'text', text: `Task started (id: ${taskId}).` }] };
   }
 
-  if (name === 'finish_activity') {
-    const { activity_id, status, result_msg_id, commit_sha } = args as {
-      activity_id: number;
+  if (name === 'finish_task') {
+    const { task_id, status, result_msg_id, commit_sha } = args as {
+      task_id: number;
       status: 'completed' | 'aborted';
       result_msg_id?: number;
       commit_sha?: string;
     };
-    const ok = finishTask(activity_id, status, result_msg_id ?? null, commit_sha ?? null);
-    return { content: [{ type: 'text', text: ok ? `Task ${activity_id} marked ${status}.` : `Task ${activity_id} not found or already finished.` }] };
+    const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
+    return { content: [{ type: 'text', text: ok ? `Task ${task_id} marked ${status}.` : `Task ${task_id} not found or already finished.` }] };
   }
 
   if (name === 'delegate_task') {
@@ -614,7 +614,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
     let outboundContent = content;
     // For large specs, stage the brief to a file and send a short pointer message.
-    // We need the activityId for the filename, so start the activity with null trigger first,
+    // We need the taskId for the filename, so start the task with null trigger first,
     // then send the message and record it via the existing trigger_msg_id path.
     if (task_file) {
       // Start task without trigger so we have an id for the filename
@@ -626,11 +626,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const preview = lines.slice(0, 3).join('\n');
       outboundContent = `Task brief at .synapse/tasks/${taskId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
       const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
-      return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${taskId}` }] };
+      return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, task_id=${taskId}` }] };
     }
     const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
     const taskId = startTask(to_id, title, messageId, source_msg_id ?? null);
-    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${taskId}` }] };
+    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, task_id=${taskId}` }] };
   }
 
   if (name === 'report_done') {

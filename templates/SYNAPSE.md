@@ -13,10 +13,10 @@ Synapse is a human-in-the-loop observation layer. A human operator watches all a
 | `read_messages` | Check for messages from the operator or other agents |
 | `send_message` | Send a message to the operator (`human`) or another agent by their agent ID |
 | `update_status` | Report your current state to the dashboard |
-| `start_task` | Open a task-activity record on S-Deck (call when starting a non-trivial task) |
-| `finish_activity` | Close the activity with `completed` or `aborted` when the task is done |
-| `delegate_task` | Send a task to a worker AND record the activity in one call (orchestrator only) |
-| `report_done` | Finish a task: sends DONE to orchestrator, milestone to human, closes activity (worker only) |
+| `start_task` | Open a task record on S-Deck (call when starting a non-trivial task) |
+| `finish_task` | Close the task with `completed` or `aborted` when done |
+| `delegate_task` | Send a task to a worker AND record the task in one call (orchestrator only) |
+| `report_done` | Finish a task: sends DONE to orchestrator, milestone to human, closes task (worker only) |
 | `spawn_agent` | Spawn a new worker agent (orchestrator only) |
 
 ---
@@ -51,20 +51,20 @@ The operator watches the deck, not your scratchpad. The moment one of these happ
 The harness auto-posts `COMMIT` for you whenever you `git commit`, so never hand-report commits.
 If a turn produced none of the above, stay silent — milestones are signal, not chatter.
 
-**Rule 4 — Track non-trivial tasks as Activities**
-Activities appear in the S-Deck Activity Panel so the operator can track what each agent is working on and review outcomes.
+**Rule 4 — Track non-trivial tasks**
+Tasks appear in the S-Deck Tasks panel so the operator can track what each agent is working on and review outcomes.
 
-**Workers:** do NOT call `start_task` or `delegate_task`. When the orchestrator uses `delegate_task`, it opens the activity automatically. Your only calls are: `update_status` → execute → `report_done` → `update_status` → `read_messages`.
+**Workers:** do NOT call `start_task` or `delegate_task`. When the orchestrator uses `delegate_task`, it opens the task automatically. Your only calls are: `update_status` → execute → `report_done` → `update_status` → `read_messages`.
 
 **Orchestrators:** the canonical delegated-task sequence is strictly ordered — do not skip or reorder steps:
 
 ```
-delegate_task  →  wait for DONE (read_messages)  →  git commit  →  finish_activity
+delegate_task  →  wait for DONE (read_messages)  →  git commit  →  finish_task
 ```
 
-Do NOT commit before the worker replies. Do NOT call `finish_activity` before committing (the commit hook sets the SHA). For self-driven work, use `start_task` / `finish_activity` with the same commit-before-finish order.
+Do NOT commit before the worker replies. Do NOT call `finish_task` before committing (the commit hook sets the SHA). For self-driven work, use `start_task` / `finish_task` with the same commit-before-finish order.
 
-Skip activity tracking for trivial back-and-forth — only use it for tasks worth a recap entry.
+Skip task tracking for trivial back-and-forth — only use it for tasks worth a recap entry.
 
 ---
 

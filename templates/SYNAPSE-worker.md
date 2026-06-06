@@ -18,7 +18,7 @@ Post key milestones to `human` (P5) so the operator can follow along on S-Deck w
                    • if message references .synapse/tasks/<id>.md, Read that file first
 2. update_status — state="working", current_task="<short description>"
 3. Execute       — implement the task
-4. report_done   — sends full DONE to orchestrator + one-liner to human + closes activity
+4. report_done   — sends full DONE to orchestrator + one-liner to human + closes task
 5. update_status — state="idle"
 6. Read          — read_messages and wait for the next task
 ```

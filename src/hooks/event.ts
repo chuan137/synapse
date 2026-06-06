@@ -117,7 +117,7 @@ function emitDeterministicMilestones(hookType: string, sessionId: string, payloa
   const firstLine = subject.split(/\\n|\n/)[0].trim();
   postMilestoneOnce(sessionId, `✅ committed ${hash}: ${firstLine}`.slice(0, MAX_LEN));
 
-  // Attach the commit SHA to this agent's current in_progress activity (if any).
+  // Attach the commit SHA to this agent's current in_progress task (if any).
   const agentId = getAgentIdBySession(sessionId);
   if (agentId) {
     try { attachCommitToCurrentTask(agentId, hash); } catch { /* telemetry must not block */ }
