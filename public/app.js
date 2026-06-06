@@ -493,40 +493,41 @@
     const el = document.getElementById('eval-content');
     el.innerHTML = '<div style="color:var(--muted);font-size:11px">Loading...</div>';
 
-    const [report, gate, proposals] = await Promise.all([
-      fetch('/api/eval/report').then(r => r.json()),
-      fetch('/api/eval/gate').then(r => r.json()),
+    const [liveResults, counts, proposals] = await Promise.all([
+      fetch('/api/eval/live').then(r => r.json()),
+      fetch('/api/eval/counts').then(r => r.json()),
       fetch('/api/proposals').then(r => r.json()),
     ]);
 
-    const failed = report.filter(r => !r.pass);
-    const passed = report.filter(r => r.pass);
+    const failed = liveResults.filter(r => !r.pass);
+    const passed = liveResults.filter(r => r.pass);
 
-    const gateByTask = {};
-    gate.forEach(g => {
-      const m = g.patch_file.match(/task_(\d+)/);
-      if (m) gateByTask[m[1]] = g.deploy_recommended;
-    });
+    const METRICS = ['traceability', 'tool_calls', 'duration', 'has_commit'];
+    const THRESHOLD = 3;
+    const counterHtml = `<div class="eval-counters">
+      ${METRICS.map(m => {
+        const count = counts[m] ?? 0;
+        const color = count >= THRESHOLD ? 'var(--p0)' : count >= 2 ? 'var(--warn)' : 'var(--muted)';
+        return `<div class="eval-counter"><span style="color:${color}">${m}: ${count}/${THRESHOLD}</span></div>`;
+      }).join('')}
+    </div>`;
 
-    const failedHtml = failed.map(r => {
-      const gateVerdict = gateByTask[r.id];
-      const gateBadge = gateVerdict === undefined ? '' :
-        gateVerdict ? '<span style="color:var(--idle);font-size:9px">DEPLOY ✓</span>' :
-                     '<span style="color:var(--p0);font-size:9px">HOLD ✗</span>';
-      return `<div class="eval-row eval-fail">
+    const failedHtml = failed.map(r => `
+      <div class="eval-row eval-fail">
         <div class="eval-row-header">
-          <span class="eval-id">#${r.id}</span>
+          <span class="eval-id">#${r.task_id}</span>
           <span class="eval-label bad">FAIL</span>
-          ${gateBadge}
+          <span style="font-size:9px;color:var(--muted)">${new Date(r.created_at).toLocaleTimeString([], {hour12:false})}</span>
         </div>
         <div class="eval-title">${esc(r.title.slice(0, 55))}</div>
-        <div class="eval-failures">${r.failures.map(f => `<span class="eval-chip">${esc(f)}</span>`).join('')}</div>
-      </div>`;
-    }).join('');
+        <div class="eval-failures">${r.metrics.filter(m => !m.passed).map(m =>
+          `<span class="eval-chip">${esc(m.metric)}=${m.value ?? '✗'}</span>`
+        ).join('')}</div>
+      </div>`).join('');
 
     const passedHtml = passed.map(r => `
       <div class="eval-row eval-pass">
-        <span class="eval-id">#${r.id}</span>
+        <span class="eval-id">#${r.task_id}</span>
         <span class="eval-label good">PASS</span>
         <span class="eval-title-inline">${esc(r.title.slice(0, 45))}</span>
       </div>`).join('');
@@ -565,6 +566,7 @@
         <button id="eval-run-btn" class="btn-run-eval">▶ Run improvement loop</button>
         <span id="eval-run-status" style="font-size:10px;color:var(--muted);margin-left:8px"></span>
       </div>
+      ${counterHtml}
       <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Failed (${failed.length})</div>
       ${failedHtml}
       <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Passed (${passed.length})</div>

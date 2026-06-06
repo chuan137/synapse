@@ -1011,6 +1011,48 @@ export function getEvalResults(taskId: number): EvalResultRow[] {
   }));
 }
 
+export function getAllEvalResults(): {
+  task_id: number; title: string; agent_id: string;
+  metrics: { metric: string; passed: boolean; value: number | null }[];
+  pass: boolean; created_at: number;
+}[] {
+  const rows = db.prepare(`
+    SELECT t.id as task_id, t.title, t.agent_id,
+           er.metric, er.passed, er.value, er.created_at
+    FROM eval_results er
+    JOIN tasks t ON t.id = er.task_id
+    ORDER BY er.created_at DESC
+  `).all() as any[];
+
+  const byTask = new Map<number, {
+    task_id: number; title: string; agent_id: string;
+    metrics: { metric: string; passed: boolean; value: number | null }[];
+    created_at: number;
+  }>();
+
+  for (const r of rows) {
+    if (!byTask.has(r.task_id)) {
+      byTask.set(r.task_id, {
+        task_id: r.task_id,
+        title: r.title,
+        agent_id: r.agent_id,
+        metrics: [],
+        created_at: r.created_at,
+      });
+    }
+    byTask.get(r.task_id)!.metrics.push({
+      metric: r.metric,
+      passed: r.passed === 1,
+      value: r.value,
+    });
+  }
+
+  return Array.from(byTask.values()).map(t => ({
+    ...t,
+    pass: t.metrics.every(m => m.passed),
+  }));
+}
+
 export function getMetricFailureCounts(): Record<string, number> {
   const rows = db.prepare(`SELECT metric, count FROM metric_failure_counts`).all() as { metric: string; count: number }[];
   return Object.fromEntries(rows.map(r => [r.metric, r.count]));

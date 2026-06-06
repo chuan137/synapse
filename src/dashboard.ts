@@ -24,6 +24,7 @@ import {
   getAgentById,
   markAgentEnded,
   getEvalResults,
+  getAllEvalResults,
   getMetricFailureCounts,
   checkAndResetMetricThreshold,
   resetMetricCount,
@@ -453,6 +454,10 @@ app.get('/api/eval/results', (req: Request, res: Response) => {
 
 app.get('/api/eval/counts', (_req: Request, res: Response) => {
   res.json(getMetricFailureCounts());
+});
+
+app.get('/api/eval/live', (_req: Request, res: Response) => {
+  res.json(getAllEvalResults());
 });
 
 // ── Proposals endpoints ────────────────────────────────────────────────────
