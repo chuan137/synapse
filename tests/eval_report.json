@@ -1,0 +1,153 @@
+[
+  {
+    "id": 1,
+    "label": "bad",
+    "title": "Coordinate parallel role-customization (:20) and Plan tab (:21) deliveries",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)",
+      "tool_calls=24 (max 20)",
+      "duration=838s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 24,
+      "duration_ms": 838270,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 16,
+    "label": "bad",
+    "title": "Implement delegate_task and report_done MCP tools",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "tool_calls=29 (max 20)",
+      "duration=153s (max 120s)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 29,
+      "duration_ms": 152562,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 17,
+    "label": "bad",
+    "title": "Add delegate_task and report_done MCP tools; update protocol docs",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "tool_calls=30 (max 20)",
+      "duration=173s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 30,
+      "duration_ms": 173171,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 27,
+    "label": "bad",
+    "title": "Rename activities → tasks throughout codebase",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)",
+      "tool_calls=58 (max 20)",
+      "duration=284s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 58,
+      "duration_ms": 283994,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 32,
+    "label": "bad",
+    "title": "Plan 1: Agent system prompt modal",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)",
+      "tool_calls=40 (max 20)",
+      "duration=165s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 40,
+      "duration_ms": 165075,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 39,
+    "label": "good",
+    "title": "Add source_msg_id lint check in guard.ts",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 5,
+      "duration_ms": 36073,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 43,
+    "label": "good",
+    "title": "Swap agent card name/slot order — name first",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 6,
+      "duration_ms": 13108,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 51,
+    "label": "good",
+    "title": "Show message ID on hover in message list",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 7,
+      "duration_ms": 32728,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 52,
+    "label": "good",
+    "title": "Fix task jump to select correct agent for source message",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 14,
+      "duration_ms": 56239,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 53,
+    "label": "good",
+    "title": "Store theme preference in .synapse/settings.json",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 13,
+      "duration_ms": 52251,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  }
+]

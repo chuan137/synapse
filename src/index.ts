@@ -573,16 +573,32 @@ program
   .description('Extract and evaluate agent trajectory cases')
   .action(async () => {
     const { extractCases } = await import('./eval/extract.js');
+    const { evaluateCases } = await import('./eval/evaluator.js');
+    const { writeFileSync } = await import('fs');
     const { join } = await import('path');
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
-    const outDir = join(process.cwd(), 'tests', 'cases');
-    const cases = extractCases(dbPath, outDir);
-    cases.forEach(c => {
-      const t = c.task as any;
-      process.stdout.write(`[${c.label.toUpperCase()}] #${c.id} ${t.title?.slice(0, 50)}\n`);
-      process.stdout.write(`  calls=${c.metrics.tool_calls} dur=${Math.round((c.metrics.duration_ms ?? 0)/1000)}s missing=${c.metrics.traceability_score} commit=${c.metrics.has_commit}\n`);
+    const casesDir = join(process.cwd(), 'tests', 'cases');
+    const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
+
+    process.stdout.write('Extracting trajectory cases...\n');
+    extractCases(dbPath, casesDir);
+
+    process.stdout.write('\nEvaluating trajectories...\n');
+    const results = evaluateCases(casesDir);
+    const passed = results.filter(r => r.pass);
+    const failed = results.filter(r => !r.pass);
+
+    process.stdout.write(`\n=== EVAL REPORT ===\nPASS: ${passed.length}/${results.length}\n`);
+    failed.forEach(r => {
+      process.stdout.write(`  FAIL [${r.label.toUpperCase()}] #${r.id} ${r.title.slice(0, 45)}\n`);
+      r.failures.forEach(f => process.stdout.write(`    - ${f}\n`));
     });
-    process.stdout.write(`\nWrote ${cases.length} cases to ${outDir}\n`);
+    passed.forEach(r => {
+      process.stdout.write(`  PASS [${r.label.toUpperCase()}] #${r.id} ${r.title.slice(0, 45)}\n`);
+    });
+
+    writeFileSync(reportPath, JSON.stringify(results, null, 2));
+    process.stdout.write(`\nWrote ${results.length} results to ${reportPath}\n`);
   });
 
 program.parse(process.argv);
