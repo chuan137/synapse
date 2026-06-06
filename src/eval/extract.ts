@@ -17,15 +17,12 @@ export interface TrajectoryCase {
   };
 }
 
-export function extractCases(dbPath: string, outDir: string, limit = 20): TrajectoryCase[] {
+export function extractCases(dbPath: string, outDir: string, limit = 20, taskId?: number): TrajectoryCase[] {
   const db = openDb(dbPath);
 
-  const tasks = db.prepare(`
-    SELECT * FROM tasks
-    WHERE finished_at IS NOT NULL
-    ORDER BY finished_at DESC
-    LIMIT ?
-  `).all(limit) as any[];
+  const tasks = taskId !== undefined
+    ? (db.prepare(`SELECT * FROM tasks WHERE id = ? AND finished_at IS NOT NULL`).all(taskId) as any[])
+    : (db.prepare(`SELECT * FROM tasks WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT ?`).all(limit) as any[]);
 
   const cases: TrajectoryCase[] = tasks.map(task => {
     const linkedIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean);

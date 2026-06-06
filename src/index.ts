@@ -574,6 +574,7 @@ program
   .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')
   .option('--gate', 'Run validation gate on all critic patches')
   .option('--limit <n>', 'Number of most recent completed tasks to evaluate', '20')
+  .option('--task-id <n>', 'Evaluate a single task by ID and write results to eval_results table')
   .action(async (options) => {
     const { extractCases } = await import('./eval/extract.js');
     const { evaluateCases } = await import('./eval/evaluator.js');
@@ -583,6 +584,36 @@ program
     const casesDir = join(process.cwd(), 'tests', 'cases');
     const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
     const limit = parseInt(options.limit, 10);
+
+    if (options.taskId !== undefined) {
+      // Single-task mode: fetch, score, persist, print
+      const taskId = parseInt(options.taskId, 10);
+      const { writeEvalResults } = await import('./db.js');
+      process.stdout.write(`Evaluating task #${taskId}...\n`);
+      const singleCases = extractCases(dbPath, casesDir, 1, taskId);
+      if (singleCases.length === 0) {
+        process.stdout.write(`Task #${taskId} not found in completed tasks.\n`);
+        process.exit(0);
+      }
+      const allResults = evaluateCases(casesDir);
+      const result = allResults.find((r: any) => r.id === taskId);
+      if (!result) {
+        process.stdout.write(`Task #${taskId} could not be evaluated.\n`);
+        process.exit(0);
+      }
+      const evalRows = [
+        { metric: 'traceability', passed: result.metrics.traceability_score <= 1, value: result.metrics.traceability_score },
+        { metric: 'tool_calls', passed: result.metrics.tool_calls <= 20, value: result.metrics.tool_calls },
+        { metric: 'duration', passed: (result.metrics.duration_ms ?? 0) <= 120_000, value: result.metrics.duration_ms },
+        { metric: 'has_commit', passed: result.metrics.has_commit, value: null },
+      ];
+      writeEvalResults(taskId, evalRows);
+      process.stdout.write(`Task #${taskId}: ${result.pass ? 'PASS' : 'FAIL'}\n`);
+      if (!result.pass) {
+        result.failures.forEach((f: string) => process.stdout.write(`  - ${f}\n`));
+      }
+      process.exit(0);
+    }
 
     process.stdout.write(`Extracting last ${limit} completed trajectory cases...\n`);
     extractCases(dbPath, casesDir, limit);

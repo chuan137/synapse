@@ -22,6 +22,8 @@ import {
   updateAgentConfig,
   getAgentById,
   markAgentEnded,
+  getEvalResults,
+  getMetricFailureCounts,
   AgentStatus,
   Message,
   ApprovalRequest,
@@ -428,6 +430,16 @@ app.post('/api/eval/run', (_req: Request, res: Response) => {
   });
   child.unref();
   res.json({ ok: true, message: 'Improvement loop started' });
+});
+
+app.get('/api/eval/results', (req: Request, res: Response) => {
+  const taskId = parseInt(String(req.query.task_id), 10);
+  if (isNaN(taskId)) { res.status(400).json({ error: 'task_id required' }); return; }
+  res.json(getEvalResults(taskId));
+});
+
+app.get('/api/eval/counts', (_req: Request, res: Response) => {
+  res.json(getMetricFailureCounts());
 });
 
 // Kill + respawn a worker agent in the same role (restart)

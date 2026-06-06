@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
-import { spawnSync } from 'child_process';
+import { spawnSync, spawn } from 'child_process';
 import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent } from './db.js';
 import { spawnWorker } from './spawn.js';
 
@@ -605,6 +605,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       commit_sha?: string;
     };
     const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
+    if (ok && status === 'completed') {
+      const indexJs = join(dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
+      const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(task_id)], {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env },
+      });
+      child.unref();
+    }
     return { content: [{ type: 'text', text: ok ? `Task ${task_id} marked ${status}.` : `Task ${task_id} not found or already finished.` }] };
   }
 

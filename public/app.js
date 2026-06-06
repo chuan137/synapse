@@ -580,7 +580,7 @@
           <div class="task-card-body">
             <div class="task-card-header">
               <span class="task-id-badge">#${a.id}</span>
-              <span class="task-title">${esc(a.title)}</span>
+              ${a.eval_failed ? '<span class="eval-warn-badge" title="Eval failed">⚠</span> ' : ''}<span class="task-title">${esc(a.title)}</span>
             </div>
             <div class="task-state-row">
               <span class="task-state-dot ${a.status}"></span>

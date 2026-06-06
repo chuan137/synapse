@@ -97,6 +97,22 @@ export function openDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_activities_agent  ON activities(agent_id, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
+
+    CREATE TABLE IF NOT EXISTS eval_results (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id    INTEGER NOT NULL REFERENCES tasks(id),
+      metric     TEXT    NOT NULL,
+      passed     INTEGER NOT NULL,
+      value      REAL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_eval_results_task ON eval_results(task_id);
+
+    CREATE TABLE IF NOT EXISTS metric_failure_counts (
+      metric        TEXT    PRIMARY KEY,
+      count         INTEGER NOT NULL DEFAULT 0,
+      last_reset_at INTEGER NOT NULL
+    );
   `);
 
   // Migrate existing tables — ignore errors if columns already exist
@@ -532,6 +548,7 @@ export interface Task {
   commit_sha: string | null;
   tool_calls: number;
   source_msg_to_id: string | null;
+  eval_failed: number; // 1 if any eval metric failed, 0 otherwise
 }
 
 export function startTask(
@@ -636,7 +653,10 @@ export function listAllTasks(limit = 200): Task[] {
             WHERE tm.synapse_agent_id = t.agent_id
               AND tm.timestamp >= t.started_at
               AND tm.timestamp <= COALESCE(t.finished_at, 9999999999999)) AS tool_calls,
-           m.to_id AS source_msg_to_id
+           m.to_id AS source_msg_to_id,
+           EXISTS(
+             SELECT 1 FROM eval_results er WHERE er.task_id = t.id AND er.passed = 0
+           ) AS eval_failed
     FROM tasks t
     LEFT JOIN messages m ON t.source_msg_id = m.id
     ORDER BY t.started_at DESC
@@ -948,4 +968,50 @@ export interface AgentToolMetric extends ToolMetricSummary {
 /** Whole-swarm tool metrics, one row per (agent, tool). */
 export function getAllToolMetrics(): AgentToolMetric[] {
   return stmts.toolMetricsAll.all();
+}
+
+// ── Eval result helpers ────────────────────────────────────────────────────
+
+export interface EvalResultRow {
+  metric: string;
+  passed: boolean;
+  value: number | null;
+}
+
+export function writeEvalResults(
+  taskId: number,
+  results: EvalResultRow[],
+): void {
+  const now = Date.now();
+  const insert = db.prepare(`
+    INSERT INTO eval_results (task_id, metric, passed, value, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const upsertCount = db.prepare(`
+    INSERT INTO metric_failure_counts (metric, count, last_reset_at)
+    VALUES (?, 1, ?)
+    ON CONFLICT(metric) DO UPDATE SET count = count + 1
+  `);
+  const tx = db.transaction(() => {
+    for (const r of results) {
+      insert.run(taskId, r.metric, r.passed ? 1 : 0, r.value ?? null, now);
+      if (!r.passed) upsertCount.run(r.metric, now);
+    }
+  });
+  tx();
+}
+
+export function getEvalResults(taskId: number): EvalResultRow[] {
+  return (db.prepare(`
+    SELECT metric, passed, value FROM eval_results WHERE task_id = ?
+  `).all(taskId) as any[]).map(r => ({
+    metric: r.metric as string,
+    passed: r.passed === 1,
+    value: r.value as number | null,
+  }));
+}
+
+export function getMetricFailureCounts(): Record<string, number> {
+  const rows = db.prepare(`SELECT metric, count FROM metric_failure_counts`).all() as { metric: string; count: number }[];
+  return Object.fromEntries(rows.map(r => [r.metric, r.count]));
 }
