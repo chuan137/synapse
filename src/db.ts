@@ -518,6 +518,7 @@ export interface Task {
   source_msg_id: number | null;
   commit_sha: string | null;
   tool_calls: number;
+  source_msg_to_id: string | null;
 }
 
 export function startTask(
@@ -621,8 +622,10 @@ export function listAllTasks(limit = 200): Task[] {
            (SELECT COUNT(*) FROM tool_metrics tm
             WHERE tm.synapse_agent_id = t.agent_id
               AND tm.timestamp >= t.started_at
-              AND tm.timestamp <= COALESCE(t.finished_at, 9999999999999)) AS tool_calls
+              AND tm.timestamp <= COALESCE(t.finished_at, 9999999999999)) AS tool_calls,
+           m.to_id AS source_msg_to_id
     FROM tasks t
+    LEFT JOIN messages m ON t.source_msg_id = m.id
     ORDER BY t.started_at DESC
     LIMIT ?
   `).all(limit);

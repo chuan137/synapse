@@ -494,7 +494,8 @@
           a.tool_calls > 0 ? `<span class="task-chip">${a.tool_calls} calls</span>` : '',
           sha,
         ].filter(Boolean).join('');
-        return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump} data-agent-id="${esc(a.agent_id ?? '')}" data-trigger-msg="${a.trigger_msg_id ?? ''}" data-source-msg="${a.source_msg_id ?? ''}">
+        const sourceMsgAgent = a.source_msg_to_id ?? '';
+        return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump} data-agent-id="${esc(a.agent_id ?? '')}" data-source-msg-agent="${esc(sourceMsgAgent)}" data-trigger-msg="${a.trigger_msg_id ?? ''}" data-source-msg="${a.source_msg_id ?? ''}">
           <div class="task-card-body">
             <div class="task-card-header">
               <span class="task-id-badge">#${a.id}</span>
@@ -521,10 +522,10 @@
         const msgId = row.dataset.sourceMsg || row.dataset.jumpMsg;
         if (!msgId) return;
 
-        // Select the owning agent if not already selected
-        const agentId = row.dataset.agentId;
-        if (agentId && agentId !== selectedAgentId) {
-          selectedAgentId = agentId;
+        // Select the agent whose thread contains the source message, fall back to task owner
+        const targetAgentId = row.dataset.sourceMsgAgent || row.dataset.agentId;
+        if (targetAgentId && targetAgentId !== selectedAgentId) {
+          selectedAgentId = targetAgentId;
           renderAgents();
           renderMessages();
           renderActivity();
