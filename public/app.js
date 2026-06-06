@@ -449,7 +449,7 @@
         const startTime = new Date(a.started_at).toLocaleTimeString([], { hour12: false });
         const endTime = a.finished_at ? new Date(a.finished_at).toLocaleTimeString([], { hour12: false }) : null;
         const duration = a.finished_at ? `${Math.round((a.finished_at - a.started_at) / 1000)}s` : null;
-        const sha = a.commit_sha ? `<span class="task-sha" title="commit ${esc(a.commit_sha)}">${esc(a.commit_sha.slice(0, 7))}</span>` : '';
+        const sha = a.commit_sha ? `<span class="task-sha diff-trigger" data-sha="${esc(a.commit_sha)}" title="View diff for ${esc(a.commit_sha.slice(0, 7))}">${esc(a.commit_sha.slice(0, 7))}</span>` : '';
         const timeStr = endTime ? `${startTime} → ${endTime}${duration ? ` (${duration})` : ''}` : `${startTime} …`;
         const jumpId = a.result_msg_id ?? a.trigger_msg_id;
         const clickable = jumpId ? 'clickable' : '';
@@ -473,7 +473,8 @@
 
     // Wire click → jump to linked message
     taskList.querySelectorAll('.task-row.clickable').forEach(row => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.diff-trigger')) return;
         const msgId = row.dataset.jumpMsg;
         if (!msgId) return;
         const target = document.getElementById(`msg-${msgId}`);
@@ -482,6 +483,14 @@
         target.style.outline = '1.5px solid var(--accent)';
         target.style.background = 'rgba(79,126,248,0.08)';
         setTimeout(() => { target.style.outline = ''; target.style.background = ''; }, 1200);
+      });
+    });
+
+    // Wire sha badge → open diff modal
+    taskList.querySelectorAll('.diff-trigger').forEach(badge => {
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openDiffModal(badge.dataset.sha);
       });
     });
   }
@@ -861,3 +870,48 @@ Describe the role's responsibilities here.
       setRolesError(String(e.message || e));
     }
   });
+
+  // ── Diff modal ─────────────────────────────────────────────────────────────
+  const diffBackdrop = document.getElementById('diff-backdrop');
+  const diffTitle    = document.getElementById('diff-modal-title');
+  const diffPre      = document.getElementById('diff-modal-pre');
+  const diffClose    = document.getElementById('diff-modal-close');
+
+  function closeDiffModal() {
+    diffBackdrop.classList.add('hidden');
+  }
+
+  diffClose.addEventListener('click', closeDiffModal);
+  diffBackdrop.addEventListener('click', (e) => { if (e.target === diffBackdrop) closeDiffModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !diffBackdrop.classList.contains('hidden')) closeDiffModal();
+  });
+
+  function renderDiff(text) {
+    return text.split('\n').map(line => {
+      const escaped = esc(line);
+      if (line.startsWith('+++') || line.startsWith('---')) return `<span>${escaped}</span>`;
+      if (line.startsWith('+')) return `<span class="diff-add">${escaped}</span>`;
+      if (line.startsWith('-')) return `<span class="diff-del">${escaped}</span>`;
+      if (line.startsWith('@@')) return `<span class="diff-hunk">${escaped}</span>`;
+      return `<span>${escaped}</span>`;
+    }).join('\n');
+  }
+
+  async function openDiffModal(sha) {
+    diffTitle.textContent = `diff  ${sha.slice(0, 7)}`;
+    diffPre.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+    diffBackdrop.classList.remove('hidden');
+    try {
+      const res = await fetch(`/api/commit/${encodeURIComponent(sha)}/diff`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        diffPre.innerHTML = `<span style="color:var(--error)">${esc(err.error ?? 'Failed to load diff')}</span>`;
+        return;
+      }
+      const { diff } = await res.json();
+      diffPre.innerHTML = renderDiff(diff);
+    } catch (e) {
+      diffPre.innerHTML = `<span style="color:var(--error)">${esc(String(e))}</span>`;
+    }
+  }

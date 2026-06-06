@@ -132,6 +132,17 @@
 </div>
 
 
+<!-- Diff modal -->
+<div id="diff-backdrop" class="modal-backdrop hidden">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="diff-modal-title">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h2 id="diff-modal-title" style="font-family:inherit;"></h2>
+      <button id="diff-modal-close" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 9px;border-radius:4px;cursor:pointer;font-family:inherit;align-self:auto;">✕</button>
+    </div>
+    <pre id="diff-modal-pre" class="diff-modal-pre"></pre>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

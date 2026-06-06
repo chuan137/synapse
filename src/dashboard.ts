@@ -465,6 +465,21 @@ app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// Git diff for a commit SHA
+app.get('/api/commit/:sha/diff', (req: Request, res: Response) => {
+  const sha = String(req.params.sha);
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
+    res.status(400).json({ error: 'invalid sha' });
+    return;
+  }
+  try {
+    const diff = execSync(`git show --stat -p ${sha}`, { encoding: 'utf8' });
+    res.json({ sha, diff });
+  } catch {
+    res.status(404).json({ error: 'commit not found' });
+  }
+});
+
 // SSE stream
 app.get('/events', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
