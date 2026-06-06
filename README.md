@@ -18,36 +18,6 @@ npm run build
 npm link          # registers the global `synapse` command
 ```
 
-## Register the MCP server
-
-Do this once globally — it works for all projects.
-
-**Claude Code** (`~/.claude/settings.json`):
-```json
-{
-  "mcpServers": {
-    "synapse-bus": {
-      "command": "synapse",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-**Zed** (`~/.config/zed/settings.json`):
-```json
-{
-  "context_servers": {
-    "synapse-bus": {
-      "command": {
-        "path": "synapse",
-        "args": ["mcp"]
-      }
-    }
-  }
-}
-```
-
 ## Per-project setup
 
 Run once in each project you want to observe:
@@ -57,7 +27,7 @@ cd my-project
 synapse init
 ```
 
-This creates `.synapse/synapse.db` and copies `SYNAPSE.md` into the project root.
+This creates `.synapse/synapse.db`, copies the agent protocol files into `.synapse/`, and adds `.mcp.json` to the project root so the `synapse-bus` MCP server is automatically available to Claude Code (no manual MCP registration needed).
 
 ## Start the dashboard
 

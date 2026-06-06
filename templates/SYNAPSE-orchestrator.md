@@ -67,9 +67,8 @@ When two or more workers may touch the same files in parallel, isolate each in i
 
 **When to use a worktree:**
 
-- **Default: don't.** Sequential single-worker tasks share the main checkout. No worktree overhead.
-- **Use a worktree when** two or more workers will mutate code at the same time, especially in overlapping files. Without isolation they corrupt each other's working tree.
-- **Optional but useful** for risky / experimental tasks even when sequential — easy throwaway, no merge unless results pan out.
+- **Default: always.** Create a worktree for any task that modifies 3 or more lines. External tools (editors, formatters, other agents) may modify the working tree concurrently — isolation prevents conflicts even for sequential tasks.
+- **Skip only** for trivial changes under 3 lines (e.g. a one-line config tweak, a single comment fix).
 
 **Slug naming convention:** `<role>-<slot>-<task-slug>` — e.g. `developer-19-fix-stale-worker`. Discoverable via `git branch --list 'synapse/*'`. The CLI prefixes `synapse/` automatically; you only pass the slug.
 
@@ -81,7 +80,6 @@ When two or more workers may touch the same files in parallel, isolate each in i
 4. If the merge prints `(ff)` or `(squash)` you're done; if it fails with a conflict, escalate to the human or route a follow-up.
 
 **Don't:**
-- Don't run `synapse worktree create` for a task that won't conflict with anything else in flight — the merge step is overhead you don't need.
 - Don't have the worker run `synapse worktree merge` themselves — merging is an orchestrator action; workers commit, orchestrator integrates.
 - Don't skip `synapse worktree prune` after a failed merge once you've inspected — leftover worktrees clutter the repo.
 
