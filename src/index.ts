@@ -588,7 +588,8 @@ program
     if (options.taskId !== undefined) {
       // Single-task mode: fetch, score, persist, print
       const taskId = parseInt(options.taskId, 10);
-      const { writeEvalResults } = await import('./db.js');
+      const { writeEvalResults, checkAndResetMetricThreshold } = await import('./db.js');
+      const { spawnProposalSession } = await import('./eval/propose.js');
       process.stdout.write(`Evaluating task #${taskId}...\n`);
       const singleCases = extractCases(dbPath, casesDir, 1, taskId);
       if (singleCases.length === 0) {
@@ -608,6 +609,15 @@ program
         { metric: 'has_commit', passed: result.metrics.has_commit, value: null },
       ];
       writeEvalResults(taskId, evalRows);
+      for (const r of evalRows) {
+        if (!r.passed) {
+          const triggered = checkAndResetMetricThreshold(r.metric);
+          if (triggered) {
+            await spawnProposalSession(taskId, r.metric);
+            process.stdout.write(`  → threshold reached for ${r.metric}, spawned proposal session\n`);
+          }
+        }
+      }
       process.stdout.write(`Task #${taskId}: ${result.pass ? 'PASS' : 'FAIL'}\n`);
       if (!result.pass) {
         result.failures.forEach((f: string) => process.stdout.write(`  - ${f}\n`));

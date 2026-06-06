@@ -1015,3 +1015,21 @@ export function getMetricFailureCounts(): Record<string, number> {
   const rows = db.prepare(`SELECT metric, count FROM metric_failure_counts`).all() as { metric: string; count: number }[];
   return Object.fromEntries(rows.map(r => [r.metric, r.count]));
 }
+
+export function checkAndResetMetricThreshold(metric: string, threshold = 3): boolean {
+  const row = db.prepare<[string], { count: number }>(
+    `SELECT count FROM metric_failure_counts WHERE metric = ?`
+  ).get(metric);
+  if (!row || row.count < threshold) return false;
+  db.prepare(`
+    UPDATE metric_failure_counts SET count = 0, last_reset_at = ? WHERE metric = ?
+  `).run(Date.now(), metric);
+  return true;
+}
+
+export function getFailedTasksForMetric(metric: string, limit = 3): number[] {
+  const rows = db.prepare<[string, number], { task_id: number }>(
+    `SELECT task_id FROM eval_results WHERE metric = ? AND passed = 0 ORDER BY created_at DESC LIMIT ?`
+  ).all(metric, limit);
+  return rows.map(r => r.task_id);
+}
