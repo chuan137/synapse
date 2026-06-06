@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync, mkdirSync } from 'fs';
 import { execSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import {
@@ -183,6 +183,7 @@ app.get('/api/settings', (_req: Request, res: Response) => {
 app.post('/api/settings', (req: Request, res: Response) => {
   const update = req.body as Record<string, unknown>;
   const merged = { ...readSettings(), ...update };
+  mkdirSync(dirname(SETTINGS_PATH), { recursive: true });
   writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2), 'utf8');
   res.json({ ok: true });
 });
