@@ -163,11 +163,15 @@
       const hasTmux = !!a.tmux_pane;
       const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[a.state] ?? 'var(--muted)';
       const isOrch = a.slot === 0;
+      const currentTask = a.current_task ? esc(a.current_task) : '';
       return `
-        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" title="click to select">
-          <div class="agent-card-row">
-            <div class="agent-name">${esc(slot)}${humanName ? `  <span style="color:var(--muted);font-weight:400;">${humanName}</span>` : ''}</div>
-            <div style="display:flex;align-items:center;gap:6px;">
+        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}">
+          <div class="agent-card-header">
+            <div class="agent-card-identity">
+              <span class="agent-slot">${esc(slot)}</span>
+              <span class="agent-name">${humanName || 'agent'}</span>
+            </div>
+            <div class="agent-card-actions">
               <button class="surface-btn focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
               <button class="surface-btn ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
               <div class="agent-menu-wrap">
@@ -176,14 +180,15 @@
                   <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
                   <button class="prompt-item" data-prompt-id="${esc(a.agent_id)}">instructions</button>
                   ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
-                  ${!isOrch ? `<button class="kill-item danger" data-kill-id="${esc(a.agent_id)}" data-kill-slot="${a.slot}" ${hasTmux ? '' : 'disabled'} style="color:var(--error);">kill</button>` : ''}
+                  ${!isOrch ? `<button class="kill-item danger" data-kill-id="${esc(a.agent_id)}" data-kill-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>kill</button>` : ''}
                 </div>
               </div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
-            <span style="width:7px;height:7px;border-radius:50%;background:${stateColor};flex-shrink:0;"></span>
-            <span style="font-size:11px;color:${stateColor};font-weight:600;">${esc(a.state)}</span>
+          <div class="agent-card-state">
+            <span class="agent-state-dot" data-state="${esc(a.state)}" style="background:${stateColor};"></span>
+            <span class="agent-state-label" style="color:${stateColor};">${esc(a.state)}</span>
+            ${currentTask ? `<span class="agent-state-task">· ${currentTask}</span>` : ''}
           </div>
           ${renderMetricChips(a.agent_id)}
         </div>
@@ -468,7 +473,7 @@
         const slotTag = isOrchestrator && ownerSlot != null
           ? `<span class="activity-slot-tag">:${ownerSlot}</span>`
           : '';
-        return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump}>
+        return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump} data-agent-id="${esc(a.agent_id ?? '')}">
           <div class="task-title">${slotTag}${esc(a.title)}</div>
           <div class="task-meta">
             <span class="task-status ${a.status}">${a.status.replace('_', ' ')}</span>
@@ -481,18 +486,35 @@
 
     morphdom(taskList, `<div id="task-list">${html}</div>`, { childrenOnly: true });
 
-    // Wire click → jump to linked message
+    // Wire click → select owning agent, switch to messages tab, jump to linked message
     taskList.querySelectorAll('.task-row.clickable').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.diff-trigger')) return;
         const msgId = row.dataset.jumpMsg;
         if (!msgId) return;
-        const target = document.getElementById(`msg-${msgId}`);
-        if (!target) return;
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        target.style.outline = '1.5px solid var(--accent)';
-        target.style.background = 'rgba(79,126,248,0.08)';
-        setTimeout(() => { target.style.outline = ''; target.style.background = ''; }, 1200);
+
+        // Select the owning agent if not already selected
+        const agentId = row.dataset.agentId;
+        if (agentId && agentId !== selectedAgentId) {
+          selectedAgentId = agentId;
+          renderAgents();
+          renderMessages();
+          renderActivity();
+          renderTasks();
+        }
+
+        // Switch to messages tab
+        switchMiddleTab('messages');
+
+        // Wait for DOM to update, then scroll to the message
+        setTimeout(() => {
+          const target = document.getElementById(`msg-${msgId}`);
+          if (!target) return;
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.style.outline = '1.5px solid var(--accent)';
+          target.style.background = 'rgba(79,126,248,0.08)';
+          setTimeout(() => { target.style.outline = ''; target.style.background = ''; }, 1200);
+        }, 80);
       });
     });
 
