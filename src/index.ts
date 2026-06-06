@@ -572,10 +572,11 @@ program
   .command('eval')
   .description('Extract and evaluate agent trajectory cases')
   .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')
+  .option('--gate', 'Run validation gate on all critic patches')
   .action(async (options) => {
     const { extractCases } = await import('./eval/extract.js');
     const { evaluateCases } = await import('./eval/evaluator.js');
-    const { writeFileSync } = await import('fs');
+    const { writeFileSync, readdirSync } = await import('fs');
     const { join } = await import('path');
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     const casesDir = join(process.cwd(), 'tests', 'cases');
@@ -613,6 +614,19 @@ program
         process.stdout.write(`  → ${patch.slice(0, 100).replace(/\n/g, ' ')}...\n`);
       }
       process.stdout.write(`\nPatches written to tests/patches/\n`);
+    }
+
+    if (options.gate) {
+      const { runGate } = await import('./eval/gate.js');
+      const patchDir = join(process.cwd(), 'tests', 'patches');
+      const gateDir = join(process.cwd(), 'tests', 'gate_results');
+      const rulesFile = join(process.cwd(), 'templates', 'SYNAPSE-orchestrator.md');
+      const patches = readdirSync(patchDir).filter((f: string) => f.endsWith('.md'));
+      process.stdout.write(`\nRunning validation gate on ${patches.length} patches...\n`);
+      for (const p of patches) {
+        const result = await runGate(join(patchDir, p), casesDir, rulesFile, gateDir);
+        process.stdout.write(`  ${p}: regression=${result.regression_pass} coverage=${result.deploy_recommended ? 'ADEQUATE' : 'INADEQUATE'} → ${result.deploy_recommended ? 'DEPLOY ✓' : 'HOLD ✗'}\n`);
+      }
     }
   });
 
