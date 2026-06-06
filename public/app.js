@@ -623,6 +623,11 @@
         const senderLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}${agent.name && agent.name !== agent.agent_id ? ' ' + agent.name : ''}` : senderId);
         const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
         const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
+        const approveBtn = !fromHuman
+          ? `<div class="message-actions">
+               <button class="msg-approve-btn" data-to="${esc(m.from_id)}" data-priority="${m.priority}">✓ approve</button>
+             </div>`
+          : '';
         return `
           <div id="msg-${m.id}" class="message-row ${cls}">
             <div class="message-avatar">${esc(avatarLabel)}</div>
@@ -632,6 +637,7 @@
                 <span class="message-time">${t}</span>
               </div>
               <div class="message-content">${renderMarkdown(m.content)}</div>
+              ${approveBtn}
             </div>
           </div>
         `;
@@ -643,6 +649,21 @@
     // position, text selection, and preventing markdown re-render blink.
     morphdom(messagesList, `<div id="messages-list">${innerHtml}</div>`, { childrenOnly: true });
     renderStatusRow();
+
+    // Wire approve quick-reply buttons
+    messagesList.querySelectorAll('.msg-approve-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const toId = btn.dataset.to;
+        const priority = parseInt(btn.dataset.priority ?? '5', 10);
+        btn.disabled = true;
+        btn.textContent = '✓ sent';
+        await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to_id: toId, content: 'Approved.', priority }),
+        });
+      });
+    });
 
     if (!userScrolledUp) messagesList.scrollTop = messagesList.scrollHeight;
   }

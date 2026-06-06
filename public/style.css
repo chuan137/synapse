@@ -1257,6 +1257,23 @@ input, select, textarea {
       opacity: 0.4;
     }
 
+    /* ── Approve quick-reply button ── */
+    .message-actions { margin-top: 6px; }
+    .msg-approve-btn {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      font-family: inherit;
+      align-self: auto;
+    }
+    .msg-approve-btn:hover:not(:disabled) { border-color: var(--idle); color: var(--idle); opacity: 1; }
+    .msg-approve-btn:disabled { opacity: 0.5; cursor: default; }
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
