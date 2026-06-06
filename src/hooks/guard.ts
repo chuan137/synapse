@@ -62,6 +62,19 @@ async function guard(payload: any): Promise<void> {
   const input     = payload.tool_input ?? {};
   const sessionId = payload.session_id ?? null;
 
+  // Lint check: delegate_task must declare source_msg_id (null is valid; absent is not)
+  if (tool === 'mcp__synapse-bus__delegate_task') {
+    if (!('source_msg_id' in input)) {
+      return deny(
+        'source_msg_id is required on delegate_task. ' +
+        'Pass source_msg_id: <message_id> if this task was triggered by a human message ' +
+        '(get the ID from read_messages), or source_msg_id: null if self-initiated. ' +
+        'This field is required for task traceability.'
+      );
+    }
+    return allow();
+  }
+
   const reason = guardReason(tool, input);
   if (!reason) return allow();
 
