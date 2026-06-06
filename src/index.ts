@@ -573,6 +573,7 @@ program
   .description('Extract and evaluate agent trajectory cases')
   .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')
   .option('--gate', 'Run validation gate on all critic patches')
+  .option('--limit <n>', 'Number of most recent completed tasks to evaluate', '20')
   .action(async (options) => {
     const { extractCases } = await import('./eval/extract.js');
     const { evaluateCases } = await import('./eval/evaluator.js');
@@ -581,9 +582,10 @@ program
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     const casesDir = join(process.cwd(), 'tests', 'cases');
     const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
+    const limit = parseInt(options.limit, 10);
 
-    process.stdout.write('Extracting trajectory cases...\n');
-    extractCases(dbPath, casesDir);
+    process.stdout.write(`Extracting last ${limit} completed trajectory cases...\n`);
+    extractCases(dbPath, casesDir, limit);
 
     process.stdout.write('\nEvaluating trajectories...\n');
     const results = evaluateCases(casesDir);

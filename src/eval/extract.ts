@@ -2,9 +2,6 @@ import { openDb } from '../db.js';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-const BAD_IDS  = [1, 16, 27, 32, 17];
-const GOOD_IDS = [39, 43, 51, 52, 53];
-
 export interface TrajectoryCase {
   id: number;
   label: 'good' | 'bad';
@@ -19,21 +16,22 @@ export interface TrajectoryCase {
   };
 }
 
-export function extractCases(dbPath: string, outDir: string): TrajectoryCase[] {
+export function extractCases(dbPath: string, outDir: string, limit = 20): TrajectoryCase[] {
   const db = openDb(dbPath);
-  const allIds = [...BAD_IDS, ...GOOD_IDS];
 
-  const cases: TrajectoryCase[] = allIds.map(id => {
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;
-    if (!task) throw new Error(`Task ${id} not found`);
+  const tasks = db.prepare(`
+    SELECT * FROM tasks
+    WHERE finished_at IS NOT NULL
+    ORDER BY finished_at DESC
+    LIMIT ?
+  `).all(limit) as any[];
 
-    // Collect linked messages
+  const cases: TrajectoryCase[] = tasks.map(task => {
     const msgIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean);
     const messages: Record<string, unknown>[] = msgIds.length > 0
       ? (db.prepare(`SELECT * FROM messages WHERE id IN (${msgIds.join(',')})`).all() as Record<string, unknown>[])
       : [];
 
-    // Tool metrics during task window
     const tool_metrics = db.prepare(`
       SELECT * FROM tool_metrics
       WHERE synapse_agent_id = ?
@@ -47,9 +45,11 @@ export function extractCases(dbPath: string, outDir: string): TrajectoryCase[] {
       (task.trigger_msg_id ? 0 : 1) +
       (task.result_msg_id  ? 0 : 1);
 
+    // Label is determined after scoring in evaluateCases; default to 'good' here
+    // and let the caller override after evaluation.
     return {
-      id,
-      label: BAD_IDS.includes(id) ? 'bad' : 'good',
+      id: task.id,
+      label: 'good' as const,
       task,
       messages,
       tool_metrics,

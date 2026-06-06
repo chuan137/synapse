@@ -31,11 +31,12 @@ export function evaluateCases(casesDir: string): EvalResult[] {
       failures.push(`duration=${Math.round((c.metrics.duration_ms ?? 0)/1000)}s (max 120s)`);
     if (!c.metrics.has_commit)
       failures.push('no_commit');
+    const pass = failures.length === 0;
     return {
       id: c.id,
-      label: c.label,
+      label: (pass ? 'good' : 'bad') as 'good' | 'bad',
       title: (c.task as any).title ?? '',
-      pass: failures.length === 0,
+      pass,
       failures,
       metrics: c.metrics,
     };
