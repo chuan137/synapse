@@ -436,6 +436,25 @@ app.post('/api/agents/:agentId/kill', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// Return boot_task + role body for the agent system prompt modal
+app.get('/api/agents/:agentId/prompt', (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId);
+  const agent = getAgentById(agentId);
+  if (!agent) { res.status(404).json({ error: 'Agent not found' }); return; }
+
+  let roleBody: string | null = null;
+  if (agent.role) {
+    const rolePath = join(ROLES_DIR, `${agent.role}.md`);
+    if (existsSync(rolePath)) {
+      const raw = readFileSync(rolePath, 'utf8');
+      // Strip front-matter so only the body text is returned
+      roleBody = raw.replace(/^---\n[\s\S]*?\n---\n*/, '').trim();
+    }
+  }
+
+  res.json({ boot_task: agent.boot_task ?? null, role: agent.role ?? null, role_body: roleBody });
+});
+
 // Update agent config (name, model, effort) from the dashboard
 app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
   const agentId = String(req.params.agentId);

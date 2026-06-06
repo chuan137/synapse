@@ -108,6 +108,26 @@
   </div>
 </div>
 
+<!-- Agent system prompt modal -->
+<div id="agent-prompt-backdrop" class="modal-backdrop hidden">
+  <div class="modal prompt-modal" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
+    <div class="prompt-modal-header">
+      <h2 id="prompt-title">Instructions <span id="prompt-agent-slot" style="color:var(--accent)"></span> <span id="prompt-role-badge" class="prompt-role-badge"></span></h2>
+      <button id="prompt-close" class="prompt-close-btn" title="Close">✕</button>
+    </div>
+    <div class="prompt-sections">
+      <div class="prompt-section">
+        <div class="prompt-section-label">Boot task</div>
+        <pre id="prompt-boot-task" class="prompt-pre"></pre>
+      </div>
+      <div class="prompt-section" id="prompt-role-section" style="display:none;">
+        <div class="prompt-section-label">Role instructions</div>
+        <pre id="prompt-role-body" class="prompt-pre"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Roles CRUD modal -->
 <div id="roles-backdrop" class="modal-backdrop hidden">
   <div class="modal roles-modal" role="dialog" aria-modal="true" aria-labelledby="roles-title">

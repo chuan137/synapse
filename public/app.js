@@ -174,6 +174,7 @@
                 <button class="kebab-btn" data-menu-id="${esc(a.agent_id)}" title="More actions">⋮</button>
                 <div class="agent-menu" id="menu-${esc(a.agent_id)}" style="display:none;">
                   <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
+                  <button class="prompt-item" data-prompt-id="${esc(a.agent_id)}">instructions</button>
                   ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
                   ${!isOrch ? `<button class="kill-item danger" data-kill-id="${esc(a.agent_id)}" data-kill-slot="${a.slot}" ${hasTmux ? '' : 'disabled'} style="color:var(--error);">kill</button>` : ''}
                 </div>
@@ -258,6 +259,15 @@
         e.stopPropagation();
         closeAllMenus();
         openAgentConfigDialog(btn.dataset.cfgId);
+      });
+    });
+
+    // Wire prompt menu item → open system prompt modal
+    agentsList.querySelectorAll('.prompt-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllMenus();
+        openPromptModal(btn.dataset.promptId);
       });
     });
 
@@ -713,6 +723,48 @@
       agent.effort = body.effort;
     }
     renderAgents();
+  });
+
+  // ── Agent prompt modal ────────────────────────────────────────────────────
+  const promptBackdrop  = document.getElementById('agent-prompt-backdrop');
+  const promptAgentSlot = document.getElementById('prompt-agent-slot');
+  const promptRoleBadge = document.getElementById('prompt-role-badge');
+  const promptBootTask  = document.getElementById('prompt-boot-task');
+  const promptRoleBody  = document.getElementById('prompt-role-body');
+  const promptRoleSection = document.getElementById('prompt-role-section');
+  const promptClose     = document.getElementById('prompt-close');
+
+  function closePromptModal() {
+    promptBackdrop.classList.add('hidden');
+  }
+
+  async function openPromptModal(agentId) {
+    const agent = agentStatuses.find(a => a.agent_id === agentId);
+    promptAgentSlot.textContent = agent ? `:${agent.slot}` : agentId;
+    promptRoleBadge.textContent = agent?.role ?? '';
+    promptRoleBadge.style.display = agent?.role ? '' : 'none';
+    promptBootTask.textContent = 'loading…';
+    promptRoleBody.textContent = '';
+    promptRoleSection.style.display = 'none';
+    promptBackdrop.classList.remove('hidden');
+    try {
+      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/prompt`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      promptBootTask.textContent = data.boot_task ?? '(none recorded)';
+      if (data.role_body) {
+        promptRoleBody.textContent = data.role_body;
+        promptRoleSection.style.display = '';
+      }
+    } catch (e) {
+      promptBootTask.textContent = `Error: ${e.message}`;
+    }
+  }
+
+  promptClose.addEventListener('click', closePromptModal);
+  promptBackdrop.addEventListener('click', (e) => { if (e.target === promptBackdrop) closePromptModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !promptBackdrop.classList.contains('hidden')) closePromptModal();
   });
 
   // ── Roles modal ────────────────────────────────────────────────────────────

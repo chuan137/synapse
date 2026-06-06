@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -466,6 +466,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (!worker) {
       return { content: [{ type: 'text', text: `Worker spawned in tmux window "${windowName}" but has not registered yet. Check S-Deck.` }] };
     }
+
+    recordSpawnIntent(worker.agent_id, task);
 
     return {
       content: [
