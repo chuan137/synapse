@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSyn
 import { execSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import {
+  db,
   getAllStatuses,
   getRecentMessages,
   sendMessage,
@@ -388,7 +389,11 @@ app.post('/api/messages', (req: Request, res: Response) => {
 app.post('/api/messages/:id/approve', (req: Request, res: Response) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as any;
   approveMessage(id);
+  if (msg) {
+    sendMessage('human', msg.from_id, 'Approved.', 5, false, undefined, msg.task_id ?? null);
+  }
   res.json({ ok: true });
 });
 
@@ -396,7 +401,13 @@ app.post('/api/messages/:id/select-option', (req: Request, res: Response) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }
   const { option_index } = req.body as { option_index: number };
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as any;
   selectOption(id, option_index);
+  if (msg) {
+    const options = msg.request_options ? JSON.parse(msg.request_options) : [];
+    const chosen = options[option_index] ?? `option ${option_index}`;
+    sendMessage('human', msg.from_id, chosen, 5, false, undefined, msg.task_id ?? null);
+  }
   res.json({ ok: true });
 });
 
