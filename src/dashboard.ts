@@ -165,6 +165,27 @@ app.get('/api/info', (_req: Request, res: Response) => {
   res.json({ project: PROJECT_NAME, projectId: readProjectId() });
 });
 
+// ── Settings (theme, etc.) ────────────────────────────────────────────────────
+
+const SETTINGS_PATH = join(process.cwd(), '.synapse', 'settings.json');
+
+function readSettings(): Record<string, unknown> {
+  try {
+    return existsSync(SETTINGS_PATH) ? JSON.parse(readFileSync(SETTINGS_PATH, 'utf8')) : {};
+  } catch { return {}; }
+}
+
+app.get('/api/settings', (_req: Request, res: Response) => {
+  res.json(readSettings());
+});
+
+app.post('/api/settings', (req: Request, res: Response) => {
+  const update = req.body as Record<string, unknown>;
+  const merged = { ...readSettings(), ...update };
+  writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2), 'utf8');
+  res.json({ ok: true });
+});
+
 // ── Roles CRUD ───────────────────────────────────────────────────────────────
 // Source of truth = templates/roles/*.md. Read lazily on every request so the
 // MCP server's spawn_agent (which also reads the dir fresh) sees edits immediately.

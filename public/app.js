@@ -15,10 +15,23 @@
   const bright = localStorage.getItem('sdeck-theme') === 'bright';
   if (bright) document.documentElement.classList.add('bright');
   themeBtn.textContent = bright ? '☾' : '☀';
+  // Sync theme from settings.json (survives random port changes)
+  fetch('/api/settings').then(r => r.json()).then(s => {
+    const serverBright = s.theme === 'bright';
+    if (serverBright !== document.documentElement.classList.contains('bright')) {
+      document.documentElement.classList.toggle('bright', serverBright);
+      themeBtn.textContent = serverBright ? '☾' : '☀';
+    }
+  }).catch(() => {});
   themeBtn.addEventListener('click', () => {
     const isBright = document.documentElement.classList.toggle('bright');
     localStorage.setItem('sdeck-theme', isBright ? 'bright' : 'dark');
     themeBtn.textContent = isBright ? '☾' : '☀';
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: isBright ? 'bright' : 'dark' }),
+    }).catch(() => {});
   });
 
   // ── Activity collapse ──────────────────────────────────────────────────────
