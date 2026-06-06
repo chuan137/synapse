@@ -1,0 +1,974 @@
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Dark theme — neutral dark grey, no blue tint, easy on eyes */
+      --bg:      #1c1c1e;
+      --surface: #242426;
+      --border:  #38383a;
+      --text:    #c8c8ca;
+      --muted:   #78787e;
+      --accent:  #7091f5;
+    }
+
+    :root.bright {
+      /* Light theme — neutral with a whisper of warmth */
+      --bg:      #eae9e5;
+      --surface: #f2f1ed;
+      --border:  #d5d2ce;
+      --text:    #2d2b29;
+      --muted:   #87847f;
+      --accent:  #4060c8;
+      --idle:    #1a8a42;
+      --working: #b86a06;
+      --blocked: #c84e10;
+      --error:   #b82020;
+      --p0:      #b82020;
+      --p0-bg:   #f5eded;
+      --p0-text: #921818;
+      --hover-soft: rgba(0,0,0,0.03);
+    }
+
+    :root {
+
+      --idle:    #4ade80;
+      --working: #facc15;
+      --blocked: #fb923c;
+      --error:   #f87171;
+
+      --p0: #ef4444;
+      --p0-bg: #2a1212;
+      --p0-text: #fca5a5;
+      --hover-soft: rgba(255,255,255,0.02);
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Menlo', monospace;
+      font-size: 14px;
+      line-height: 1.55;
+      letter-spacing: 0.01em;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }
+
+    .logo span { color: var(--muted); font-weight: 400; }
+
+    .project-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      padding: 2px 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--idle);
+      box-shadow: 0 0 6px var(--idle);
+      animation: pulse 2s infinite;
+      margin-left: auto;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .dot-label { color: var(--muted); font-size: 11px; }
+
+    /* ── Layout ── */
+    main {
+      display: grid;
+      grid-template-columns: 320px 1fr 360px;
+      grid-template-rows: auto 1fr;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #approvals-panel  { grid-column: 1 / -1; grid-row: 1; }
+    #agents-panel     { grid-column: 1;       grid-row: 2; min-height: 0; }
+    #messages-panel   { grid-column: 2;       grid-row: 2; min-height: 0; }
+    #activity-panel   { grid-column: 3;       grid-row: 2; min-height: 0; }
+
+    /* Events collapse: smoothly animate the column to zero and fade the panel.
+       No rail — reopening is the same toggle in the Messages header. */
+    main { transition: grid-template-columns 0.22s ease; }
+    main.activity-collapsed { grid-template-columns: 320px 1fr 0; }
+    #activity-panel {
+      transition: opacity 0.18s ease;
+      min-width: 0;
+    }
+    main.activity-collapsed #activity-panel {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Toggle buttons: quiet ghost buttons with a pure-CSS chevron.
+       #activity-collapse (›) lives in the Events header, shown when open.
+       #activity-expand  (‹) lives in the Messages header, shown when collapsed. */
+    .activity-toggle {
+      background: none;
+      border: none;
+      width: 22px; height: 22px;
+      padding: 0;
+      border-radius: 5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      align-self: center;      /* override global button{align-self:flex-end} */
+      transition: background 0.15s;
+      font-size: 0;
+    }
+    .activity-toggle:hover { background: var(--bg); }
+
+    /* Collapse: a chevron (›) pointing toward the panel's edge — "tuck away".
+       Pure-CSS square with two borders, rotated 45°; flexbox centers it. */
+    #activity-collapse::before {
+      content: "";
+      width: 6px; height: 6px;
+      border-top:   1.5px solid var(--muted);
+      border-right: 1.5px solid var(--muted);
+      transform: rotate(45deg);
+      margin-left: -2px;       /* optical centering */
+      transition: border-color 0.15s;
+    }
+    #activity-collapse:hover::before { border-color: var(--text); }
+
+    /* Expand: a sidebar/panel icon — reads as "show the side panel" with no
+       left/right ambiguity. A rounded rectangle with a divided right column. */
+    #activity-expand::before {
+      content: "";
+      width: 15px; height: 12px;
+      border: 1.5px solid var(--muted);
+      border-radius: 2px;
+      box-shadow: inset -4.5px 0 0 -3px var(--muted); /* the right "panel" divider */
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    #activity-expand:hover::before {
+      border-color: var(--text);
+      box-shadow: inset -4.5px 0 0 -3px var(--text);
+    }
+
+    /* Visibility: one button per state. Open → collapse (in Events);
+       collapsed → expand (in Messages). */
+    #activity-expand   { display: none; }
+    main.activity-collapsed #activity-collapse { display: none; }
+    main.activity-collapsed #activity-expand   { display: flex; }
+
+    /* Auto-collapse on narrow viewports unless the user has chosen otherwise (JS handles persistence). */
+    @media (max-width: 1100px) {
+      main:not(.activity-expanded) { grid-template-columns: 320px 1fr 0; }
+      main:not(.activity-expanded) #activity-panel    { opacity: 0; pointer-events: none; }
+      main:not(.activity-expanded) #activity-collapse { display: none; }
+      main:not(.activity-expanded) #activity-expand   { display: flex; }
+    }
+
+    /* ── Approvals ── */
+    #approvals-panel {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      background: #1a1208;
+    }
+
+    #approvals-panel.visible { display: flex; }
+
+    .approval-card {
+      background: #2a1e08;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .approval-question {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fcd34d;
+    }
+
+    .approval-context {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
+
+    .approval-meta {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .approval-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .approval-comment {
+      flex: 1;
+      font-size: 11px;
+      height: 28px;
+      padding: 4px 8px;
+    }
+
+    .btn-approve {
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-reject {
+      background: #dc2626;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* ── Agents panel ── */
+    #agents-panel {
+      border-right: 2px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .panel-header {
+      height: 41px;            /* uniform across panels (text + button rows align) */
+      flex-shrink: 0;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    #agents-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .agent-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      transition: border-color 0.2s, opacity 0.2s;
+      cursor: default;
+    }
+
+    .agent-card { cursor: pointer; }
+    .agent-card:hover { border-color: var(--accent); }
+    .agent-card.selected {
+      border-color: var(--accent);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .agent-card-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .surface-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .surface-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .surface-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .kebab-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1;
+      padding: 1px 6px 3px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .kebab-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .agent-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      z-index: 100;
+      min-width: 110px;
+      overflow: hidden;
+    }
+    .agent-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 7px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .agent-menu button:hover { background: var(--border); color: var(--accent); }
+    .agent-menu button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .agent-menu button.danger:hover { color: var(--error); }
+    .agent-menu-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    /* ── Agent config modal ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-backdrop.hidden { display: none; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+      width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0;
+    }
+    .modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .modal-field label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+    .modal-field input,
+    .modal-field select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .modal-field input:focus,
+    .modal-field select:focus { border-color: var(--accent); }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .modal-actions button {
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .modal-actions button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .modal-actions button:hover:not(.primary) { border-color: var(--accent); color: var(--accent); }
+    .modal-actions button.primary:hover { opacity: 0.88; }
+    .modal-actions button.danger { color: var(--error); border-color: var(--border); margin-right: auto; }
+    .modal-actions button.danger:hover { border-color: var(--error); color: var(--error); }
+
+    /* Roles modal: wider, two-pane (list | editor). Reuses .modal-backdrop / .modal. */
+    .modal.roles-modal {
+      width: 760px;
+      max-width: 92vw;
+      height: 560px;
+      max-height: 86vh;
+      padding: 20px 22px;
+    }
+    .roles-body {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 16px;
+      flex: 1;
+      min-height: 0;
+    }
+    .roles-list-pane { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+    #roles-list {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .role-row {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .role-row:last-child { border-bottom: none; }
+    .role-row:hover { background: var(--surface); }
+    .role-row.selected { background: var(--surface); border-left: 2px solid var(--accent); }
+    .role-row .role-row-name { font-size: 12px; font-weight: 600; color: var(--text); }
+    .role-row .role-row-desc {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #roles-new-btn {
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #roles-new-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .roles-editor-pane { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+    #roles-editor-header { font-size: 12px; font-weight: 600; color: var(--text); }
+    #roles-editor-header .muted { color: var(--muted); font-weight: 400; }
+    #roles-source {
+      flex: 1;
+      resize: none;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 10px;
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.15s;
+      white-space: pre;
+      overflow: auto;
+    }
+    #roles-source:focus { border-color: var(--accent); }
+    #roles-source:disabled { opacity: 0.5; }
+    #roles-error { font-size: 11px; color: var(--error); min-height: 14px; }
+    .roles-empty { padding: 14px; font-size: 11px; color: var(--muted); text-align: center; }
+
+    .agent-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+      text-transform: capitalize;
+    }
+
+    .agent-session {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: inherit;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .empty-state {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      padding: 32px 16px;
+    }
+
+    /* ── Events panel ── */
+    #activity-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+      border-left: 2px solid var(--border);
+    }
+
+    #activity-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .activity-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 11px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .activity-row:hover { background: var(--surface); }
+    .activity-time { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+    .activity-tool { font-weight: 600; color: var(--text); flex-shrink: 0; }
+    .activity-detail {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .activity-dur { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+    .activity-row.err .activity-tool { color: var(--error); }
+    .activity-row.err::before { content: '✗'; color: var(--error); flex-shrink: 0; }
+    .activity-row.ok::before  { content: '·'; color: var(--idle);  flex-shrink: 0; }
+    .activity-row.evt::before { content: '◇'; color: var(--accent); flex-shrink: 0; }
+
+    /* ── Activity panel tabs ── */
+    .panel-tabs {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+    .panel-tab {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .panel-tab:hover { color: var(--text); background: var(--bg); }
+    .panel-tab.active { color: var(--accent); background: var(--bg); }
+
+    /* ── Task activity rows ── */
+    #task-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .task-row {
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: default;
+    }
+    .task-row:hover { border-color: var(--accent); }
+    .task-row.clickable { cursor: pointer; }
+    .task-title {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .task-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .task-status {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.03em;
+    }
+    .task-status.in_progress { background: rgba(250,204,21,0.15); color: var(--working); }
+    .task-status.completed   { background: rgba(74,222,128,0.12); color: var(--idle); }
+    .task-status.aborted     { background: rgba(248,113,113,0.12); color: var(--error); }
+    .task-sha {
+      font-family: inherit;
+      color: var(--accent);
+      opacity: 0.8;
+    }
+    .activity-slot-tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+    }
+
+    /* ── Events status ticker (shown in Messages header when events panel is collapsed) ── */
+    .header-status-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      min-width: 0;
+    }
+    #activity-latest-flash {
+      display: none;
+      font-size: 11px;
+      color: var(--muted);
+      max-width: 380px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      text-transform: lowercase;
+    }
+    main.activity-collapsed #activity-latest-flash:not(:empty) {
+      display: inline-block;
+    }
+
+    /* Per-agent tool metric chips (inside agent cards) */
+    .agent-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 8px;
+    }
+    .metric-chip {
+      font-size: 9px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .metric-chip b { color: var(--text); font-weight: 600; }
+    .metric-chip.has-err { border-color: var(--error); color: var(--error); }
+
+    /* ── Messages panel ── */
+    #messages-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    #messages-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    #plan-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 18px;
+      line-height: 1.6;
+      font-size: 13px;
+    }
+    #plan-content h1 { font-size: 16px; font-weight: 700; margin: 0 0 10px; }
+    #plan-content h2 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: var(--accent); }
+    #plan-content h3 { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+    #plan-content p  { margin: 0 0 8px; }
+    #plan-content ul, #plan-content ol { margin: 0 0 8px; padding-left: 18px; }
+    #plan-content li { margin-bottom: 3px; }
+    #plan-content code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    #plan-content pre { background: var(--bg); padding: 10px 12px; border-radius: 5px; overflow-x: auto; margin: 0 0 10px; }
+    #plan-content a { color: var(--accent); }
+    #plan-content hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+    /* ── Compose (inside messages panel) ── */
+    #compose {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 12px 16px;
+    }
+
+    .message-row {
+      display: flex;
+      flex-direction: row;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border-left: 2px solid transparent;
+    }
+
+    .message-row.from-human {
+      background: rgba(112, 145, 245, 0.07);
+      border-left-color: rgba(112, 145, 245, 0.35);
+    }
+
+    /* Light mode: softer blue tint */
+    :root.bright .message-row.from-human {
+      background: rgba(53, 96, 192, 0.06);
+      border-left-color: rgba(53, 96, 192, 0.28);
+    }
+
+    .message-row.from-agent {
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    :root.bright .message-row.from-agent {
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+
+    .message-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .from-human .message-avatar {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .from-agent .message-avatar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .from-agent.p0 .message-avatar {
+      border-color: var(--p0);
+      color: var(--p0);
+    }
+
+    .message-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .message-time {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .message-content {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .from-agent.p0 .message-content { color: var(--p0-text); }
+
+    /* Rendered markdown inside message bubbles. marked emits block elements, so
+       the container drops pre-wrap and these rules govern spacing/formatting. */
+    .message-content { white-space: normal; }
+    .message-content > :first-child { margin-top: 0; }
+    .message-content > :last-child { margin-bottom: 0; }
+    .message-content p { margin: 0 0 4px; }
+    .message-content code {
+      font-family: inherit;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-size: 11px;
+      color: var(--accent);
+    }
+    .message-content pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin: 4px 0;
+      overflow-x: auto;
+    }
+    .message-content pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 11px;
+      white-space: pre;
+    }
+    .message-content ul, .message-content ol { margin: 4px 0; padding-left: 20px; }
+    .message-content li { margin: 1px 0; }
+    .message-content blockquote {
+      margin: 4px 0;
+      padding: 1px 10px;
+      border-left: 2px solid var(--border);
+      color: var(--muted);
+    }
+    .message-content a { color: var(--accent); text-decoration: none; }
+    .message-content a:hover { text-decoration: underline; }
+    .message-content strong { font-weight: 700; color: var(--text); }
+    .message-content h1, .message-content h2, .message-content h3,
+    .message-content h4, .message-content h5, .message-content h6 {
+      font-size: 12px;
+      margin: 6px 0 4px;
+    }
+    .message-content table {
+      border-collapse: collapse;
+      margin: 4px 0;
+    }
+    .message-content th, .message-content td {
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+    }
+
+input, select, textarea {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      border-radius: 4px;
+      padding: 6px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+
+    select option { background: var(--bg); }
+
+    /* --msg-input-min: floor height (~4 rows); JS auto-resize grows from here up to max-height. */
+    #msg-input  { --msg-input-min: 92px; width: 100%; resize: vertical; min-height: var(--msg-input-min); height: var(--msg-input-min); max-height: 220px; overflow-y: auto; }
+    #msg-input:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 7px 18px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      align-self: flex-end;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:active { opacity: 0.7; }
+    button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(128,120,112,0.25); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(128,120,112,0.45); }
