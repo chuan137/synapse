@@ -83,7 +83,7 @@ export function openDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_metrics_agent ON tool_metrics(synapse_agent_id, tool);
 
-    CREATE TABLE IF NOT EXISTS tasks (
+    CREATE TABLE IF NOT EXISTS activities (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
       agent_id        TEXT    NOT NULL,
       title           TEXT    NOT NULL,
@@ -95,8 +95,8 @@ export function openDb(dbPath: string): Database.Database {
       source_msg_id   INTEGER REFERENCES messages(id),
       commit_sha      TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_activities_agent  ON tasks(agent_id, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_activities_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_activities_agent  ON activities(agent_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
   `);
 
   // Migrate existing tables — ignore errors if columns already exist
@@ -110,10 +110,15 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE agent_status ADD COLUMN ended_at INTEGER`,
     `ALTER TABLE agent_status ADD COLUMN role TEXT`,
     `ALTER TABLE agent_status ADD COLUMN boot_task TEXT`,
+    // Rename activities → tasks. On fresh DBs: activities was just created above, rename succeeds.
+    // On existing DBs pre-rename: activities exists, rename succeeds.
+    // On existing DBs already renamed: tasks exists, rename fails → swallowed (idempotent).
     `ALTER TABLE activities RENAME TO tasks`,
     `ALTER TABLE tasks ADD COLUMN source_msg_id INTEGER REFERENCES messages(id)`,
+    // Safety: if the prior bug left rows in a stale activities table, rescue them.
+    `INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha) SELECT id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha FROM activities`,
   ]) {
-    try { database.exec(sql); } catch { /* column already exists or table already renamed */ }
+    try { database.exec(sql); } catch { /* already applied or not applicable */ }
   }
 
   // Migrate stale names to role-based names (one-time, idempotent)
