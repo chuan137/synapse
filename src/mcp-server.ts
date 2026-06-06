@@ -90,7 +90,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description:
         `Check for instructions from the human operator. Your agent ID is "${AGENT_ID}". ` +
         'Call this at the START of every turn before doing anything else. ' +
-        'Returns unread messages addressed to you, ordered by priority (0 = urgent).',
+        'Returns unread messages addressed to you, ordered by priority (0 = urgent). ' +
+        'When there are messages, the first content block is a JSON array where each element has: ' +
+        '{ id: number, from: string, priority: 0|5, at: string (ISO timestamp), content: string }. ' +
+        'Use the `id` field as `source_msg_id` when calling `delegate_task`.',
       inputSchema: { type: 'object', properties: {}, required: [] },
     },
     {
@@ -384,20 +387,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: `No new messages.${reminder}` }] };
     }
 
-    const formatted = msgs
-      .map((m) => {
-        const ts = new Date(m.created_at).toISOString();
-        const label = m.priority === 0 ? '[P0 — URGENT]' : '[P5]';
-        return `${label} [id=${m.id}] From: ${m.from_id} at ${ts}\n${m.content}`;
-      })
-      .join('\n\n---\n\n');
+    const array = msgs.map((m) => ({
+      id: m.id,
+      from: m.from_id,
+      priority: m.priority,
+      at: new Date(m.created_at).toISOString(),
+      content: m.content,
+    }));
 
     return {
       content: [
-        {
-          type: 'text',
-          text: `${msgs.length} new message(s):\n\n${formatted}${reminder}`,
-        },
+        { type: 'text', text: JSON.stringify(array, null, 2) },
+        { type: 'text', text: reminder.trim() },
       ],
     };
   }
