@@ -487,34 +487,38 @@
         const duration = a.finished_at ? `${Math.round((a.finished_at - a.started_at) / 1000)}s` : null;
         const sha = a.commit_sha ? `<span class="task-sha diff-trigger" data-sha="${esc(a.commit_sha)}" title="View diff for ${esc(a.commit_sha.slice(0, 7))}">${esc(a.commit_sha.slice(0, 7))}</span>` : '';
         const timeStr = endTime ? `${startTime} → ${endTime}${duration ? ` (${duration})` : ''}` : `${startTime} …`;
-        const jumpId = a.trigger_msg_id ?? a.result_msg_id;
+        const jumpId = a.source_msg_id ?? a.trigger_msg_id ?? a.result_msg_id;
         const clickable = jumpId ? 'clickable' : '';
         const dataJump = jumpId ? `data-jump-msg="${jumpId}"` : '';
-        const ownerSlot = agentStatuses.find(s => s.agent_id === a.agent_id)?.slot;
-        const slotMeta = isOrchestrator && ownerSlot != null
-          ? `<span class="activity-slot-tag">:${ownerSlot}</span>`
-          : '';
-        const toolCallsStr = a.tool_calls > 0 ? `<span class="task-tool-calls">${a.tool_calls} calls</span>` : '';
-        return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump} data-agent-id="${esc(a.agent_id ?? '')}">
-          <div class="task-title"><span class="task-id-badge">#${a.id}</span>${esc(a.title)}</div>
-          <div class="task-meta">
-            <span class="task-status ${a.status}">${a.status.replace('_', ' ')}</span>
-            ${slotMeta}
-            <span>${timeStr}</span>
-            ${toolCallsStr}
-            ${sha}
+        const chipsHtml = [
+          a.tool_calls > 0 ? `<span class="task-chip">${a.tool_calls} calls</span>` : '',
+          sha,
+        ].filter(Boolean).join('');
+        return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump} data-agent-id="${esc(a.agent_id ?? '')}" data-trigger-msg="${a.trigger_msg_id ?? ''}" data-source-msg="${a.source_msg_id ?? ''}">
+          <div class="task-card-body">
+            <div class="task-card-header">
+              <span class="task-id-badge">#${a.id}</span>
+              <span class="task-title">${esc(a.title)}</span>
+            </div>
+            <div class="task-state-row">
+              <span class="task-state-dot ${a.status}"></span>
+              <span class="task-status-label ${a.status}">${a.status.replace('_', ' ')}</span>
+              <span>${timeStr}</span>
+            </div>
           </div>
+          ${chipsHtml ? `<div class="task-chips">${chipsHtml}</div>` : ''}
         </div>`;
       }).join('');
     }
 
     morphdom(taskList, `<div id="task-list">${html}</div>`, { childrenOnly: true });
 
-    // Wire click → select owning agent, switch to messages tab, jump to linked message
+    // Wire click → select owning agent, switch to messages tab, jump to source message
     taskList.querySelectorAll('.task-row.clickable').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.diff-trigger')) return;
-        const msgId = row.dataset.jumpMsg;
+        // Prefer source_msg_id (the message that spawned the task), fall back to jump-msg
+        const msgId = row.dataset.sourceMsg || row.dataset.jumpMsg;
         if (!msgId) return;
 
         // Select the owning agent if not already selected
@@ -530,7 +534,7 @@
         // Switch to messages tab
         switchMiddleTab('messages');
 
-        // Wait for DOM to update, then scroll to the message
+        // Scroll to and highlight the source message
         setTimeout(() => {
           const target = document.getElementById(`msg-${msgId}`);
           if (!target) return;
