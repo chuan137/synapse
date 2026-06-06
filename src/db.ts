@@ -1033,3 +1033,11 @@ export function getFailedTasksForMetric(metric: string, limit = 3): number[] {
   ).all(metric, limit);
   return rows.map(r => r.task_id);
 }
+
+export function resetMetricCount(metric: string): void {
+  db.prepare(`
+    INSERT INTO metric_failure_counts (metric, count, last_reset_at)
+    VALUES (?, 0, ?)
+    ON CONFLICT(metric) DO UPDATE SET count = 0, last_reset_at = ?
+  `).run(metric, Date.now(), Date.now());
+}

@@ -24,6 +24,8 @@ import {
   markAgentEnded,
   getEvalResults,
   getMetricFailureCounts,
+  checkAndResetMetricThreshold,
+  resetMetricCount,
   AgentStatus,
   Message,
   ApprovalRequest,
@@ -440,6 +442,161 @@ app.get('/api/eval/results', (req: Request, res: Response) => {
 
 app.get('/api/eval/counts', (_req: Request, res: Response) => {
   res.json(getMetricFailureCounts());
+});
+
+// ── Proposals endpoints ────────────────────────────────────────────────────
+
+const PROPOSALS_DIR = join(process.cwd(), '.synapse', 'proposals');
+
+function parseProposalFile(filename: string, content: string): Record<string, unknown> {
+  const get = (label: string) => {
+    const m = content.match(new RegExp(`^##?\\s+${label}[:\\s]*\\n([\\s\\S]*?)(?=\\n##|$)`, 'im'));
+    return m ? m[1].trim() : '';
+  };
+  const statusMatch = content.match(/^Status:\s*(.+)$/im);
+  const targetMatch = content.match(/^Target-file:\s*(.+)$/im);
+  const metricMatch = content.match(/^Trigger:\s*(\w+)/im) || filename.match(/\d+-(\w+)\.md/);
+  const tsMatch = filename.match(/^(\d+)-/);
+  return {
+    filename,
+    metric: metricMatch ? (Array.isArray(metricMatch) ? metricMatch[1] : metricMatch[1]) : '',
+    timestamp: tsMatch ? new Date(parseInt(tsMatch[1])).toLocaleString() : '',
+    status: statusMatch ? statusMatch[1].trim() : 'pending',
+    rootCause: get('Root cause'),
+    proposedChange: get('Proposed rule change'),
+    targetFile: targetMatch ? targetMatch[1].trim() : '',
+  };
+}
+
+app.get('/api/proposals', (_req: Request, res: Response) => {
+  mkdirSync(PROPOSALS_DIR, { recursive: true });
+  const files = readdirSync(PROPOSALS_DIR)
+    .filter(f => f.endsWith('.md') && !f.startsWith('handover-') && !f.startsWith('gate-handover-'));
+  const proposals = files.map(filename => {
+    const content = readFileSync(join(PROPOSALS_DIR, filename), 'utf8');
+    const parsed = parseProposalFile(filename, content);
+    const verdictFile = filename.replace('.md', '.verdict.json');
+    const verdictPath = join(PROPOSALS_DIR, verdictFile);
+    const verdict = existsSync(verdictPath)
+      ? JSON.parse(readFileSync(verdictPath, 'utf8'))
+      : null;
+    return { ...parsed, verdictFile, verdict };
+  });
+  res.json(proposals);
+});
+
+app.post('/api/proposals/:filename/gate', (req: Request, res: Response) => {
+  const filename = String(req.params.filename);
+  const proposalPath = join(PROPOSALS_DIR, filename);
+  if (!existsSync(proposalPath)) { res.status(404).json({ error: 'Proposal not found' }); return; }
+
+  const proposalContent = readFileSync(proposalPath, 'utf8');
+  const passingTasks = listAllTasks(200).filter((t: any) => t.status === 'completed' && !t.eval_failed).slice(0, 20);
+  const passingSection = passingTasks.map((t: any) => {
+    const evals = getEvalResults(t.id);
+    const metrics = evals.map(e => `${e.metric}=${e.value ?? 'n/a'}`).join(', ');
+    return `- Task #${t.id}: ${t.title.slice(0, 60)} [${metrics}]`;
+  }).join('\n') || '(none recorded)';
+
+  const tsMatch = filename.match(/^(\d+)-(\w+)\.md$/);
+  const verdictPath = tsMatch
+    ? join(PROPOSALS_DIR, `${tsMatch[1]}-${tsMatch[2]}.verdict.json`)
+    : join(PROPOSALS_DIR, filename.replace('.md', '.verdict.json'));
+
+  const handoverContent = `# Gate Evaluation Request
+
+You are a Synapse protocol gate evaluator.
+
+## Proposal to evaluate
+${proposalContent}
+
+## Passing trajectories (check for regression — last 20 tasks with all metrics passing):
+${passingSection}
+
+## Instructions
+Evaluate this proposal on 3 criteria:
+1. regression_prevented: Would this rule change have prevented the 3 listed failures?
+2. regression_free: Does it risk causing any of the 20 passing tasks to fail?
+3. size_ok: Does it stay within 2 added/modified rule sentences?
+
+Write your verdict ONLY to \`${verdictPath}\`:
+{
+  "regression_prevented": true/false,
+  "regression_free": true/false,
+  "size_ok": true/false,
+  "deploy_recommended": true/false,
+  "notes": "..."
+}
+
+Do not modify any other files.
+`;
+
+  const handoverPath = join(PROPOSALS_DIR, `gate-handover-${filename}`);
+  writeFileSync(handoverPath, handoverContent, 'utf8');
+
+  const child = spawn('claude', ['--print', '--dangerously-skip-permissions', handoverPath], {
+    detached: true,
+    stdio: 'ignore',
+    cwd: process.cwd(),
+    env: { ...process.env },
+  });
+  child.unref();
+  res.json({ ok: true });
+});
+
+app.post('/api/proposals/:filename/regenerate', async (req: Request, res: Response) => {
+  const filename = String(req.params.filename);
+  const metricMatch = filename.match(/^\d+-(\w+)\.md$/);
+  if (!metricMatch) { res.status(400).json({ error: 'Cannot parse metric from filename' }); return; }
+  const metric = metricMatch[1];
+  const tsMatch = filename.match(/^(\d+)-/);
+  const triggerTaskId = tsMatch ? parseInt(tsMatch[1], 10) : 0;
+  resetMetricCount(metric);
+  try {
+    const { spawnProposalSession } = await import('./eval/propose.js');
+    await spawnProposalSession(triggerTaskId, metric);
+  } catch (e) {
+    res.status(500).json({ error: String(e) }); return;
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/proposals/:filename/deploy', (req: Request, res: Response) => {
+  const filename = String(req.params.filename);
+  const proposalPath = join(PROPOSALS_DIR, filename);
+  if (!existsSync(proposalPath)) { res.status(404).json({ error: 'Proposal not found' }); return; }
+
+  let content = readFileSync(proposalPath, 'utf8');
+  const targetMatch = content.match(/^Target-file:\s*(.+)$/im);
+  const changeMatch = content.match(/^##\s*Proposed rule change\s*\n([\s\S]*?)(?=\n##|$)/im);
+  const metricMatch = filename.match(/^\d+-(\w+)\.md$/);
+
+  if (!targetMatch) { res.status(400).json({ error: 'No Target-file in proposal' }); return; }
+  const targetFile = join(process.cwd(), targetMatch[1].trim());
+  const proposedChange = changeMatch ? changeMatch[1].trim() : '';
+
+  if (proposedChange && existsSync(targetFile)) {
+    const existing = readFileSync(targetFile, 'utf8');
+    writeFileSync(targetFile, existing.trimEnd() + '\n\n' + proposedChange + '\n', 'utf8');
+  }
+
+  try {
+    execSync('synapse update .', { cwd: process.cwd(), stdio: 'pipe' });
+  } catch { /* best-effort */ }
+
+  try {
+    execSync(`git add "${targetFile}" && git commit -m "deploy proposal: ${filename}"`, {
+      cwd: process.cwd(), stdio: 'pipe',
+    });
+  } catch { /* best-effort if nothing staged */ }
+
+  if (metricMatch) {
+    resetMetricCount(metricMatch[1]);
+  }
+
+  content = content.replace(/^Status:\s*.+$/im, 'Status: deployed');
+  writeFileSync(proposalPath, content, 'utf8');
+  res.json({ ok: true });
 });
 
 // Kill + respawn a worker agent in the same role (restart)

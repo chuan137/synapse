@@ -493,9 +493,10 @@
     const el = document.getElementById('eval-content');
     el.innerHTML = '<div style="color:var(--muted);font-size:11px">Loading...</div>';
 
-    const [report, gate] = await Promise.all([
+    const [report, gate, proposals] = await Promise.all([
       fetch('/api/eval/report').then(r => r.json()),
       fetch('/api/eval/gate').then(r => r.json()),
+      fetch('/api/proposals').then(r => r.json()),
     ]);
 
     const failed = report.filter(r => !r.pass);
@@ -530,6 +531,35 @@
         <span class="eval-title-inline">${esc(r.title.slice(0, 45))}</span>
       </div>`).join('');
 
+    const proposalsHtml = proposals.length === 0
+      ? '<div style="color:var(--muted);font-size:11px">No proposals yet.</div>'
+      : proposals.map(p => {
+        const statusColor = p.status === 'deployed' ? 'var(--idle)'
+          : p.verdict?.deploy_recommended ? 'var(--idle)'
+          : p.status === 'gate_rejected' ? 'var(--p0)'
+          : 'var(--muted)';
+        const verdictHtml = p.verdict ? `<div style="font-size:10px;margin-bottom:4px">
+          ${p.verdict.regression_prevented ? '✓' : '✗'} prevents failure &nbsp;
+          ${p.verdict.regression_free ? '✓' : '✗'} regression-free &nbsp;
+          ${p.verdict.size_ok ? '✓' : '✗'} size ok
+        </div>` : '';
+        const btnsHtml = p.status !== 'deployed' ? `
+          <button class="btn-proposal" data-action="gate" data-file="${esc(p.filename)}">Run Gate</button>
+          <button class="btn-proposal" data-action="regenerate" data-file="${esc(p.filename)}">Regenerate</button>
+          ${p.verdict?.deploy_recommended ? `<button class="btn-proposal btn-deploy" data-action="deploy" data-file="${esc(p.filename)}">Deploy</button>` : ''}
+        ` : '<span style="color:var(--idle);font-size:10px">Deployed ✓</span>';
+        return `<div class="eval-row proposal-row" data-file="${esc(p.filename)}">
+          <div class="eval-row-header">
+            <span class="eval-label" style="color:${statusColor}">${esc(p.status.toUpperCase())}</span>
+            <span style="font-size:10px;color:var(--muted)">${esc(p.metric)} · ${esc(p.timestamp)}</span>
+          </div>
+          <div class="eval-title" style="margin:4px 0">${esc((p.rootCause || '').slice(0, 80))}</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:6px">→ ${esc((p.proposedChange || '').slice(0, 100))}</div>
+          ${verdictHtml}
+          <div class="proposal-btns">${btnsHtml}</div>
+        </div>`;
+      }).join('');
+
     el.innerHTML = `
       <div style="margin-bottom:10px">
         <button id="eval-run-btn" class="btn-run-eval">▶ Run improvement loop</button>
@@ -539,6 +569,8 @@
       ${failedHtml}
       <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Passed (${passed.length})</div>
       ${passedHtml}
+      <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Proposals (${proposals.length})</div>
+      <div id="proposals-list">${proposalsHtml}</div>
     `;
 
     document.getElementById('eval-run-btn').addEventListener('click', async () => {
@@ -548,6 +580,20 @@
       status.textContent = 'Starting…';
       await fetch('/api/eval/run', { method: 'POST' });
       status.textContent = 'Loop started — re-run eval to see updated results';
+    });
+
+    document.getElementById('proposals-list').addEventListener('click', async (e) => {
+      const btn = e.target.closest('.btn-proposal');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const file = btn.dataset.file;
+      btn.disabled = true;
+      try {
+        await fetch(`/api/proposals/${encodeURIComponent(file)}/${action}`, { method: 'POST' });
+        renderEval();
+      } catch {
+        btn.disabled = false;
+      }
     });
   }
 
