@@ -555,14 +555,14 @@
         const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[selectedAgent.state] ?? 'var(--muted)';
         const task = selectedAgent.current_task ? esc(selectedAgent.current_task) : '';
         innerHtml += `
-          <div id="msg-status-row" style="display:flex;align-items:center;gap:8px;padding:8px 0 2px;opacity:0.6;">
-            <div style="flex:1;height:1px;background:var(--border);"></div>
-            <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);white-space:nowrap;">
-              <span style="width:5px;height:5px;border-radius:50%;background:${stateColor};"></span>
-              <span style="color:${stateColor};">${esc(selectedAgent.state)}</span>
-              ${task ? `<span>·</span><span>${task}</span>` : ''}
-            </span>
-            <div style="flex:1;height:1px;background:var(--border);"></div>
+          <div id="msg-status-row">
+            <div class="msg-status-line"></div>
+            <div class="msg-status-badge">
+              <span class="msg-status-dot" data-state="${esc(selectedAgent.state)}" style="background:${stateColor};"></span>
+              <span class="msg-status-state" style="color:${stateColor};">${esc(selectedAgent.state)}</span>
+              ${task ? `<span class="msg-status-sep">·</span><span class="msg-status-task">${task}</span>` : ''}
+            </div>
+            <div class="msg-status-line"></div>
           </div>
         `;
       }

@@ -985,6 +985,79 @@ input, select, textarea {
     button:active { opacity: 0.7; }
     button:disabled { opacity: 0.3; cursor: not-allowed; }
 
+    /* ── Agent status row (bottom of message list) ── */
+    #msg-status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 4px 4px;
+    }
+
+    .msg-status-line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to var(--dir, right), transparent, var(--border));
+    }
+    .msg-status-line:first-child { --dir: right; }
+    .msg-status-line:last-child  { --dir: left; }
+
+    .msg-status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      white-space: nowrap;
+      padding: 3px 9px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      letter-spacing: 0.01em;
+    }
+
+    .msg-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .msg-status-dot[data-state="working"] {
+      animation: status-pulse 1.4s ease-in-out infinite;
+    }
+
+    .msg-status-dot[data-state="blocked"] {
+      animation: status-flash 1.8s step-end infinite;
+    }
+
+    @keyframes status-pulse {
+      0%, 100% { opacity: 1;   transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+
+    @keyframes status-flash {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.25; }
+    }
+
+    .msg-status-state {
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .msg-status-task {
+      color: var(--muted);
+      opacity: 0.75;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .msg-status-sep {
+      opacity: 0.4;
+    }
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
