@@ -1346,6 +1346,23 @@ input, select, textarea {
     .msg-option-btn.selected { background: var(--accent); color: var(--bg); border-color: var(--accent); }
     .msg-option-btn:disabled { opacity: 0.5; cursor: default; }
 
+    /* ── Eval panel ── */
+    .eval-row { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 4px; }
+    .eval-row.eval-fail { border-color: var(--p0); }
+    .eval-row.eval-pass { display: flex; align-items: center; gap: 6px; }
+    .eval-row-header { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+    .eval-id { font-size: 10px; color: var(--muted); }
+    .eval-label { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
+    .eval-label.bad { background: var(--p0); color: #fff; }
+    .eval-label.good { background: var(--idle); color: #fff; }
+    .eval-title { font-size: 11px; color: var(--text); margin-bottom: 4px; }
+    .eval-title-inline { font-size: 11px; color: var(--muted); }
+    .eval-failures { display: flex; flex-wrap: wrap; gap: 3px; }
+    .eval-chip { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+    .btn-run-eval { font-size: 11px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--accent); background: none; color: var(--accent); cursor: pointer; font-family: inherit; }
+    .btn-run-eval:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+    .btn-run-eval:disabled { opacity: 0.5; cursor: default; }
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }

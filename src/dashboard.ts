@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync } from 'fs';
-import { execSync, spawnSync } from 'child_process';
+import { execSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import {
   getAllStatuses,
@@ -399,6 +399,34 @@ app.post('/api/messages/:id/select-option', (req: Request, res: Response) => {
 app.post('/api/agents/purge', (_req: Request, res: Response) => {
   const count = purgeStaleAgents();
   res.json({ ok: true, purged: count });
+});
+
+// ── Eval pipeline endpoints ────────────────────────────────────────────────────
+
+app.get('/api/eval/report', (_req: Request, res: Response) => {
+  const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
+  if (!existsSync(reportPath)) { res.json([]); return; }
+  res.json(JSON.parse(readFileSync(reportPath, 'utf8')));
+});
+
+app.get('/api/eval/gate', (_req: Request, res: Response) => {
+  const gateDir = join(process.cwd(), 'tests', 'gate_results');
+  if (!existsSync(gateDir)) { res.json([]); return; }
+  const results = readdirSync(gateDir)
+    .filter(f => f.endsWith('.json'))
+    .map(f => JSON.parse(readFileSync(join(gateDir, f), 'utf8')));
+  res.json(results);
+});
+
+app.post('/api/eval/run', (_req: Request, res: Response) => {
+  const indexJs = join(__dirname, '..', 'index.js');
+  const child = spawn(process.execPath, [indexJs, 'eval', '--critic', '--gate'], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env },
+  });
+  child.unref();
+  res.json({ ok: true, message: 'Improvement loop started' });
 });
 
 // Kill + respawn a worker agent in the same role (restart)

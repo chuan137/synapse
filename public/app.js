@@ -467,22 +467,90 @@
   // ── Right panel tab switching ────────────────────────────────────────────
   const tabEvents  = document.getElementById('tab-events');
   const tabTasks   = document.getElementById('tab-tasks');
+  const tabEval    = document.getElementById('tab-eval');
   const taskList   = document.getElementById('task-list');
+  const evalPanel  = document.getElementById('eval-panel');
 
   function switchRightTab(tab) {
     rightPanelTab = tab;
     tabEvents.classList.toggle('active', tab === 'events');
     tabTasks.classList.toggle('active', tab === 'tasks');
+    tabEval.classList.toggle('active', tab === 'eval');
     activityList.style.display = tab === 'events' ? '' : 'none';
     taskList.style.display = tab === 'tasks' ? '' : 'none';
+    evalPanel.style.display = tab === 'eval' ? '' : 'none';
     if (tab === 'tasks') renderTasks();
+    if (tab === 'eval') renderEval();
   }
 
   tabEvents.addEventListener('click', () => switchRightTab('events'));
   tabTasks.addEventListener('click', () => switchRightTab('tasks'));
+  tabEval.addEventListener('click', () => switchRightTab('eval'));
   switchRightTab('tasks');   // initialize to default
 
   // ── Tasks rendering ──────────────────────────────────────────────────────
+  async function renderEval() {
+    const el = document.getElementById('eval-content');
+    el.innerHTML = '<div style="color:var(--muted);font-size:11px">Loading...</div>';
+
+    const [report, gate] = await Promise.all([
+      fetch('/api/eval/report').then(r => r.json()),
+      fetch('/api/eval/gate').then(r => r.json()),
+    ]);
+
+    const failed = report.filter(r => !r.pass);
+    const passed = report.filter(r => r.pass);
+
+    const gateByTask = {};
+    gate.forEach(g => {
+      const m = g.patch_file.match(/task_(\d+)/);
+      if (m) gateByTask[m[1]] = g.deploy_recommended;
+    });
+
+    const failedHtml = failed.map(r => {
+      const gateVerdict = gateByTask[r.id];
+      const gateBadge = gateVerdict === undefined ? '' :
+        gateVerdict ? '<span style="color:var(--idle);font-size:9px">DEPLOY ✓</span>' :
+                     '<span style="color:var(--p0);font-size:9px">HOLD ✗</span>';
+      return `<div class="eval-row eval-fail">
+        <div class="eval-row-header">
+          <span class="eval-id">#${r.id}</span>
+          <span class="eval-label bad">FAIL</span>
+          ${gateBadge}
+        </div>
+        <div class="eval-title">${esc(r.title.slice(0, 55))}</div>
+        <div class="eval-failures">${r.failures.map(f => `<span class="eval-chip">${esc(f)}</span>`).join('')}</div>
+      </div>`;
+    }).join('');
+
+    const passedHtml = passed.map(r => `
+      <div class="eval-row eval-pass">
+        <span class="eval-id">#${r.id}</span>
+        <span class="eval-label good">PASS</span>
+        <span class="eval-title-inline">${esc(r.title.slice(0, 45))}</span>
+      </div>`).join('');
+
+    el.innerHTML = `
+      <div style="margin-bottom:10px">
+        <button id="eval-run-btn" class="btn-run-eval">▶ Run improvement loop</button>
+        <span id="eval-run-status" style="font-size:10px;color:var(--muted);margin-left:8px"></span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Failed (${failed.length})</div>
+      ${failedHtml}
+      <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Passed (${passed.length})</div>
+      ${passedHtml}
+    `;
+
+    document.getElementById('eval-run-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('eval-run-btn');
+      const status = document.getElementById('eval-run-status');
+      btn.disabled = true;
+      status.textContent = 'Starting…';
+      await fetch('/api/eval/run', { method: 'POST' });
+      status.textContent = 'Loop started — re-run eval to see updated results';
+    });
+  }
+
   function renderTasks() {
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
     const isOrchestrator = sel?.slot === 0;
