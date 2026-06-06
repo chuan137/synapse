@@ -645,7 +645,7 @@
               : `<div class="message-actions"><button class="msg-approve-btn" data-msg-id="${m.id}">✓ approve</button></div>`)
           : '';
         return `
-          <div id="msg-${m.id}" class="message-row ${cls}">
+          <div id="msg-${m.id}" class="message-row ${cls}" title="msg #${m.id}">
             <div class="message-avatar">${esc(avatarLabel)}</div>
             <div class="message-body">
               <div class="message-header">
