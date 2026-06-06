@@ -726,13 +726,18 @@
   });
 
   // ── Agent prompt modal ────────────────────────────────────────────────────
-  const promptBackdrop  = document.getElementById('agent-prompt-backdrop');
-  const promptAgentSlot = document.getElementById('prompt-agent-slot');
-  const promptRoleBadge = document.getElementById('prompt-role-badge');
-  const promptBootTask  = document.getElementById('prompt-boot-task');
-  const promptRoleBody  = document.getElementById('prompt-role-body');
+  const promptBackdrop    = document.getElementById('agent-prompt-backdrop');
+  const promptAgentSlot   = document.getElementById('prompt-agent-slot');
+  const promptRoleBadge   = document.getElementById('prompt-role-badge');
+  const promptBaseSection = document.getElementById('prompt-base-section');
+  const promptBaseProto   = document.getElementById('prompt-base-protocol');
+  const promptSlotSection = document.getElementById('prompt-slot-section');
+  const promptSlotDoc     = document.getElementById('prompt-slot-doc');
   const promptRoleSection = document.getElementById('prompt-role-section');
-  const promptClose     = document.getElementById('prompt-close');
+  const promptRoleBody    = document.getElementById('prompt-role-body');
+  const promptBootSection = document.getElementById('prompt-boot-section');
+  const promptBootTask    = document.getElementById('prompt-boot-task');
+  const promptClose       = document.getElementById('prompt-close');
 
   function closePromptModal() {
     promptBackdrop.classList.add('hidden');
@@ -743,19 +748,34 @@
     promptAgentSlot.textContent = agent ? `:${agent.slot}` : agentId;
     promptRoleBadge.textContent = agent?.role ?? '';
     promptRoleBadge.style.display = agent?.role ? '' : 'none';
-    promptBootTask.textContent = 'loading…';
-    promptRoleBody.textContent = '';
+    // Reset all sections
+    promptBaseSection.style.display = 'none';
+    promptSlotSection.style.display = 'none';
     promptRoleSection.style.display = 'none';
+    promptBootSection.style.display = 'none';
+    promptBaseProto.textContent = '';
+    promptSlotDoc.textContent = '';
+    promptRoleBody.textContent = '';
+    promptBootTask.textContent = 'loading…';
+    promptBootSection.style.display = '';
     promptBackdrop.classList.remove('hidden');
     try {
       const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/prompt`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      promptBootTask.textContent = data.boot_task ?? '(none recorded)';
+      if (data.base_protocol) {
+        promptBaseProto.textContent = data.base_protocol;
+        promptBaseSection.style.display = '';
+      }
+      if (data.slot_doc) {
+        promptSlotDoc.textContent = data.slot_doc;
+        promptSlotSection.style.display = '';
+      }
       if (data.role_body) {
         promptRoleBody.textContent = data.role_body;
         promptRoleSection.style.display = '';
       }
+      promptBootTask.textContent = data.boot_task ?? '(none recorded)';
     } catch (e) {
       promptBootTask.textContent = `Error: ${e.message}`;
     }
@@ -947,7 +967,7 @@ Describe the role's responsibilities here.
       if (line.startsWith('-')) return `<span class="diff-del">${escaped}</span>`;
       if (line.startsWith('@@')) return `<span class="diff-hunk">${escaped}</span>`;
       return `<span>${escaped}</span>`;
-    }).join('\n');
+    }).join('');
   }
 
   async function openDiffModal(sha) {

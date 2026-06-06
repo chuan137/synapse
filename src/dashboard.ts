@@ -436,7 +436,7 @@ app.post('/api/agents/:agentId/kill', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// Return boot_task + role body for the agent system prompt modal
+// Return boot_task + role body + protocol docs for the agent system prompt modal
 app.get('/api/agents/:agentId/prompt', (req: Request, res: Response) => {
   const agentId = String(req.params.agentId);
   const agent = getAgentById(agentId);
@@ -452,7 +452,26 @@ app.get('/api/agents/:agentId/prompt', (req: Request, res: Response) => {
     }
   }
 
-  res.json({ boot_task: agent.boot_task ?? null, role: agent.role ?? null, role_body: roleBody });
+  const synapseDir = join(process.cwd(), '.synapse');
+  const baseProtocolPath = join(synapseDir, 'SYNAPSE.md');
+  const slotDocPath = agent.slot === 0
+    ? join(synapseDir, 'SYNAPSE-orchestrator.md')
+    : join(synapseDir, 'SYNAPSE-worker.md');
+
+  const baseProtocol = existsSync(baseProtocolPath)
+    ? readFileSync(baseProtocolPath, 'utf8').trim()
+    : null;
+  const slotDoc = existsSync(slotDocPath)
+    ? readFileSync(slotDocPath, 'utf8').trim()
+    : null;
+
+  res.json({
+    boot_task: agent.boot_task ?? null,
+    role: agent.role ?? null,
+    role_body: roleBody,
+    base_protocol: baseProtocol,
+    slot_doc: slotDoc,
+  });
 });
 
 // Update agent config (name, model, effort) from the dashboard

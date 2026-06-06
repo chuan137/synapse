@@ -116,13 +116,21 @@
       <button id="prompt-close" class="prompt-close-btn" title="Close">✕</button>
     </div>
     <div class="prompt-sections">
-      <div class="prompt-section">
-        <div class="prompt-section-label">Boot task</div>
-        <pre id="prompt-boot-task" class="prompt-pre"></pre>
+      <div class="prompt-section" id="prompt-base-section" style="display:none;">
+        <div class="prompt-section-label">Base protocol</div>
+        <pre id="prompt-base-protocol" class="prompt-pre"></pre>
+      </div>
+      <div class="prompt-section" id="prompt-slot-section" style="display:none;">
+        <div class="prompt-section-label">Role-specific protocol</div>
+        <pre id="prompt-slot-doc" class="prompt-pre"></pre>
       </div>
       <div class="prompt-section" id="prompt-role-section" style="display:none;">
         <div class="prompt-section-label">Role instructions</div>
         <pre id="prompt-role-body" class="prompt-pre"></pre>
+      </div>
+      <div class="prompt-section" id="prompt-boot-section" style="display:none;">
+        <div class="prompt-section-label">Boot task</div>
+        <pre id="prompt-boot-task" class="prompt-pre"></pre>
       </div>
     </div>
   </div>
