@@ -39,7 +39,7 @@ function readProjectId(): string | null {
 
 // ── PLAN.md file-watch ────────────────────────────────────────────────────
 
-const PLAN_PATH = join(process.cwd(), 'PLAN.md');
+const PLAN_PATH = join(process.cwd(), '.synapse', 'PLAN.md');
 
 function readPlan(): { content: string; updated_at: number } {
   try {
