@@ -91,6 +91,8 @@ When two or more workers may touch the same files in parallel, isolate each in i
                    • large spec (>~300 tokens): pass task_file: true
                      → brief written to .synapse/tasks/<activityId>.md
                      → worker receives short pointer; reads the file before starting
+                   • NEVER substitute start_activity + send_message for delegate_task —
+                     that breaks source_msg_id, trigger_msg_id, and result_msg_id wiring
 3. Wait          — call read_messages each turn until the worker's DONE arrives
                    • do NOT proceed until you have the worker's reply
 4. git commit    — integrate the worker's diff; post-commit hook closes the activity
@@ -98,7 +100,7 @@ When two or more workers may touch the same files in parallel, isolate each in i
 6. Update PLAN.md if this commit closes or opens a planned item
 ```
 
-For self-driven work (doc edits, investigations you run yourself): use `start_activity` before starting and `finish_activity` after committing. Same commit-before-finish order.
+For self-driven work (doc edits, protocol file updates, investigations the orchestrator runs itself — NOT worker tasks): use `start_activity` before starting and `finish_activity` after committing. Same commit-before-finish order.
 
 **Logging milestones to S-Deck (human, P5):**
 Use `send_message(to_id="human", priority=5)` to log key decisions and progress. Send the full content — not a one-line summary. The human reads the bus, not the terminal.
