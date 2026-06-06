@@ -981,7 +981,8 @@ Describe the role's responsibilities here.
         diffPre.innerHTML = `<span style="color:var(--error)">${esc(err.error ?? 'Failed to load diff')}</span>`;
         return;
       }
-      const { diff } = await res.json();
+      const { diff, subject } = await res.json();
+      diffTitle.textContent = `${sha.slice(0, 7)}  ${subject}`;
       diffPre.innerHTML = renderDiff(diff);
     } catch (e) {
       diffPre.innerHTML = `<span style="color:var(--error)">${esc(String(e))}</span>`;

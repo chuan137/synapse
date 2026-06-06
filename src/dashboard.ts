@@ -512,7 +512,8 @@ app.get('/api/commit/:sha/diff', (req: Request, res: Response) => {
   }
   try {
     const diff = execSync(`git show --stat -p ${sha}`, { encoding: 'utf8' });
-    res.json({ sha, diff });
+    const subject = execSync(`git log -1 --format=%s ${sha}`, { encoding: 'utf8' }).trim();
+    res.json({ sha, subject, diff });
   } catch {
     res.status(404).json({ error: 'commit not found' });
   }
