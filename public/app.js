@@ -623,9 +623,9 @@
         const senderLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}${agent.name && agent.name !== agent.agent_id ? ' ' + agent.name : ''}` : senderId);
         const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
         const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
-        const approveBtn = !fromHuman
+        const approveBtn = (!fromHuman && m.needs_approval)
           ? `<div class="message-actions">
-               <button class="msg-approve-btn" data-to="${esc(m.from_id)}" data-priority="${m.priority}">✓ approve</button>
+               <button class="msg-approve-btn" data-to="${esc(m.from_id)}" data-msg-id="${m.id}" data-priority="${m.priority}">✓ approve</button>
              </div>`
           : '';
         return `

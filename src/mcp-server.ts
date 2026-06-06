@@ -99,7 +99,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         'Send a message to the human operator or another agent. ' +
         'To reach the human operator, set to_id = "human" (this is the correct value, not "synapse" or anything else). ' +
         'To message another agent, use their agent_id. ' +
-        'Keep messages short — the operator is watching multiple agents.',
+        'Keep messages short — the operator is watching multiple agents. ' +
+        'Set needs_approval: true to show an Approve button to the operator on S-Deck.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -120,6 +121,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           report_file: {
             type: 'boolean',
             description: 'If true and to_id is "human", write the full content to .synapse/reports/<timestamp>-<slug>.md and send a truncated summary with the file path instead. Use when the message is longer than ~20 lines.',
+            default: false,
+          },
+          needs_approval: {
+            type: 'boolean',
+            description: 'If true, shows an Approve button on the message in S-Deck. Use when you need explicit operator sign-off before proceeding.',
             default: false,
           },
         },
@@ -397,11 +403,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'send_message') {
-    const { to_id, content, priority = 5, report_file = false } = args as {
+    const { to_id, content, priority = 5, report_file = false, needs_approval = false } = args as {
       to_id: string;
       content: string;
       priority?: number;
       report_file?: boolean;
+      needs_approval?: boolean;
     };
 
     if (report_file && to_id === 'human') {
@@ -413,11 +420,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const lines = content.split('\n');
       const summary = lines.slice(0, 10).join('\n');
       const shortMsg = `${summary}${lines.length > 10 ? '\n…' : ''}\n\n[Full report: .synapse/reports/${filename}]`;
-      sendMessage(AGENT_ID, to_id, shortMsg, priority);
+      sendMessage(AGENT_ID, to_id, shortMsg, priority, needs_approval);
       return { content: [{ type: 'text', text: 'Message sent (report filed).' }] };
     }
 
-    sendMessage(AGENT_ID, to_id, content, priority);
+    sendMessage(AGENT_ID, to_id, content, priority, needs_approval);
 
     return {
       content: [
