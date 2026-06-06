@@ -103,6 +103,26 @@
 
     .dot-label { color: var(--muted); font-size: 11px; }
 
+    /* Header ghost buttons (Roles, theme toggle) */
+    .header-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      font-family: inherit;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
+      align-self: center;
+    }
+    .header-btn:hover {
+      background: color-mix(in srgb, var(--muted) 12%, transparent);
+      color: var(--text);
+    }
+
     /* ── Layout ── */
     main {
       display: grid;
@@ -307,66 +327,184 @@
     .agent-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px 14px;
-      transition: border-color 0.2s, opacity 0.2s;
-      cursor: default;
+      border-radius: 10px;
+      cursor: pointer;
+      position: relative;
+      transition: border-color 0.15s, background 0.15s;
     }
 
-    .agent-card { cursor: pointer; }
-    .agent-card:hover { border-color: var(--accent); }
-    .agent-card.selected {
-      border-color: var(--accent);
-      box-shadow: inset 3px 0 0 var(--accent);
+    .agent-card:hover {
+      background: color-mix(in srgb, var(--muted) 4%, var(--surface));
     }
+    .agent-card.selected {
+      background: color-mix(in srgb, var(--muted) 8%, var(--surface));
+    }
+
+    /* ── Card body padding ── */
+    .agent-card-body {
+      padding: 9px 8px 9px 13px;
+    }
+
+    /* Row 1: slot + name | icon actions */
+    .agent-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .agent-card-identity {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .agent-slot {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+      opacity: 0.7;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+
+    /* Always-visible icon action buttons */
+    .agent-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      flex-shrink: 0;
+    }
+
+    .agent-icon-btn {
+      background: none;
+      border: none;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--muted);
+      font-family: inherit;
+      transition: background 0.12s, color 0.12s;
+      padding: 0;
+    }
+    .agent-icon-btn:hover {
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      color: var(--accent);
+    }
+    .agent-icon-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+    /* Row 2: dot + task text */
+    .agent-state-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 3px;
+    }
+
+    .agent-state-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .agent-state-dot[data-state="working"] { animation: status-pulse 1.4s ease-in-out infinite; }
+    .agent-state-dot[data-state="blocked"] { animation: status-flash 1.8s step-end infinite; }
+
+    .agent-state-task {
+      font-size: 10px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Metrics — hidden by default, visible only on selected card */
+    .agent-metrics {
+      display: none;
+    }
+    .agent-card.selected .agent-metrics {
+      display: flex;
+    }
+
     .agent-card-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
 
+    /* ── Ghost action buttons (focus, ping) ── */
     .surface-btn {
       background: none;
-      border: 1px solid var(--border);
+      border: none;
       color: var(--muted);
       font-size: 10px;
-      padding: 2px 7px;
-      border-radius: 3px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 5px;
       cursor: pointer;
       font-family: inherit;
-      transition: border-color 0.15s, color 0.15s;
+      letter-spacing: 0.02em;
+      transition: background 0.12s, color 0.12s;
       white-space: nowrap;
     }
-    .surface-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .surface-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .surface-btn:hover {
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      color: var(--accent);
+    }
+    .surface-btn:disabled { opacity: 0.28; cursor: not-allowed; }
 
+    /* ── Kebab / more-actions icon button ── */
     .kebab-btn {
       background: none;
-      border: 1px solid var(--border);
+      border: none;
       color: var(--muted);
-      font-size: 14px;
+      font-size: 15px;
       line-height: 1;
-      padding: 1px 6px 3px;
-      border-radius: 3px;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
       cursor: pointer;
       font-family: inherit;
-      transition: border-color 0.15s, color 0.15s;
-      white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
+      padding: 0;
     }
-    .kebab-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .kebab-btn:hover {
+      background: color-mix(in srgb, var(--muted) 14%, transparent);
+      color: var(--text);
+    }
 
+    /* ── Dropdown menu ── */
     .agent-menu {
       position: absolute;
       right: 0;
-      top: calc(100% + 4px);
-      background: var(--surface);
+      top: calc(100% + 6px);
+      background: color-mix(in srgb, var(--surface) 92%, var(--bg));
       border: 1px solid var(--border);
-      border-radius: 5px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      border-radius: 9px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.12);
       z-index: 100;
-      min-width: 110px;
+      min-width: 130px;
       overflow: hidden;
+      padding: 4px;
+      animation: menu-appear 0.12s ease;
     }
+
+    @keyframes menu-appear {
+      from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+      to   { opacity: 1; transform: scale(1)    translateY(0); }
+    }
+
     .agent-menu button {
       display: block;
       width: 100%;
@@ -376,13 +514,34 @@
       color: var(--text);
       font-family: inherit;
       font-size: 12px;
-      padding: 7px 14px;
+      font-weight: 500;
+      padding: 6px 10px;
+      border-radius: 5px;
       cursor: pointer;
       white-space: nowrap;
+      transition: background 0.1s, color 0.1s;
     }
-    .agent-menu button:hover { background: var(--border); color: var(--accent); }
-    .agent-menu button:disabled { opacity: 0.35; cursor: not-allowed; }
-    .agent-menu button.danger:hover { color: var(--error); }
+    .agent-menu button:hover {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent);
+    }
+    .agent-menu button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Danger group separator + red hover */
+    .agent-menu button.danger {
+      color: var(--muted);
+    }
+    .agent-menu button.danger:first-of-type {
+      margin-top: 4px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      border-radius: 0 0 5px 5px;
+    }
+    .agent-menu button.danger:hover {
+      background: color-mix(in srgb, var(--error) 10%, transparent);
+      color: var(--error);
+    }
+
     .agent-menu-wrap {
       position: relative;
       display: inline-block;
@@ -511,15 +670,19 @@
     #roles-new-btn {
       font-family: inherit;
       font-size: 11px;
-      padding: 6px 10px;
-      border-radius: 4px;
+      font-weight: 500;
+      padding: 5px 10px;
+      border-radius: 6px;
       cursor: pointer;
-      border: 1px solid var(--border);
+      border: none;
       background: none;
       color: var(--muted);
-      transition: border-color 0.15s, color 0.15s;
+      transition: background 0.12s, color 0.12s;
     }
-    #roles-new-btn:hover { border-color: var(--accent); color: var(--accent); }
+    #roles-new-btn:hover {
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      color: var(--accent);
+    }
     .roles-editor-pane { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
     #roles-editor-header { font-size: 12px; font-weight: 600; color: var(--text); }
     #roles-editor-header .muted { color: var(--muted); font-weight: 400; }
@@ -546,13 +709,12 @@
 
     .agent-name {
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 600;
       color: var(--text);
       white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;
-      margin-bottom: 4px;
       text-transform: capitalize;
+      text-overflow: ellipsis;
     }
 
     .agent-session {
@@ -723,23 +885,58 @@
       display: inline-block;
     }
 
-    /* Per-agent tool metric chips (inside agent cards) */
+    /* Per-agent tool metric chips — layout + border (visibility controlled above) */
     .agent-metrics {
-      display: flex;
       flex-wrap: wrap;
-      gap: 4px;
-      margin-top: 8px;
+      gap: 3px;
+      padding: 6px 11px 7px 14px;
+      border-top: 1px solid var(--border);
     }
     .metric-chip {
       font-size: 9px;
-      padding: 1px 6px;
-      border-radius: 3px;
-      background: var(--bg);
-      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--muted) 8%, transparent);
       color: var(--muted);
+      border: none;
+      letter-spacing: 0.01em;
     }
     .metric-chip b { color: var(--text); font-weight: 600; }
-    .metric-chip.has-err { border-color: var(--error); color: var(--error); }
+    .metric-chip.has-err {
+      background: color-mix(in srgb, var(--error) 12%, transparent);
+      color: var(--error);
+    }
+
+    /* Fast tooltip — metric chips + icon buttons */
+    .metric-chip[data-tip],
+    .agent-icon-btn[data-tip] {
+      position: relative;
+    }
+    .metric-chip[data-tip]::after,
+    .agent-icon-btn[data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 5px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.08s;
+      z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .metric-chip[data-tip]:hover::after,
+    .agent-icon-btn[data-tip]:hover::after {
+      opacity: 1;
+      transition-delay: 250ms;
+    }
 
     /* ── Messages panel ── */
     #messages-panel {

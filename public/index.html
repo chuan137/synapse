@@ -21,8 +21,8 @@
   <div class="project-name" id="project-name">—</div>
   <div class="dot-label" id="conn-label">connecting…</div>
   <div class="dot" id="conn-dot" style="background: var(--muted); box-shadow: none;"></div>
-  <button id="roles-btn" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:inherit;" title="View and edit worker roles">Roles</button>
-  <button id="theme-btn" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:inherit;" title="Toggle theme">☀</button>
+  <button id="roles-btn" class="header-btn" title="View and edit worker roles">Roles</button>
+  <button id="theme-btn" class="header-btn" title="Toggle theme">☀</button>
 </header>
 
 <main>
@@ -34,7 +34,7 @@
   <section id="agents-panel">
     <div class="panel-header">
       <span>Agents</span>
-      <button id="purge-btn" title="Delete ended agents with no message or tool history" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;align-self:auto;transition:border-color 0.15s,color 0.15s;">tidy</button>
+      <button id="purge-btn" class="surface-btn" title="Delete ended agents with no message or tool history">tidy</button>
     </div>
     <div id="agents-list">
       <div class="empty-state">No agents connected yet.</div>

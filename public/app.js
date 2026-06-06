@@ -155,6 +155,12 @@
       requestAnimationFrame(scrollMessagesToBottom);
     }
 
+    // Preserve open menu across re-renders: SSE ticks destroy innerHTML,
+    // closing any open dropdown. Save the agent ID before, restore after.
+    const openMenuId = [...agentsList.querySelectorAll('.agent-menu')]
+      .find(m => m.style.display !== 'none')
+      ?.id?.replace('menu-', '');
+
     agentsList.innerHTML = agentStatuses.map(a => {
       const selected = a.agent_id === selectedAgentId;
       const cardClass = ['agent-card', selected ? 'selected' : ''].filter(Boolean).join(' ');
@@ -164,36 +170,44 @@
       const stateColor = { idle: 'var(--idle)', working: 'var(--working)', blocked: 'var(--blocked)', error: 'var(--error)' }[a.state] ?? 'var(--muted)';
       const isOrch = a.slot === 0;
       const currentTask = a.current_task ? esc(a.current_task) : '';
+      const stateText = currentTask || a.state;
       return `
-        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}">
-          <div class="agent-card-header">
-            <div class="agent-card-identity">
-              <span class="agent-slot">${esc(slot)}</span>
-              <span class="agent-name">${humanName || 'agent'}</span>
-            </div>
-            <div class="agent-card-actions">
-              <button class="surface-btn focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Focus tmux pane' : 'No tmux pane'}">focus</button>
-              <button class="surface-btn ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} title="${hasTmux ? 'Nudge agent' : 'No tmux pane'}">ping</button>
-              <div class="agent-menu-wrap">
-                <button class="kebab-btn" data-menu-id="${esc(a.agent_id)}" title="More actions">⋮</button>
-                <div class="agent-menu" id="menu-${esc(a.agent_id)}" style="display:none;">
-                  <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
-                  <button class="prompt-item" data-prompt-id="${esc(a.agent_id)}">instructions</button>
-                  ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
-                  ${!isOrch ? `<button class="kill-item danger" data-kill-id="${esc(a.agent_id)}" data-kill-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>kill</button>` : ''}
+        <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" data-state="${esc(a.state)}">
+          <div class="agent-card-body">
+            <div class="agent-card-header">
+              <div class="agent-card-identity">
+                <span class="agent-slot">${esc(slot)}</span>
+                <span class="agent-name">${humanName || 'agent'}</span>
+              </div>
+              <div class="agent-card-actions">
+                <button class="agent-icon-btn focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} data-tip="Focus tmux pane">⊙</button>
+                <button class="agent-icon-btn ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} data-tip="Ping agent">↯</button>
+                <div class="agent-menu-wrap">
+                  <button class="agent-icon-btn kebab-btn" data-menu-id="${esc(a.agent_id)}" data-tip="More actions">⋮</button>
+                  <div class="agent-menu" id="menu-${esc(a.agent_id)}" style="display:none;">
+                    <button class="cfg-item" data-cfg-id="${esc(a.agent_id)}">cfg</button>
+                    <button class="prompt-item" data-prompt-id="${esc(a.agent_id)}">instructions</button>
+                    ${!isOrch ? `<button class="restart-item danger" data-restart-id="${esc(a.agent_id)}" data-restart-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>restart</button>` : ''}
+                    ${!isOrch ? `<button class="kill-item danger" data-kill-id="${esc(a.agent_id)}" data-kill-slot="${a.slot}" ${hasTmux ? '' : 'disabled'}>kill</button>` : ''}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div class="agent-card-state">
-            <span class="agent-state-dot" data-state="${esc(a.state)}" style="background:${stateColor};"></span>
-            <span class="agent-state-label" style="color:${stateColor};">${esc(a.state)}</span>
-            ${currentTask ? `<span class="agent-state-task">· ${currentTask}</span>` : ''}
+            <div class="agent-state-row">
+              <span class="agent-state-dot" data-state="${esc(a.state)}" style="background:${stateColor};"></span>
+              <span class="agent-state-task">${esc(stateText)}</span>
+            </div>
           </div>
           ${renderMetricChips(a.agent_id)}
         </div>
       `;
     }).join('');
+
+    // Restore menu that was open before the re-render
+    if (openMenuId) {
+      const restored = document.getElementById(`menu-${openMenuId}`);
+      if (restored) restored.style.display = 'block';
+    }
 
     // Close all open menus when clicking outside
     function closeAllMenus() {
@@ -325,13 +339,19 @@
 
   // ── Tool metric chips (per agent card) ─────────────────────────────────────
   function renderMetricChips(agentId) {
-    const rows = toolMetrics.filter(m => m.synapse_agent_id === agentId);
+    const rows = toolMetrics
+      .filter(m => m.synapse_agent_id === agentId)
+      .sort((a, b) => b.calls - a.calls);
     if (!rows.length) return '';
     const chips = rows.slice(0, 6).map(m => {
-      const avg = m.avg_ms != null ? ` ${Math.round(m.avg_ms)}ms` : '';
+      // Shorten mcp__server__fn → fn  (keep full name in tooltip)
+      const label = m.tool.startsWith('mcp__')
+        ? m.tool.replace(/^mcp__[^_]+__/, '')
+        : m.tool;
       const cls = m.errors > 0 ? 'metric-chip has-err' : 'metric-chip';
       const errs = m.errors > 0 ? ` ⚠${m.errors}` : '';
-      return `<span class="${cls}" title="${esc(m.tool)}: ${m.calls} calls, ${m.errors} errors${m.avg_ms != null ? ', avg ' + Math.round(m.avg_ms) + 'ms, max ' + Math.round(m.max_ms) + 'ms' : ''}"><b>${esc(m.tool)}</b> ${m.calls}${errs}${avg}</span>`;
+      const tooltip = `${esc(m.tool)}: ${m.calls} calls${m.errors > 0 ? ', ' + m.errors + ' errors' : ''}${m.avg_ms != null ? ', avg ' + Math.round(m.avg_ms) + 'ms' : ''}`;
+      return `<span class="${cls}" data-tip="${tooltip}"><b>${esc(label)}</b> ${m.calls}${errs}</span>`;
     }).join('');
     return `<div class="agent-metrics">${chips}</div>`;
   }
