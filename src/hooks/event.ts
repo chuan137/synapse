@@ -12,7 +12,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { ingestEvent, setLivenessBySession, markAgentEndedBySession, postMilestoneOnce, attachCommitToCurrentActivity, getAgentIdBySession } from '../db.js';
+import { ingestEvent, setLivenessBySession, markAgentEndedBySession, postMilestoneOnce, attachCommitToCurrentTask, getAgentIdBySession } from '../db.js';
 
 const MAX_LEN = 500;
 
@@ -120,7 +120,7 @@ function emitDeterministicMilestones(hookType: string, sessionId: string, payloa
   // Attach the commit SHA to this agent's current in_progress activity (if any).
   const agentId = getAgentIdBySession(sessionId);
   if (agentId) {
-    try { attachCommitToCurrentActivity(agentId, hash); } catch { /* telemetry must not block */ }
+    try { attachCommitToCurrentTask(agentId, hash); } catch { /* telemetry must not block */ }
   }
 }
 

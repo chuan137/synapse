@@ -14,7 +14,7 @@ import {
   getIdleAgentsWithUnreadSignature,
   getRecentEvents,
   getAllToolMetrics,
-  listAllActivities,
+  listAllTasks,
   purgeStaleAgents,
   reapGhostAgents,
   updateAgentConfig,
@@ -69,7 +69,7 @@ function broadcastPlan() {
     approvals: getPendingApprovals(),
     events: getRecentEvents(200),
     metrics: getAllToolMetrics(),
-    activities: listAllActivities(200),
+    tasks: listAllTasks(200),
     plan: currentPlan,
   });
 }
@@ -100,7 +100,7 @@ let lastStatuses   = '';
 let lastMessages   = '';
 let lastApprovals  = '';
 let lastEvents     = '';
-let lastActivities = '';
+let lastTasks      = '';
 let lastPlan       = '';
 
 // agent_id → newest unread message id we've already nudged about (de-dupe).
@@ -112,13 +112,13 @@ setInterval(() => {
   const approvals  = getPendingApprovals();
   const events     = getRecentEvents(200);
   const metrics    = getAllToolMetrics();
-  const activities = listAllActivities(200);
+  const tasks      = listAllTasks(200);
 
   const statusStr     = JSON.stringify(statuses);
   const msgStr        = JSON.stringify(messages.map((m) => m.id));
   const approvalStr   = JSON.stringify(approvals.map((a) => a.id));
   const eventStr      = JSON.stringify(events.map((e) => e.id));
-  const activityStr   = JSON.stringify(activities.map((a) => `${a.id}:${a.status}:${a.commit_sha}`));
+  const taskStr       = JSON.stringify(tasks.map((a) => `${a.id}:${a.status}:${a.commit_sha}`));
   const planStr       = `${currentPlan.updated_at}`;
 
   if (
@@ -126,16 +126,16 @@ setInterval(() => {
     msgStr !== lastMessages ||
     approvalStr !== lastApprovals ||
     eventStr !== lastEvents ||
-    activityStr !== lastActivities ||
+    taskStr !== lastTasks ||
     planStr !== lastPlan
   ) {
     lastStatuses   = statusStr;
     lastMessages   = msgStr;
     lastApprovals  = approvalStr;
     lastEvents     = eventStr;
-    lastActivities = activityStr;
+    lastTasks      = taskStr;
     lastPlan       = planStr;
-    broadcast({ statuses, messages, approvals, events, metrics, activities, plan: currentPlan });
+    broadcast({ statuses, messages, approvals, events, metrics, tasks, plan: currentPlan });
   }
 
   // Nudge is decoupled from the broadcast: it must NOT re-fire on every event/
@@ -320,7 +320,7 @@ app.get('/api/state', (_req: Request, res: Response) => {
     approvals: getPendingApprovals(),
     events: getRecentEvents(200),
     metrics: getAllToolMetrics(),
-    activities: listAllActivities(200),
+    tasks: listAllTasks(200),
     plan: currentPlan,
   });
 });
@@ -479,7 +479,7 @@ app.get('/events', (req: Request, res: Response) => {
     approvals: getPendingApprovals(),
     events: getRecentEvents(200),
     metrics: getAllToolMetrics(),
-    activities: listAllActivities(200),
+    tasks: listAllTasks(200),
     plan: currentPlan,
   });
   res.write(`data: ${initial}\n\n`);

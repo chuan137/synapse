@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startActivity, finishActivity, getMostRecentInProgressActivity } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -262,8 +262,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'start_activity',
       description:
         'Begin tracking a task you\'ve taken on. Call this when you receive a substantive task assignment ' +
-        'from your orchestrator (or, for orchestrators, from the human). The Activity will appear in the ' +
-        'operator\'s S-Deck Activities panel for this agent. Returns an activity_id you must pass to ' +
+        'from your orchestrator (or, for orchestrators, from the human). The Task will appear in the ' +
+        'operator\'s S-Deck Tasks panel for this agent. Returns an activity_id you must pass to ' +
         'finish_activity when done. Skip for trivial back-and-forth — only use for tasks worth a recap entry.',
       inputSchema: {
         type: 'object',
@@ -287,8 +287,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'finish_activity',
       description:
-        'Mark an activity as done. Pass the activity_id from start_activity, status=\'completed\' or \'aborted\', ' +
-        'and optionally result_msg_id (the message id of your DONE/result message — links the activity to its ' +
+        'Mark a task as done. Pass the activity_id from start_activity, status=\'completed\' or \'aborted\', ' +
+        'and optionally result_msg_id (the message id of your DONE/result message — links the task to its ' +
         'resolution in the UI).',
       inputSchema: {
         type: 'object',
@@ -324,7 +324,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           to_id: { type: 'string', description: 'Worker agent_id (e.g. cec50b17:3)' },
-          title: { type: 'string', description: 'One-line activity title (visible in S-Deck Activities tab)' },
+          title: { type: 'string', description: 'One-line task title (visible in S-Deck Tasks tab)' },
           content: { type: 'string', description: 'The full task message body sent to the worker' },
           priority: { type: 'number', enum: [0, 5], default: 5, description: '0 = urgent, 5 = normal' },
           task_file: {
@@ -567,8 +567,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'start_activity') {
     const { title, trigger_msg_id, agent_id } = args as { title: string; trigger_msg_id?: number; agent_id?: string };
-    const activityId = startActivity(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null);
-    return { content: [{ type: 'text', text: `Activity started (id: ${activityId}).` }] };
+    const taskId = startTask(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null);
+    return { content: [{ type: 'text', text: `Task started (id: ${taskId}).` }] };
   }
 
   if (name === 'finish_activity') {
@@ -578,8 +578,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result_msg_id?: number;
       commit_sha?: string;
     };
-    const ok = finishActivity(activity_id, status, result_msg_id ?? null, commit_sha ?? null);
-    return { content: [{ type: 'text', text: ok ? `Activity ${activity_id} marked ${status}.` : `Activity ${activity_id} not found or already finished.` }] };
+    const ok = finishTask(activity_id, status, result_msg_id ?? null, commit_sha ?? null);
+    return { content: [{ type: 'text', text: ok ? `Task ${activity_id} marked ${status}.` : `Task ${activity_id} not found or already finished.` }] };
   }
 
   if (name === 'delegate_task') {
@@ -595,20 +595,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // We need the activityId for the filename, so start the activity with null trigger first,
     // then send the message and record it via the existing trigger_msg_id path.
     if (task_file) {
-      // Start activity without trigger so we have an id for the filename
-      const activityId = startActivity(to_id, title, null);
+      // Start task without trigger so we have an id for the filename
+      const taskId = startTask(to_id, title, null);
       const tasksDir = join(process.cwd(), '.synapse', 'tasks');
       mkdirSync(tasksDir, { recursive: true });
-      writeFileSync(join(tasksDir, `${activityId}.md`), content, 'utf8');
+      writeFileSync(join(tasksDir, `${taskId}.md`), content, 'utf8');
       const lines = content.split('\n');
       const preview = lines.slice(0, 3).join('\n');
-      outboundContent = `Task brief at .synapse/tasks/${activityId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
+      outboundContent = `Task brief at .synapse/tasks/${taskId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
       const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
-      return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${activityId}` }] };
+      return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${taskId}` }] };
     }
     const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
-    const activityId = startActivity(to_id, title, messageId);
-    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${activityId}` }] };
+    const taskId = startTask(to_id, title, messageId);
+    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, activity_id=${taskId}` }] };
   }
 
   if (name === 'report_done') {
@@ -637,11 +637,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         : `DONE — ${content.split('\n')[0]}`);
     }
     sendMessage(AGENT_ID, 'human', humanMsg, 5);
-    const myActivity = getMostRecentInProgressActivity(AGENT_ID);
-    if (myActivity) {
-      finishActivity(myActivity.id, 'completed', orchMsgId, null);
+    const myTask = getMostRecentInProgressTask(AGENT_ID);
+    if (myTask) {
+      finishTask(myTask.id, 'completed', orchMsgId, null);
     }
-    return { content: [{ type: 'text', text: `Reported done. orch_msg=${orchMsgId} activity_closed=${myActivity?.id ?? 'none'}` }] };
+    return { content: [{ type: 'text', text: `Reported done. orch_msg=${orchMsgId} activity_closed=${myTask?.id ?? 'none'}` }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);

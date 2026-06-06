@@ -647,7 +647,7 @@
     .panel-tab.active { color: var(--accent); background: var(--bg); }
 
     /* ── Task activity rows ── */
-    #task-activity-list {
+    #task-list {
       flex: 1;
       overflow-y: auto;
       padding: 8px 10px;
@@ -655,7 +655,7 @@
       flex-direction: column;
       gap: 4px;
     }
-    .task-activity-row {
+    .task-row {
       font-size: 12px;
       padding: 6px 8px;
       border-radius: 5px;
@@ -663,9 +663,9 @@
       background: var(--surface);
       cursor: default;
     }
-    .task-activity-row:hover { border-color: var(--accent); }
-    .task-activity-row.clickable { cursor: pointer; }
-    .task-activity-title {
+    .task-row:hover { border-color: var(--accent); }
+    .task-row.clickable { cursor: pointer; }
+    .task-title {
       font-weight: 600;
       color: var(--text);
       margin-bottom: 3px;
@@ -676,7 +676,7 @@
       align-items: center;
       gap: 5px;
     }
-    .task-activity-meta {
+    .task-meta {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -684,17 +684,17 @@
       color: var(--muted);
       flex-wrap: wrap;
     }
-    .task-activity-status {
+    .task-status {
       font-size: 10px;
       font-weight: 700;
       padding: 1px 5px;
       border-radius: 3px;
       letter-spacing: 0.03em;
     }
-    .task-activity-status.in_progress { background: rgba(250,204,21,0.15); color: var(--working); }
-    .task-activity-status.completed   { background: rgba(74,222,128,0.12); color: var(--idle); }
-    .task-activity-status.aborted     { background: rgba(248,113,113,0.12); color: var(--error); }
-    .task-activity-sha {
+    .task-status.in_progress { background: rgba(250,204,21,0.15); color: var(--working); }
+    .task-status.completed   { background: rgba(74,222,128,0.12); color: var(--idle); }
+    .task-status.aborted     { background: rgba(248,113,113,0.12); color: var(--error); }
+    .task-sha {
       font-family: inherit;
       color: var(--accent);
       opacity: 0.8;
@@ -1023,15 +1023,15 @@ input, select, textarea {
     <div class="panel-header">
       <div class="panel-tabs">
         <button id="tab-events" class="panel-tab active">Events</button>
-        <button id="tab-activities" class="panel-tab">Activities</button>
+        <button id="tab-tasks" class="panel-tab">Tasks</button>
       </div>
       <button id="activity-collapse" class="activity-toggle" title="Hide panel" aria-label="Hide panel"></button>
     </div>
     <div id="activity-list">
       <div class="empty-state">No tool activity yet.</div>
     </div>
-    <div id="task-activity-list" style="display:none;">
-      <div class="empty-state">No activities recorded yet for this agent.</div>
+    <div id="task-list" style="display:none;">
+      <div class="empty-state">No tasks recorded yet for this agent.</div>
     </div>
   </section>
 </main>
@@ -1095,11 +1095,11 @@ input, select, textarea {
   let pendingApprovals = [];
   let recentEvents     = [];
   let toolMetrics      = [];
-  let allActivities    = [];
+  let allTasks         = [];
   let planContent      = '';
   let selectedAgentId  = null;
   let middlePanelTab   = 'messages'; // 'messages' | 'plan'
-  let rightPanelTab    = 'events';   // 'events'   | 'activities'
+  let rightPanelTab    = 'events';   // 'events'   | 'tasks'
 
   // ── Theme ────────────────────────────────────────────────────────────────
   const themeBtn = document.getElementById('theme-btn');
@@ -1158,19 +1158,19 @@ input, select, textarea {
     };
 
     es.onmessage = (e) => {
-      const { statuses, messages, approvals, events, metrics, activities, plan } = JSON.parse(e.data);
+      const { statuses, messages, approvals, events, metrics, tasks, plan } = JSON.parse(e.data);
       agentStatuses    = statuses;
       allMessages      = messages;
       pendingApprovals = approvals ?? [];
       recentEvents     = events ?? [];
       toolMetrics      = metrics ?? [];
-      allActivities    = activities ?? [];
+      allTasks         = tasks ?? [];
       if (plan !== undefined) planContent = plan.content ?? '';
       renderAgents();
       renderMessages();
       renderApprovals();
       renderActivity();
-      if (rightPanelTab === 'activities') renderTaskActivities();
+      if (rightPanelTab === 'tasks') renderTasks();
       if (middlePanelTab === 'plan') renderPlan();
     };
 
@@ -1294,7 +1294,7 @@ input, select, textarea {
         renderAgents();
         renderMessages();
         renderActivity();
-        if (rightPanelTab === 'activities') renderTaskActivities();
+        if (rightPanelTab === 'tasks') renderTasks();
         // Agent switch: leave the scroll position as-is — do not force to bottom.
       });
     });
@@ -1507,39 +1507,39 @@ input, select, textarea {
   tabPlan.addEventListener('click', () => switchMiddleTab('plan'));
 
   // ── Right panel tab switching ────────────────────────────────────────────
-  const tabEvents     = document.getElementById('tab-events');
-  const tabActivities = document.getElementById('tab-activities');
-  const taskActivityList = document.getElementById('task-activity-list');
+  const tabEvents  = document.getElementById('tab-events');
+  const tabTasks   = document.getElementById('tab-tasks');
+  const taskList   = document.getElementById('task-list');
 
   function switchRightTab(tab) {
     rightPanelTab = tab;
     tabEvents.classList.toggle('active', tab === 'events');
-    tabActivities.classList.toggle('active', tab === 'activities');
+    tabTasks.classList.toggle('active', tab === 'tasks');
     activityList.style.display = tab === 'events' ? '' : 'none';
-    taskActivityList.style.display = tab === 'activities' ? '' : 'none';
-    if (tab === 'activities') renderTaskActivities();
+    taskList.style.display = tab === 'tasks' ? '' : 'none';
+    if (tab === 'tasks') renderTasks();
   }
 
   tabEvents.addEventListener('click', () => switchRightTab('events'));
-  tabActivities.addEventListener('click', () => switchRightTab('activities'));
+  tabTasks.addEventListener('click', () => switchRightTab('tasks'));
 
-  // ── Task activities rendering ────────────────────────────────────────────
-  function renderTaskActivities() {
+  // ── Tasks rendering ──────────────────────────────────────────────────────
+  function renderTasks() {
     const sel = agentStatuses.find(a => a.agent_id === selectedAgentId);
     const isOrchestrator = sel?.slot === 0;
     const filtered = (sel && !isOrchestrator)
-      ? allActivities.filter(a => a.agent_id === selectedAgentId)
-      : allActivities;
+      ? allTasks.filter(a => a.agent_id === selectedAgentId)
+      : allTasks;
 
     let html;
     if (!filtered.length) {
-      html = '<div class="empty-state">No activities recorded yet for this agent.</div>';
+      html = '<div class="empty-state">No tasks recorded yet for this agent.</div>';
     } else {
       html = filtered.map(a => {
         const startTime = new Date(a.started_at).toLocaleTimeString([], { hour12: false });
         const endTime = a.finished_at ? new Date(a.finished_at).toLocaleTimeString([], { hour12: false }) : null;
         const duration = a.finished_at ? `${Math.round((a.finished_at - a.started_at) / 1000)}s` : null;
-        const sha = a.commit_sha ? `<span class="task-activity-sha" title="commit ${esc(a.commit_sha)}">${esc(a.commit_sha.slice(0, 7))}</span>` : '';
+        const sha = a.commit_sha ? `<span class="task-sha" title="commit ${esc(a.commit_sha)}">${esc(a.commit_sha.slice(0, 7))}</span>` : '';
         const timeStr = endTime ? `${startTime} → ${endTime}${duration ? ` (${duration})` : ''}` : `${startTime} …`;
         const jumpId = a.result_msg_id ?? a.trigger_msg_id;
         const clickable = jumpId ? 'clickable' : '';
@@ -1548,10 +1548,10 @@ input, select, textarea {
         const slotTag = isOrchestrator && ownerSlot != null
           ? `<span class="activity-slot-tag">:${ownerSlot}</span>`
           : '';
-        return `<div class="task-activity-row ${clickable}" id="act-${a.id}" ${dataJump}>
-          <div class="task-activity-title">${slotTag}${esc(a.title)}</div>
-          <div class="task-activity-meta">
-            <span class="task-activity-status ${a.status}">${a.status.replace('_', ' ')}</span>
+        return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump}>
+          <div class="task-title">${slotTag}${esc(a.title)}</div>
+          <div class="task-meta">
+            <span class="task-status ${a.status}">${a.status.replace('_', ' ')}</span>
             <span>${timeStr}</span>
             ${sha}
           </div>
@@ -1559,10 +1559,10 @@ input, select, textarea {
       }).join('');
     }
 
-    morphdom(taskActivityList, `<div id="task-activity-list">${html}</div>`, { childrenOnly: true });
+    morphdom(taskList, `<div id="task-list">${html}</div>`, { childrenOnly: true });
 
     // Wire click → jump to linked message
-    taskActivityList.querySelectorAll('.task-activity-row.clickable').forEach(row => {
+    taskList.querySelectorAll('.task-row.clickable').forEach(row => {
       row.addEventListener('click', () => {
         const msgId = row.dataset.jumpMsg;
         if (!msgId) return;

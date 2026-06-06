@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { exec, execFileSync, execSync } from 'child_process';
-import { openDb, attachCommitToActivityBySlot } from './db.js';
+import { openDb, attachCommitToTaskBySlot } from './db.js';
 
 /** Strip YAML front-matter (---...---) from a role file before injecting into system prompt. */
 function stripFrontMatter(content: string): string {
@@ -419,13 +419,13 @@ function slotFromSlug(name: string): number | null {
 function attachMergeCommit(root: string, name: string): void {
   const slot = slotFromSlug(name);
   if (slot === null) {
-    process.stderr.write(`[worktree merge] could not parse slot from slug "${name}" — skipping activity attach\n`);
+    process.stderr.write(`[worktree merge] could not parse slot from slug "${name}" — skipping task attach\n`);
     return;
   }
   try {
     const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-    const ok = attachCommitToActivityBySlot(slot, headSha);
-    if (ok) process.stderr.write(`[worktree merge] attached ${headSha.slice(0, 7)} to slot :${slot} activity\n`);
+    const ok = attachCommitToTaskBySlot(slot, headSha);
+    if (ok) process.stderr.write(`[worktree merge] attached ${headSha.slice(0, 7)} to slot :${slot} task\n`);
   } catch (e) {
     process.stderr.write(`[worktree merge] activity attach failed: ${e}\n`);
   }

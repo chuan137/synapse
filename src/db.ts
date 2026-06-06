@@ -485,9 +485,9 @@ export function getAgentBySlot(slot: number): AgentStatus | null {
   ).get(slot) ?? null;
 }
 
-// ── Activities ─────────────────────────────────────────────────────────────
+// ── Tasks ─────────────────────────────────────────────────────────────────
 
-export interface Activity {
+export interface Task {
   id: number;
   agent_id: string;
   title: string;
@@ -499,7 +499,7 @@ export interface Activity {
   commit_sha: string | null;
 }
 
-export function startActivity(
+export function startTask(
   agentId: string,
   title: string,
   triggerMsgId: number | null,
@@ -511,8 +511,8 @@ export function startActivity(
   return Number(result.lastInsertRowid);
 }
 
-export function finishActivity(
-  activityId: number,
+export function finishTask(
+  taskId: number,
   status: 'completed' | 'aborted',
   resultMsgId: number | null,
   commitSha: string | null,
@@ -524,11 +524,11 @@ export function finishActivity(
            result_msg_id = COALESCE(?, result_msg_id),
            commit_sha    = COALESCE(?, commit_sha)
      WHERE id = ? AND status != 'aborted'
-  `).run(status, Date.now(), resultMsgId, commitSha, activityId);
+  `).run(status, Date.now(), resultMsgId, commitSha, taskId);
   return r.changes > 0;
 }
 
-export function getMostRecentInProgressActivity(agentId: string): { id: number } | null {
+export function getMostRecentInProgressTask(agentId: string): { id: number } | null {
   return db.prepare<[string], { id: number }>(`
     SELECT id FROM activities
      WHERE agent_id = ? AND status = 'in_progress'
@@ -537,11 +537,11 @@ export function getMostRecentInProgressActivity(agentId: string): { id: number }
 }
 
 /**
- * Attach a commit SHA to the most recent in-progress activity that has no commit yet,
- * and mark it completed. Prefers activities recorded for the committing agent, falls
- * back to the most recently started in-progress activity across all agents.
+ * Attach a commit SHA to the most recent in-progress task that has no commit yet,
+ * and mark it completed. Prefers tasks recorded for the committing agent, falls
+ * back to the most recently started in-progress task across all agents.
  */
-export function attachCommitToCurrentActivity(agentId: string, commitSha: string): boolean {
+export function attachCommitToCurrentTask(agentId: string, commitSha: string): boolean {
   const r = db.prepare(`
     UPDATE activities
        SET commit_sha  = ?,
@@ -557,12 +557,12 @@ export function attachCommitToCurrentActivity(agentId: string, commitSha: string
 }
 
 /**
- * Attach a commit_sha to the most recent in_progress activity owned by the worker at
+ * Attach a commit_sha to the most recent in_progress task owned by the worker at
  * the given slot, and mark it completed. Used by `synapse worktree merge` to link the
- * integration commit to the worker's activity. Returns true if a row was updated, false
- * if the slot has no agent or no matching in_progress activity.
+ * integration commit to the worker's task. Returns true if a row was updated, false
+ * if the slot has no agent or no matching in_progress task.
  */
-export function attachCommitToActivityBySlot(slot: number, commitSha: string): boolean {
+export function attachCommitToTaskBySlot(slot: number, commitSha: string): boolean {
   const agent = getAgentBySlot(slot);
   if (!agent) return false;
   const r = db.prepare(`
@@ -579,8 +579,8 @@ export function attachCommitToActivityBySlot(slot: number, commitSha: string): b
   return r.changes > 0;
 }
 
-export function listActivitiesForAgent(agentId: string, limit = 100): Activity[] {
-  return db.prepare<[string, number], Activity>(`
+export function listTasksForAgent(agentId: string, limit = 100): Task[] {
+  return db.prepare<[string, number], Task>(`
     SELECT * FROM activities
     WHERE agent_id = ?
     ORDER BY started_at DESC
@@ -588,8 +588,8 @@ export function listActivitiesForAgent(agentId: string, limit = 100): Activity[]
   `).all(agentId, limit);
 }
 
-export function listAllActivities(limit = 200): Activity[] {
-  return db.prepare<[number], Activity>(`
+export function listAllTasks(limit = 200): Task[] {
+  return db.prepare<[number], Task>(`
     SELECT * FROM activities
     ORDER BY started_at DESC
     LIMIT ?
