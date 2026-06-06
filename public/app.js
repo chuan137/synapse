@@ -431,6 +431,7 @@
 
   tabEvents.addEventListener('click', () => switchRightTab('events'));
   tabTasks.addEventListener('click', () => switchRightTab('tasks'));
+  switchRightTab('tasks');   // initialize to default
 
   // ── Tasks rendering ──────────────────────────────────────────────────────
   function renderTasks() {
