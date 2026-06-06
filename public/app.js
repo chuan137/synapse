@@ -619,18 +619,29 @@
   // Delegated approve button handler — wired once, not inside renderMessages
   messagesList.addEventListener('click', async (e) => {
     const btn = e.target.closest('.msg-approve-btn');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = '✓ approved';
-    const input = btn.closest('.message-actions').querySelector('.approval-reply-input');
-    const replyText = input ? input.value.trim() : '';
-    await fetch(`/api/messages/${btn.dataset.msgId}/approve`, { method: 'POST' });
-    if (replyText) {
-      await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_id: btn.dataset.fromId, content: replyText, priority: Number(btn.dataset.priority) }),
-      });
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '✓ approved';
+      await fetch(`/api/messages/${btn.dataset.msgId}/approve`, { method: 'POST' });
+      return;
+    }
+    const optBtn = e.target.closest('.msg-option-btn');
+    if (optBtn) {
+      const { msgId, optionIndex, fromId, priority } = optBtn.dataset;
+      optBtn.closest('.message-actions').querySelectorAll('.msg-option-btn').forEach(b => b.disabled = true);
+      optBtn.classList.add('selected');
+      await Promise.all([
+        fetch(`/api/messages/${msgId}/select-option`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ option_index: parseInt(optionIndex, 10) }),
+        }),
+        fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to_id: fromId, content: optBtn.textContent, priority: parseInt(priority, 10) }),
+        }),
+      ]);
     }
   });
 
@@ -663,9 +674,23 @@
         const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
         const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
         const approveBtn = (!fromHuman && m.needs_approval)
-          ? (m.approved_at
-              ? `<div class="message-actions"><span class="msg-approved-badge">✓ approved</span></div>`
-              : `<div class="message-actions"><input class="approval-reply-input" type="text" placeholder="reply (optional)" /><button class="msg-approve-btn" data-msg-id="${m.id}" data-from-id="${m.from_id}" data-priority="${m.priority}">✓ approve</button></div>`)
+          ? (() => {
+              if (m.approved_at !== null && m.approved_at !== undefined) {
+                const opts = m.request_options ? JSON.parse(m.request_options) : null;
+                const badge = (opts && m.selected_option != null)
+                  ? `<span class="msg-approved-badge">✓ ${esc(opts[m.selected_option])}</span>`
+                  : `<span class="msg-approved-badge">✓ approved</span>`;
+                return `<div class="message-actions">${badge}</div>`;
+              }
+              const opts = m.request_options ? JSON.parse(m.request_options) : null;
+              if (opts && opts.length > 0) {
+                const btns = opts.map((opt, i) =>
+                  `<button class="msg-option-btn" data-msg-id="${m.id}" data-option-index="${i}" data-from-id="${esc(m.from_id)}" data-priority="${m.priority}">${esc(opt)}</button>`
+                ).join('');
+                return `<div class="message-actions message-options">${btns}</div>`;
+              }
+              return `<div class="message-actions"><button class="msg-approve-btn" data-msg-id="${m.id}">✓ approve</button></div>`;
+            })()
           : '';
         return `
           <div id="msg-${m.id}" class="message-row ${cls}">

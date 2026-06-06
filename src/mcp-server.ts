@@ -103,7 +103,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         'To reach the human operator, set to_id = "human" (this is the correct value, not "synapse" or anything else). ' +
         'To message another agent, use their agent_id. ' +
         'Keep messages short — the operator is watching multiple agents. ' +
-        'Set needs_approval: true to show an Approve button to the operator on S-Deck.',
+        'Set needs_approval: true to show an Approve button to the operator on S-Deck. ' +
+        'Use request_options to present clickable choices when the operator must pick one of several options (requires needs_approval: true).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -130,6 +131,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'boolean',
             description: 'Required when to_id is "human". Set true if this message requires operator action (shows an Approve button in S-Deck); set false for informational messages.',
             default: false,
+          },
+          request_options: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional list of choices to present to the operator as clickable buttons. Use when the message requires the operator to pick one of several options. Requires needs_approval: true.',
           },
         },
         required: ['to_id', 'content'],
@@ -404,12 +410,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'send_message') {
-    const { to_id, content, priority = 5, report_file = false, needs_approval = false } = args as {
+    const { to_id, content, priority = 5, report_file = false, needs_approval = false, request_options } = args as {
       to_id: string;
       content: string;
       priority?: number;
       report_file?: boolean;
       needs_approval?: boolean;
+      request_options?: string[];
     };
 
     if (report_file && to_id === 'human') {
@@ -421,11 +428,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const lines = content.split('\n');
       const summary = lines.slice(0, 10).join('\n');
       const shortMsg = `${summary}${lines.length > 10 ? '\n…' : ''}\n\n[Full report: .synapse/reports/${filename}]`;
-      sendMessage(AGENT_ID, to_id, shortMsg, priority, needs_approval);
+      sendMessage(AGENT_ID, to_id, shortMsg, priority, needs_approval, request_options);
       return { content: [{ type: 'text', text: 'Message sent (report filed).' }] };
     }
 
-    sendMessage(AGENT_ID, to_id, content, priority, needs_approval);
+    sendMessage(AGENT_ID, to_id, content, priority, needs_approval, request_options);
 
     return {
       content: [

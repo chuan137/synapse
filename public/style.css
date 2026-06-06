@@ -1315,16 +1315,7 @@ input, select, textarea {
 
     /* ── Approve quick-reply button ── */
     .message-actions { margin-top: 6px; display: flex; align-items: center; gap: 6px; }
-    .approval-reply-input {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 3px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      width: 120px;
-      font-family: inherit;
-    }
+    .message-options { flex-wrap: wrap; gap: 4px; }
     .msg-approve-btn {
       font-size: 10px;
       padding: 2px 8px;
@@ -1340,6 +1331,20 @@ input, select, textarea {
     .msg-approve-btn:hover:not(:disabled) { border-color: var(--idle); color: var(--idle); opacity: 1; }
     .msg-approve-btn:disabled { opacity: 0.5; cursor: default; }
     .msg-approved-badge { font-size: 10px; color: var(--muted); opacity: 0.6; }
+    .msg-option-btn {
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .msg-option-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .msg-option-btn.selected { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .msg-option-btn:disabled { opacity: 0.5; cursor: default; }
 
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 5px; }

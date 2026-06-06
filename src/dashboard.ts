@@ -9,6 +9,7 @@ import {
   getRecentMessages,
   sendMessage,
   approveMessage,
+  selectOption,
   getTmuxPane,
   getPendingApprovals,
   resolveApproval,
@@ -383,6 +384,14 @@ app.post('/api/messages/:id/approve', (req: Request, res: Response) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }
   approveMessage(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/messages/:id/select-option', (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }
+  const { option_index } = req.body as { option_index: number };
+  selectOption(id, option_index);
   res.json({ ok: true });
 });
 

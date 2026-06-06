@@ -84,6 +84,18 @@ async function guard(payload: any): Promise<void> {
         'Set needs_approval: true if this message requires operator action, or needs_approval: false for informational messages.'
       );
     }
+
+    // If needs_approval and content looks like an option list, require request_options
+    const needsApproval = input.needs_approval === true;
+    const content = String(input.content ?? '');
+    const hasOptions = Array.isArray(input.request_options) && input.request_options.length > 0;
+    if (toId === 'human' && needsApproval && !hasOptions && looksLikeOptionList(content)) {
+      return deny(
+        'This message presents options to the human but request_options is not set. ' +
+        'Pass request_options: ["option 1 text", "option 2 text"] so the operator sees clickable buttons.'
+      );
+    }
+
     return allow();
   }
 
@@ -116,6 +128,10 @@ async function guard(payload: any): Promise<void> {
     }
   }
   return deny('No operator response within 10 minutes — blocked by Synapse guard (fail-safe).');
+}
+
+function looksLikeOptionList(content: string): boolean {
+  return /^\s*\d+[.)]/m.test(content) || /^[-•]\s/m.test(content);
 }
 
 function guardReason(tool: string, input: any): string | null {
