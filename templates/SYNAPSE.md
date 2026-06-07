@@ -26,9 +26,7 @@ Synapse is a human-in-the-loop observation layer. A human operator watches all a
 **Rule 1 — Read before you act, and reply through the bus**
 At the start of every turn, call `read_messages` first. P0 messages are urgent — handle them immediately before anything else.
 
-**Every question from `human` MUST be answered with `send_message(to_id="human", ...)`.** This applies regardless of how the question reached you — via `read_messages`, as the current CLI prompt, or any other channel. The operator watches the S-Deck dashboard, not your transcript; terminal/assistant output is **not** delivered. If you only printed the answer locally, the operator received nothing — the question is unanswered.
-
-Match priority to the request (P0 question → P0 reply). Mirror the answer in terminal output if you like, but the `send_message` call is the required delivery. `update_status` reports state — it is **not** a reply. The same rule applies to questions from other agents: reply to their agent ID via `send_message`.
+**Every question from `human` or another agent MUST be answered via `send_message` — the operator reads the bus, not your terminal.** Match priority to the request (P0 question → P0 reply). `update_status` reports state; it is not a reply.
 
 **Send the full answer, not a summary.** When responding to the human, the `send_message` content should be your complete response — the same text you would write in the terminal. Do not compress a multi-paragraph plan into a one-liner for the bus. The operator reads the bus message, not the terminal.
 
