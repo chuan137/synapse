@@ -501,6 +501,20 @@ app.get('/api/proposals', (_req: Request, res: Response) => {
   res.json(proposals);
 });
 
+app.post('/api/proposals/generate', async (req: Request, res: Response) => {
+  const { metric } = req.body as { metric: string };
+  if (!metric) { res.status(400).json({ error: 'metric required' }); return; }
+
+  const { spawnProposalSession } = await import('./eval/propose.js');
+  const { getFailedTasksForMetric } = await import('./db.js');
+
+  const failedIds = getFailedTasksForMetric(metric, 1);
+  const triggerTaskId = failedIds[0] ?? 0;
+
+  spawnProposalSession(triggerTaskId, metric);
+  res.json({ ok: true, message: `Spawning proposal session for metric: ${metric}` });
+});
+
 app.post('/api/proposals/:filename/gate', (req: Request, res: Response) => {
   const filename = String(req.params.filename);
   const proposalPath = join(PROPOSALS_DIR, filename);

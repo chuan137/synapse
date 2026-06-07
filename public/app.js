@@ -505,7 +505,13 @@
       ${METRICS.map(m => {
         const count = counts[m] ?? 0;
         const color = count >= THRESHOLD ? 'var(--p0)' : count >= 2 ? 'var(--warn)' : 'var(--muted)';
-        return `<div class="eval-counter"><span style="color:${color}">${m}: ${count}/${THRESHOLD}</span></div>`;
+        const btn = count >= THRESHOLD
+          ? `<button class="btn-gen-proposal" data-metric="${esc(m)}" style="margin-left:6px;font-size:9px;padding:1px 6px">Generate proposal</button>`
+          : '';
+        return `<div class="eval-counter" style="display:flex;align-items:center;gap:4px">
+          <span style="color:${color}">${m}: ${count}/${THRESHOLD}</span>
+          ${btn}
+        </div>`;
       }).join('')}
     </div>`;
 
@@ -572,6 +578,24 @@
       status.textContent = 'Starting…';
       await fetch('/api/eval/run', { method: 'POST' });
       status.textContent = 'Loop started — re-run eval to see updated results';
+    });
+
+    el.querySelectorAll('.btn-gen-proposal').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const metric = btn.dataset.metric;
+        btn.disabled = true;
+        btn.textContent = 'Spawning…';
+        try {
+          await fetch('/api/proposals/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ metric }),
+          });
+          btn.textContent = 'Spawned ✓';
+        } catch {
+          btn.textContent = 'Error';
+        }
+      });
     });
 
     document.getElementById('proposals-list').addEventListener('click', async (e) => {

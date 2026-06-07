@@ -589,7 +589,6 @@ program
       // Single-task mode: fetch, score, persist, print
       const taskId = parseInt(options.taskId, 10);
       const { writeEvalResults, checkAndResetMetricThreshold } = await import('./db.js');
-      const { spawnProposalSession } = await import('./eval/propose.js');
       process.stdout.write(`Evaluating task #${taskId}...\n`);
       const singleCases = extractCases(dbPath, casesDir, 1, taskId);
       if (singleCases.length === 0) {
@@ -613,8 +612,7 @@ program
         if (!r.passed) {
           const triggered = checkAndResetMetricThreshold(r.metric);
           if (triggered) {
-            await spawnProposalSession(taskId, r.metric);
-            process.stdout.write(`  → threshold reached for ${r.metric}, spawned proposal session\n`);
+            process.stdout.write(`  ⚠ threshold reached for metric: ${r.metric} — click "Generate proposal" in S-Deck Eval tab\n`);
           }
         }
       }

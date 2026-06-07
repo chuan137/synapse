@@ -37,7 +37,11 @@ export async function spawnProposalSession(triggerTaskId: number, triggerMetric:
 
   const handoverContent = `# Rule Improvement Request: ${triggerMetric} failures
 
-You are a Synapse protocol critic. The orchestrator protocol has produced 3 consecutive failures
+## Why this proposal was triggered
+The metric **${triggerMetric}** has accumulated ${failedTaskIds.length} consecutive failures since the last protocol update.
+This proposal should focus specifically on fixing this metric. Do not address other metrics.
+
+You are a Synapse protocol critic. The orchestrator protocol has produced consecutive failures
 on the **${triggerMetric}** metric.
 
 ## Trigger metric: ${triggerMetric}
