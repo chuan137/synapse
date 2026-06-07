@@ -38,10 +38,18 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
   // Write a launcher script — cd to project dir, run worker with task
   const launchScript = join(tmpDir, 'launch.sh');
   const slotArg = slot !== undefined ? ` --slot ${slot}` : '';
+  const ENV_VARS_TO_FORWARD = [
+    'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN',
+    'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS',
+  ];
+  const envLines = ENV_VARS_TO_FORWARD
+    .filter(k => process.env[k])
+    .map(k => `export ${k}=${JSON.stringify(process.env[k])}`);
   writeFileSync(launchScript, [
     '#!/bin/sh',
     `cd ${JSON.stringify(projectDir)}`,
     `export SYNAPSE_DB_PATH=${JSON.stringify(dbPath)}`,
+    ...envLines,
     `synapse run --role ${JSON.stringify(role)}${slotArg} --task-file ${JSON.stringify(taskFile)}`,
   ].join('\n') + '\n', 'utf8');
   chmodSync(launchScript, 0o755);
