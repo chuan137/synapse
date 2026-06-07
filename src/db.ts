@@ -983,6 +983,7 @@ export interface EvalResultRow {
 export function writeEvalResults(
   taskId: number,
   results: EvalResultRow[],
+  incrementCounters = false,
 ): void {
   const now = Date.now();
   const insert = db.prepare(`
@@ -997,7 +998,7 @@ export function writeEvalResults(
   const tx = db.transaction(() => {
     for (const r of results) {
       insert.run(taskId, r.metric, r.passed ? 1 : 0, r.value ?? null, now);
-      if (!r.passed) upsertCount.run(r.metric, now);
+      if (!r.passed && incrementCounters) upsertCount.run(r.metric, now);
     }
   });
   tx();

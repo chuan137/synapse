@@ -607,7 +607,7 @@ program
         { metric: 'duration', passed: (result.metrics.duration_ms ?? 0) <= 120_000, value: result.metrics.duration_ms },
         { metric: 'has_commit', passed: result.metrics.has_commit, value: null },
       ];
-      writeEvalResults(taskId, evalRows);
+      writeEvalResults(taskId, evalRows, true);
       for (const r of evalRows) {
         if (!r.passed) {
           const triggered = checkAndResetMetricThreshold(r.metric);
@@ -624,6 +624,13 @@ program
     }
 
     process.stdout.write(`Extracting last ${limit} completed trajectory cases...\n`);
+    // Clear stale case files so evaluateCases only scores this run's tasks
+    const { readdirSync: readDir, rmSync } = await import('fs');
+    if (existsSync(casesDir)) {
+      for (const f of readDir(casesDir).filter((f: string) => f.endsWith('.json'))) {
+        rmSync(join(casesDir, f));
+      }
+    }
     extractCases(dbPath, casesDir, limit);
 
     process.stdout.write('\nEvaluating trajectories...\n');
