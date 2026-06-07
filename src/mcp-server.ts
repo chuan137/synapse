@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -580,8 +580,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       child.unref();
     }
     // Auto-restart after AUTO_RESTART_AFTER_TASKS completed tasks
-    const AUTO_RESTART_AFTER_TASKS = parseInt(process.env.SYNAPSE_AUTO_RESTART_TASKS ?? '5', 10);
-    if (!isNaN(AUTO_RESTART_AFTER_TASKS) && AUTO_RESTART_AFTER_TASKS > 0 && status === 'completed') {
+    const settings = readSynapseSettings();
+    const AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number' ? settings.autoRestartTasks : 5;
+    if (AUTO_RESTART_AFTER_TASKS > 0 && status === 'completed') {
       const sessionStart = getAgentSessionStart(AGENT_ID);
       if (sessionStart) {
         const completedCount = countCompletedTasksForAgent(AGENT_ID, sessionStart);

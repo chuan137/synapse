@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'node:child_process';
@@ -1103,4 +1103,12 @@ export function countCompletedTasksForAgent(agentId: string, since: number): num
 export function getAgentSessionStart(agentId: string): number | null {
   const row = db.prepare('SELECT updated_at FROM agent_status WHERE agent_id = ?').get(agentId) as { updated_at: number } | null;
   return row?.updated_at ?? null;
+}
+
+export function readSynapseSettings(): Record<string, unknown> {
+  const settingsPath = join(process.cwd(), '.synapse', 'settings.json');
+  try {
+    if (existsSync(settingsPath)) return JSON.parse(readFileSync(settingsPath, 'utf8'));
+  } catch {}
+  return {};
 }

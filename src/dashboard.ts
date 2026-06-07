@@ -658,7 +658,8 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
 
   const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
   const workerRole = role ?? 'worker';
-  const AUTO_RESTART_AFTER_TASKS = parseInt(process.env.SYNAPSE_AUTO_RESTART_TASKS ?? '5', 10);
+  const settings = readSettings();
+  const AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number' ? settings.autoRestartTasks : 5;
 
   // Fetch last DONE message for this agent to use as handover context
   const lastDone = db.prepare(
