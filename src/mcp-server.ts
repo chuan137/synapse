@@ -362,9 +362,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'report_done',
       description:
-        'Wrap up a task you finished. Sends the full DONE message to the orchestrator, posts a one-liner milestone to human, ' +
-        'and closes your most recent in-progress task. ' +
-        'Replaces the previous send_message + send_message + finish_task sequence.',
+        'Wrap up a task you finished. Sends the full DONE message to the orchestrator and posts a one-liner milestone to human. ' +
+        'The orchestrator closes the task via finish_task after committing. ' +
+        'Replaces the previous send_message + send_message sequence.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -673,11 +673,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         : `DONE — ${content.split('\n')[0]}`);
     }
     sendMessage(AGENT_ID, 'human', humanMsg, 5);
-    const myTask = getMostRecentInProgressTask(AGENT_ID);
-    if (myTask) {
-      finishTask(myTask.id, 'completed', orchMsgId, null);
-    }
-    return { content: [{ type: 'text', text: `Reported done. orch_msg=${orchMsgId} activity_closed=${myTask?.id ?? 'none'}` }] };
+    return { content: [{ type: 'text', text: `Reported done. orch_msg=${orchMsgId}` }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);
