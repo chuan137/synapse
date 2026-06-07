@@ -1243,34 +1243,32 @@ input, select, textarea {
     /* ── Agent status row (bottom of message list) ── */
     #msg-status-row {
       display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 16px;
+      flex-direction: row;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 6px 12px 8px 28px;
       flex-shrink: 0;
-      border-top: 1px solid var(--border);
+      opacity: 0.55;
+      max-height: 50px;
+      overflow: hidden;
+      transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
     }
 
-    .msg-status-line {
-      flex: 1;
-      height: 1px;
-      background: linear-gradient(to var(--dir, right), transparent, var(--border));
+    #msg-status-row.status-hidden {
+      max-height: 0;
+      opacity: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      pointer-events: none;
     }
-    .msg-status-line:first-child { --dir: right; }
-    .msg-status-line:last-child  { --dir: left; }
 
-    .msg-status-badge {
+    .msg-status-content {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 11px;
-      font-weight: 500;
+      font-size: 12px;
       color: var(--muted);
-      white-space: nowrap;
-      padding: 3px 9px;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      letter-spacing: 0.01em;
+      padding-top: 6px;
     }
 
     .msg-status-dot {
@@ -1304,11 +1302,7 @@ input, select, textarea {
     }
 
     .msg-status-task {
-      color: var(--muted);
-      opacity: 0.75;
-      max-width: 240px;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      opacity: 0.8;
     }
 
     .msg-status-sep {

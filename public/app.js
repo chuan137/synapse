@@ -698,11 +698,11 @@
   setInterval(renderAgents, 5_000);
 
   // ── Status row (pinned below message list) ────────────────────────────────
-  const msgStatusRow   = document.getElementById('msg-status-row');
-  const msgStatusDot   = document.getElementById('msg-status-dot');
-  const msgStatusState = document.getElementById('msg-status-state');
-  const msgStatusSep   = document.getElementById('msg-status-sep');
-  const msgStatusTask  = document.getElementById('msg-status-task');
+  const msgStatusRow    = document.getElementById('msg-status-row');
+  const msgStatusDot    = document.getElementById('msg-status-dot');
+  const msgStatusState  = document.getElementById('msg-status-state');
+  const msgStatusSep    = document.getElementById('msg-status-sep');
+  const msgStatusTask   = document.getElementById('msg-status-task');
 
   function renderStatusRow() {
     const agent = agentStatuses.find(a => a.agent_id === selectedAgentId);
@@ -730,6 +730,7 @@
   messagesList.addEventListener('scroll', () => {
     const nearBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 50;
     userScrolledUp = !nearBottom;
+    msgStatusRow.classList.toggle('status-hidden', !nearBottom);
   });
 
   // Delegated approve button handler — wired once, not inside renderMessages
