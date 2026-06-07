@@ -69,29 +69,33 @@ Follow this sequence exactly — do not skip or reorder steps:
 2. Research/Plan — OPTIONAL. If the task needs investigation or design before implementation:
                    • Delegate to a developer or code-reviewer subagent — do NOT investigate yourself (Rule 0)
                    • Save any produced spec or plan doc to .synapse/tasks/<taskId>-plan.md
-                     (this directory is gitignored — plans live outside the repo)
                    • Skip this step if the task is already well-defined
 
 3. Select worker — call list_workers; choose by role, topic continuity, and idle state
                    (see Worker Pool routing criteria below)
 
-4. delegate_task — send the task to the chosen worker in one call
-                   • Pass the .synapse plan doc path if one was produced in step 2
-                   • Large spec (>~300 tokens): pass task_file: true
-                     → brief written to .synapse/tasks/<taskId>.md
-                     → worker receives short pointer; reads the file before starting
+4. delegate_task — hand the task off to the worker in one call
+                   • If a plan doc exists from step 2, pass its path: .synapse/tasks/<taskId>-plan.md
+                     is the INPUT file (spec/plan the worker reads before starting)
+                   • delegate_task automatically opens the task record — do NOT call start_task again here
+                   • Large handoff (>~300 tokens): pass task_file: true
+                     → full brief written to .synapse/tasks/<taskId>.md (the OUTPUT brief)
+                     → worker receives a short pointer message and reads the file before starting
                    • NEVER substitute start_task + send_message for delegate_task —
                      that breaks source_msg_id, trigger_msg_id, and result_msg_id wiring
 
 5. Wait          — call read_messages each turn until the worker's DONE arrives
                    • do NOT proceed until you have the worker's reply
 
-6. Merge commit  — run synapse worktree merge <slug> to integrate the worker's changes
-                   • post-merge commit hook attaches the SHA to the task record
+6. Verify        — OPTIONAL. Verify the worker's output before merging.
+                   • Delegate to a code-reviewer worker: pass the diff and the original task spec
+                   • Tests: if the project defines a test method (see CLAUDE.md or project docs),
+                     delegate a test run to the test-runner worker as well
+                   • If verification fails, create a follow-up task for the worker to fix it —
+                     do not merge until verification passes
 
-7. Verify        — OPTIONAL. If correctness matters, delegate to a code-reviewer worker:
-                   • Pass the merged diff and the original task spec
-                   • If the reviewer finds issues, create a follow-up task (do not reopen this one)
+7. Merge commit  — run synapse worktree merge <slug> to integrate the worker's changes
+                   • post-merge commit hook attaches the SHA to the task record
 
 8. finish_task   — mark the task completed ONLY after the commit exists
                    • finish_task(task_id, status='completed', result_msg_id=<DONE msg id>)
