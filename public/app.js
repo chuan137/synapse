@@ -499,9 +499,6 @@
       fetch('/api/proposals').then(r => r.json()),
     ]);
 
-    const failed = liveResults.filter(r => !r.pass);
-    const passed = liveResults.filter(r => r.pass);
-
     const METRICS = ['traceability', 'tool_calls', 'duration', 'has_commit'];
     const THRESHOLD = 3;
     const counterHtml = `<div class="eval-counters">
@@ -512,25 +509,20 @@
       }).join('')}
     </div>`;
 
-    const failedHtml = failed.map(r => `
-      <div class="eval-row eval-fail">
+    const rowsHtml = liveResults.map(r => {
+      const failedMetrics = r.metrics.filter(m => !m.passed);
+      return `<div class="eval-row ${r.pass ? 'eval-pass' : 'eval-fail'}">
         <div class="eval-row-header">
           <span class="eval-id">#${r.task_id}</span>
-          <span class="eval-label bad">FAIL</span>
+          <span class="eval-label ${r.pass ? 'good' : 'bad'}">${r.pass ? 'PASS' : 'FAIL'}</span>
           <span style="font-size:9px;color:var(--muted)">${new Date(r.created_at).toLocaleTimeString([], {hour12:false})}</span>
         </div>
         <div class="eval-title">${esc(r.title.slice(0, 55))}</div>
-        <div class="eval-failures">${r.metrics.filter(m => !m.passed).map(m =>
+        ${failedMetrics.length ? `<div class="eval-failures">${failedMetrics.map(m =>
           `<span class="eval-chip">${esc(m.metric)}=${m.value ?? '✗'}</span>`
-        ).join('')}</div>
-      </div>`).join('');
-
-    const passedHtml = passed.map(r => `
-      <div class="eval-row eval-pass">
-        <span class="eval-id">#${r.task_id}</span>
-        <span class="eval-label good">PASS</span>
-        <span class="eval-title-inline">${esc(r.title.slice(0, 45))}</span>
-      </div>`).join('');
+        ).join('')}</div>` : ''}
+      </div>`;
+    }).join('');
 
     const proposalsHtml = proposals.length === 0
       ? '<div style="color:var(--muted);font-size:11px">No proposals yet.</div>'
@@ -567,10 +559,8 @@
         <span id="eval-run-status" style="font-size:10px;color:var(--muted);margin-left:8px"></span>
       </div>
       ${counterHtml}
-      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Failed (${failed.length})</div>
-      ${failedHtml}
-      <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Passed (${passed.length})</div>
-      ${passedHtml}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Recent evals (${liveResults.length})</div>
+      ${rowsHtml}
       <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Proposals (${proposals.length})</div>
       <div id="proposals-list">${proposalsHtml}</div>
     `;

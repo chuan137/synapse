@@ -1023,7 +1023,12 @@ export function getAllEvalResults(): {
            er.metric, er.passed, er.value, er.created_at
     FROM eval_results er
     JOIN tasks t ON t.id = er.task_id
-    ORDER BY er.created_at DESC
+    WHERE t.id IN (
+      SELECT DISTINCT task_id FROM eval_results
+      ORDER BY task_id DESC
+      LIMIT 20
+    )
+    ORDER BY t.id DESC, er.metric
   `).all() as any[];
 
   const byTask = new Map<number, {
