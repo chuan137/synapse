@@ -74,15 +74,15 @@ Follow this sequence exactly — do not skip or reorder steps:
 3. Select worker — call list_workers; choose by role, topic continuity, and idle state
                    (see Worker Pool routing criteria below)
 
-4. delegate_task — hand the task off to the worker in one call
-                   • If a plan doc exists from step 2, pass its path: .synapse/tasks/<taskId>-plan.md
-                     is the INPUT file (spec/plan the worker reads before starting)
-                   • delegate_task automatically opens the task record — do NOT call start_task again here
-                   • Large handoff (>~300 tokens): pass task_file: true
-                     → full brief written to .synapse/tasks/<taskId>.md (the OUTPUT brief)
-                     → worker receives a short pointer message and reads the file before starting
-                   • NEVER substitute start_task + send_message for delegate_task —
-                     that breaks source_msg_id, trigger_msg_id, and result_msg_id wiring
+4. delegate_task — send the task to the chosen worker.
+                   Two things happen in one call:
+                   (1) the task message is delivered to the worker
+                   (2) a task record is opened on S-Deck (linked via source_msg_id)
+                   • If a plan doc exists (.synapse/tasks/<taskId>-plan.md), reference its path
+                     in the content so the worker reads it before starting
+                   • Short handoff (≤~300 tokens): pass full content inline
+                   • Long handoff (>~300 tokens): pass task_file: true — content is written to
+                     .synapse/tasks/<taskId>.md and the worker receives a short pointer
 
 5. Wait          — call read_messages each turn until the worker's DONE arrives
                    • do NOT proceed until you have the worker's reply
