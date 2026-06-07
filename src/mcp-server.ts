@@ -220,27 +220,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'pick_worker',
-      description:
-        'Convenience: return ONE worker\'s agent_id matching the filters, preferring idle. ' +
-        'Returns null if none match. Saves the orchestrator from filtering manually.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          role: {
-            type: 'string',
-            description: 'Required. The role to match.',
-          },
-          prefer: {
-            type: 'string',
-            enum: ['idle', 'any'],
-            description: "Prefer an idle worker. 'idle' (default) returns null if none are idle; 'any' falls back to the first matching worker.",
-          },
-        },
-        required: ['role'],
-      },
-    },
-    {
       name: 'request_approval',
       description:
         'Ask the human operator for approval before proceeding. ' +
@@ -524,20 +503,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const text = `${workers.length} live worker(s):\n\n${header}\n${rows.join('\n')}`;
 
     return { content: [{ type: 'text', text }] };
-  }
-
-  if (name === 'pick_worker') {
-    const { role, prefer = 'idle' } = args as { role: string; prefer?: 'idle' | 'any' };
-    const workers = listLiveWorkers({ role });
-
-    const idle = workers.find((w) => w.state === 'idle');
-    const chosen = idle ?? (prefer === 'any' ? workers[0] : undefined);
-
-    const result = chosen
-      ? { agent_id: chosen.agent_id, slot: chosen.slot, state: chosen.state }
-      : { agent_id: null };
-
-    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   }
 
   if (name === 'request_approval') {
