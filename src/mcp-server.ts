@@ -571,7 +571,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
     const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
     if (ok && status === 'completed') {
-      const indexJs = join(dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
+      const indexJs = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
       const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(task_id)], {
         detached: true,
         stdio: 'ignore',

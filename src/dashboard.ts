@@ -436,7 +436,7 @@ app.get('/api/eval/gate', (_req: Request, res: Response) => {
 });
 
 app.post('/api/eval/run', (_req: Request, res: Response) => {
-  const indexJs = join(__dirname, '..', 'index.js');
+  const indexJs = join(__dirname, 'index.js');
   const child = spawn(process.execPath, [indexJs, 'eval', '--critic', '--gate'], {
     detached: true,
     stdio: 'ignore',
