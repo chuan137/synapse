@@ -104,7 +104,8 @@ export function openDb(dbPath: string): Database.Database {
       metric     TEXT    NOT NULL,
       passed     INTEGER NOT NULL,
       value      REAL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      UNIQUE(task_id, metric)
     );
     CREATE INDEX IF NOT EXISTS idx_eval_results_task ON eval_results(task_id);
 
@@ -138,6 +139,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE messages ADD COLUMN task_id INTEGER`,
     // Safety: if the prior bug left rows in a stale activities table, rescue them.
     `INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha) SELECT id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha FROM activities`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_results_unique ON eval_results(task_id, metric)`,
   ]) {
     try { database.exec(sql); } catch { /* already applied or not applicable */ }
   }
@@ -984,7 +986,7 @@ export function writeEvalResults(
 ): void {
   const now = Date.now();
   const insert = db.prepare(`
-    INSERT INTO eval_results (task_id, metric, passed, value, created_at)
+    INSERT OR IGNORE INTO eval_results (task_id, metric, passed, value, created_at)
     VALUES (?, ?, ?, ?, ?)
   `);
   const upsertCount = db.prepare(`
