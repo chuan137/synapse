@@ -782,6 +782,57 @@ app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// File upload — saves to .synapse/uploads/ and returns the relative path
+app.post('/api/upload', (req: Request, res: Response) => {
+  const contentType = req.headers['content-type'] ?? '';
+  const boundaryMatch = contentType.match(/boundary=([^\s;]+)/);
+  if (!boundaryMatch) {
+    res.status(400).json({ error: 'expected multipart/form-data' });
+    return;
+  }
+  const boundary = boundaryMatch[1];
+  const uploadsDir = join(process.cwd(), '.synapse', 'uploads');
+  mkdirSync(uploadsDir, { recursive: true });
+
+  const chunks: Buffer[] = [];
+  req.on('data', (chunk: Buffer) => chunks.push(chunk));
+  req.on('end', () => {
+    try {
+      const body = Buffer.concat(chunks);
+      // Find the Content-Disposition header to extract filename
+      const bodyStr = body.toString('binary');
+      const headerEnd = bodyStr.indexOf('\r\n\r\n');
+      if (headerEnd === -1) { res.status(400).json({ error: 'malformed part' }); return; }
+      const headerSection = bodyStr.slice(0, headerEnd);
+      const nameMatch = headerSection.match(/filename="([^"]+)"/i);
+      if (!nameMatch) { res.status(400).json({ error: 'no filename in upload' }); return; }
+
+      // Sanitize: strip path separators, null bytes, and non-printable chars
+      const rawName = nameMatch[1];
+      const safeName = rawName.replace(/[/\\]/g, '').replace(/\.\./g, '').replace(/[^\x20-\x7e]/g, '').trim() || 'upload';
+
+      // Extract file content: between \r\n\r\n after headers and before trailing boundary
+      const partStart = headerEnd + 4; // skip \r\n\r\n
+      const trailingBoundary = Buffer.from(`\r\n--${boundary}`);
+      let partEnd = body.length;
+      for (let i = partStart; i <= body.length - trailingBoundary.length; i++) {
+        if (body.slice(i, i + trailingBoundary.length).equals(trailingBoundary)) {
+          partEnd = i;
+          break;
+        }
+      }
+      const fileData = body.slice(partStart, partEnd);
+      const filename = `${Date.now()}-${safeName}`;
+      writeFileSync(join(uploadsDir, filename), fileData);
+      const relativePath = `.synapse/uploads/${filename}`;
+      res.json({ path: relativePath });
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+  req.on('error', (e) => res.status(500).json({ error: String(e) }));
+});
+
 // Git diff for a commit SHA
 app.get('/api/commit/:sha/diff', (req: Request, res: Response) => {
   const sha = String(req.params.sha);

@@ -884,6 +884,37 @@
     requestAnimationFrame(() => scrollMessagesToBottom());
   }
 
+  // ── Drag-and-drop file upload ─────────────────────────────────────────────
+  const composeDiv = document.getElementById('compose');
+
+  composeDiv.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    composeDiv.classList.add('drag-over');
+  });
+  composeDiv.addEventListener('dragleave', () => {
+    composeDiv.classList.remove('drag-over');
+  });
+  composeDiv.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    composeDiv.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { path } = await res.json();
+      msgInput.value = (msgInput.value ? msgInput.value + '\n' : '') + `File: ${path}`;
+      autosizeMsgInput();
+      const prev = msgInput.placeholder;
+      msgInput.placeholder = 'File attached';
+      setTimeout(() => { msgInput.placeholder = prev; }, 1500);
+    } catch (err) {
+      console.error('upload failed', err);
+    }
+  });
+
   // ── Tidy ended agents ────────────────────────────────────────────────────
   const purgeBtn = document.getElementById('purge-btn');
   purgeBtn.addEventListener('click', async () => {
