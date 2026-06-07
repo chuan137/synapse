@@ -1,0 +1,137 @@
+{
+  "id": 31,
+  "label": "good",
+  "task": {
+    "id": 31,
+    "agent_id": "cec50b17:23",
+    "title": "Move PLAN.md to .synapse/ and update dashboard path",
+    "status": "completed",
+    "started_at": 1780737033311,
+    "finished_at": 1780737068582,
+    "trigger_msg_id": 746,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "339649f"
+  },
+  "linked_msg_ids": [
+    746
+  ],
+  "messages": [
+    {
+      "id": 746,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:23",
+      "content": "Move PLAN.md from the project root to `.synapse/PLAN.md` and update the dashboard to read it from there.\n\n**Steps:**\n\n1. In `src/dashboard.ts`, change line:\n   ```typescript\n   const PLAN_PATH = join(process.cwd(), 'PLAN.md');\n   ```\n   to:\n   ```typescript\n   const PLAN_PATH = join(process.cwd(), '.synapse', 'PLAN.md');\n   ```\n\n2. Copy the current `PLAN.md` content to `.synapse/PLAN.md` (use the Read tool on `PLAN.md` then Write to `.synapse/PLAN.md`).\n\n3. Remove `PLAN.md` from git tracking: `git rm PLAN.md`\n\n4. Run `npm run build` to rebuild dist/.\n\n5. Commit: `Move PLAN.md to .synapse/PLAN.md; update dashboard path`\n\nReport DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780737033311,
+      "read_at": 1780737035684,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 747,
+      "from_id": "cec50b17:23",
+      "to_id": "human",
+      "content": "✅ committed 339649f: Move PLAN.md to .synapse/PLAN.md; update dashboard path",
+      "priority": 5,
+      "created_at": 1780737068582,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 4136,
+      "event_id": "evt_1780737035784_5ttnh",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 103,
+      "timestamp": 1780737035784
+    },
+    {
+      "id": 4138,
+      "event_id": "evt_1780737038717_66v4e",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 141,
+      "timestamp": 1780737038717
+    },
+    {
+      "id": 4140,
+      "event_id": "evt_1780737041844_a389n",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780737041844
+    },
+    {
+      "id": 4141,
+      "event_id": "evt_1780737052898_r5zuf",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Write",
+      "status": "ok",
+      "duration_ms": 110,
+      "timestamp": 1780737052898
+    },
+    {
+      "id": 4142,
+      "event_id": "evt_1780737055633_anol6",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780737055633
+    },
+    {
+      "id": 4143,
+      "event_id": "evt_1780737058793_9n1bz",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 102,
+      "timestamp": 1780737058793
+    },
+    {
+      "id": 4144,
+      "event_id": "evt_1780737065527_4wm9p",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 1060,
+      "timestamp": 1780737065527
+    },
+    {
+      "id": 4145,
+      "event_id": "evt_1780737068581_nv3lz",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 108,
+      "timestamp": 1780737068581
+    }
+  ],
+  "metrics": {
+    "tool_calls": 8,
+    "duration_ms": 35271,
+    "traceability_score": 2,
+    "has_commit": true
+  }
+}

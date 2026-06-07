@@ -17,6 +17,263 @@
     }
   },
   {
+    "id": 1,
+    "label": "bad",
+    "title": "Coordinate parallel role-customization (:20) and Plan tab (:21) deliveries",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)",
+      "tool_calls=24 (max 20)",
+      "duration=838s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 24,
+      "duration_ms": 838270,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 2,
+    "label": "bad",
+    "title": "Investigate and fix dashboard Connecting... bug",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 4,
+      "duration_ms": 21973,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 3,
+    "label": "bad",
+    "title": "Fix light-mode CSS theme bugs (text contrast, hover feedback, P0 hover)",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 10,
+      "duration_ms": 68716,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 4,
+    "label": "bad",
+    "title": "Investigate agent_status.name write paths",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 12,
+      "duration_ms": 62441,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 5,
+    "label": "bad",
+    "title": "Fix agent_status.name overwrite bug",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 14,
+      "duration_ms": 68094,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 6,
+    "label": "bad",
+    "title": "Find and fix settings.json name writer",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 16,
+      "duration_ms": 69779,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 7,
+    "label": "bad",
+    "title": "Fix tmux window rename on worker restart + capitalize role name",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "tool_calls=22 (max 20)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 22,
+      "duration_ms": 99674,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 8,
+    "label": "bad",
+    "title": "Restructure activity-recording flow: agent_id, commit-before-finish, update docs",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 17,
+      "duration_ms": 85294,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 9,
+    "label": "bad",
+    "title": "Wire worktree merge to auto-attach commit_sha to worker's activity (Option 2)",
+    "pass": false,
+    "failures": [
+      "duration=149s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 20,
+      "duration_ms": 148542,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 10,
+    "label": "bad",
+    "title": "Wire activity attach into worktree merge by slot",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 18,
+      "duration_ms": 90111,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 11,
+    "label": "bad",
+    "title": "Hide ' · :0' suffix in Events/Activities tab filter labels",
+    "pass": false,
+    "failures": [
+      "duration=295s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 15,
+      "duration_ms": 294838,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 12,
+    "label": "bad",
+    "title": "UI tweak: remove slot suffix from tabs; add slot tag in global Activities",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "tool_calls=23 (max 20)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 23,
+      "duration_ms": 101848,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 13,
+    "label": "bad",
+    "title": "Remove `:N` suffix from tab headers; add slot tag in :0 global view",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 16,
+      "duration_ms": 96306,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 14,
+    "label": "bad",
+    "title": "Activity completion lifecycle: mark completed at commit; merge fields in finishActivity",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 13,
+      "duration_ms": 85665,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 15,
+    "label": "bad",
+    "title": "Fix activity-completion lifecycle in db.ts",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 11,
+      "duration_ms": 67309,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 16,
+    "label": "bad",
+    "title": "Implement delegate_task and report_done MCP tools",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "tool_calls=29 (max 20)",
+      "duration=153s (max 120s)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 29,
+      "duration_ms": 152562,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
     "id": 16,
     "label": "bad",
     "title": "Implement delegate_task and report_done MCP tools",
@@ -52,6 +309,158 @@
     }
   },
   {
+    "id": 17,
+    "label": "bad",
+    "title": "Add delegate_task and report_done MCP tools; update protocol docs",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "tool_calls=30 (max 20)",
+      "duration=173s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 30,
+      "duration_ms": 173171,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 18,
+    "label": "bad",
+    "title": "implement kill button — terminate Claude instance and tmux pane",
+    "pass": false,
+    "failures": [
+      "tool_calls=23 (max 20)"
+    ],
+    "metrics": {
+      "tool_calls": 23,
+      "duration_ms": 117779,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 19,
+    "label": "bad",
+    "title": "Implement kill button for S-Deck agent cards",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 15,
+      "duration_ms": 75387,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 20,
+    "label": "good",
+    "title": "split --update into update command; start opens browser",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 16,
+      "duration_ms": 66563,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 21,
+    "label": "bad",
+    "title": "synapse update command + browser open on start",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 12,
+      "duration_ms": 47718,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 22,
+    "label": "good",
+    "title": "Phase 1: file-based task briefs in delegate_task",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 19,
+      "duration_ms": 117022,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 23,
+    "label": "bad",
+    "title": "Add task_file param to delegate_task MCP tool",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 15,
+      "duration_ms": 73859,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 24,
+    "label": "bad",
+    "title": "Phase 2: report_file option for send_message and report_done",
+    "pass": false,
+    "failures": [
+      "duration=159s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 15,
+      "duration_ms": 159422,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 25,
+    "label": "bad",
+    "title": "Add report_file param to send_message and report_done",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 11,
+      "duration_ms": 56141,
+      "traceability_score": 2,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 26,
+    "label": "bad",
+    "title": "Light theme: message text to dark grey + remove hover effect",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 8,
+      "duration_ms": 22010,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
     "id": 27,
     "label": "bad",
     "title": "Rename activities → tasks throughout codebase",
@@ -64,6 +473,100 @@
     "metrics": {
       "tool_calls": 58,
       "duration_ms": 283994,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 27,
+    "label": "bad",
+    "title": "Rename activities → tasks throughout codebase",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)",
+      "tool_calls=58 (max 20)",
+      "duration=284s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 58,
+      "duration_ms": 283994,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 28,
+    "label": "bad",
+    "title": "Extract CSS and JS from index.html to separate files",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 17,
+      "duration_ms": 72331,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 29,
+    "label": "bad",
+    "title": "Make Tasks default panel + rebuild stale dist/",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 6,
+      "duration_ms": 20769,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 30,
+    "label": "bad",
+    "title": "Fix Tasks panel not active on initial load",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 5,
+      "duration_ms": 15435,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 31,
+    "label": "bad",
+    "title": "Move PLAN.md to .synapse/ and update dashboard path",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 8,
+      "duration_ms": 35271,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 32,
+    "label": "bad",
+    "title": "Plan 1: Agent system prompt modal",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)",
+      "tool_calls=40 (max 20)",
+      "duration=165s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 40,
+      "duration_ms": 165075,
       "traceability_score": 3,
       "has_commit": true
     }
@@ -86,6 +589,98 @@
     }
   },
   {
+    "id": 33,
+    "label": "bad",
+    "title": "Plan 2: Task diff modal",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 19,
+      "duration_ms": 86461,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 34,
+    "label": "bad",
+    "title": "Fix diff newlines + prompt modal protocol content",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 14,
+      "duration_ms": 79890,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 35,
+    "label": "bad",
+    "title": "Show commit subject in diff modal header",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 9,
+      "duration_ms": 30068,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 36,
+    "label": "bad",
+    "title": "Fix task row click → message jump across agents",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 8,
+      "duration_ms": 29568,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 37,
+    "label": "bad",
+    "title": "Fix task jump to prefer trigger_msg_id (start) over result",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 4,
+      "duration_ms": 13011,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 38,
+    "label": "bad",
+    "title": "Add source_msg_id to delegate_task; rename activities table to tasks",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)",
+      "tool_calls=26 (max 20)",
+      "duration=145s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 26,
+      "duration_ms": 145372,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
     "id": 39,
     "label": "good",
     "title": "Add source_msg_id lint check in guard.ts",
@@ -99,6 +694,51 @@
     }
   },
   {
+    "id": 40,
+    "label": "bad",
+    "title": "Add approve quick-reply button to agent→human messages",
+    "pass": false,
+    "failures": [
+      "traceability_missing=2 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 11,
+      "duration_ms": 54060,
+      "traceability_score": 2,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 41,
+    "label": "bad",
+    "title": "Fix migration order for activities→tasks rename",
+    "pass": false,
+    "failures": [
+      "no_commit"
+    ],
+    "metrics": {
+      "tool_calls": 1,
+      "duration_ms": 7242,
+      "traceability_score": 1,
+      "has_commit": false
+    }
+  },
+  {
+    "id": 42,
+    "label": "bad",
+    "title": "Scope approve button to needs_approval messages",
+    "pass": false,
+    "failures": [
+      "tool_calls=22 (max 20)"
+    ],
+    "metrics": {
+      "tool_calls": 22,
+      "duration_ms": 81872,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
     "id": 43,
     "label": "good",
     "title": "Swap agent card name/slot order — name first",
@@ -107,6 +747,111 @@
     "metrics": {
       "tool_calls": 6,
       "duration_ms": 13108,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 44,
+    "label": "bad",
+    "title": "Fix tmux window rename to use project name from .synapse/settings.json",
+    "pass": false,
+    "failures": [
+      "duration=188s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 13,
+      "duration_ms": 187517,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 45,
+    "label": "bad",
+    "title": "Include message ID in read_messages output",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 5,
+      "duration_ms": 18729,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 46,
+    "label": "bad",
+    "title": "Implement JSON envelope for read_messages output",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 5,
+      "duration_ms": 37670,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 47,
+    "label": "bad",
+    "title": "Add needs_approval lint to guard hook for send_message to human",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 3,
+      "duration_ms": 38181,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 48,
+    "label": "bad",
+    "title": "Make needs_approval mandatory on send_message to human",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 4,
+      "duration_ms": 36197,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 49,
+    "label": "bad",
+    "title": "Fix approve button multi-fire and replace reply with in-row approval badge",
+    "pass": false,
+    "failures": [
+      "traceability_missing=3 (max 1)"
+    ],
+    "metrics": {
+      "tool_calls": 3,
+      "duration_ms": 118708,
+      "traceability_score": 3,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 50,
+    "label": "bad",
+    "title": "Rename start_activity to start_task in MCP tool and docs",
+    "pass": false,
+    "failures": [
+      "tool_calls=24 (max 20)"
+    ],
+    "metrics": {
+      "tool_calls": 24,
+      "duration_ms": 75413,
       "traceability_score": 1,
       "has_commit": true
     }
@@ -147,6 +892,205 @@
       "tool_calls": 13,
       "duration_ms": 52251,
       "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 54,
+    "label": "good",
+    "title": "Add reply input to needs_approval message actions",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 14,
+      "duration_ms": 40309,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 55,
+    "label": "bad",
+    "title": "Implement request_options on send_message — structured option buttons with guard enforcement",
+    "pass": false,
+    "failures": [
+      "tool_calls=38 (max 20)",
+      "duration=173s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 38,
+      "duration_ms": 172856,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 56,
+    "label": "good",
+    "title": "Synapse-Evolve Phase 1: trajectory extractor and eval CLI command",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 13,
+      "duration_ms": 73455,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 57,
+    "label": "good",
+    "title": "Synapse-Evolve Phase 2: trajectory evaluator with threshold scoring",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 12,
+      "duration_ms": 62733,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 58,
+    "label": "bad",
+    "title": "Synapse-Evolve Phase 3: critic agent — reads failed trajectory, proposes rule patch",
+    "pass": false,
+    "failures": [
+      "duration=182s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 12,
+      "duration_ms": 182150,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 59,
+    "label": "good",
+    "title": "Synapse-Evolve Phase 4: validation gate — regression + coverage check before deploying rule patches",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 10,
+      "duration_ms": 91257,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 60,
+    "label": "bad",
+    "title": "Synapse-Evolve Phase 5: S-Deck Eval tab — failed trajectories UI with improvement loop trigger",
+    "pass": false,
+    "failures": [
+      "tool_calls=23 (max 20)",
+      "duration=134s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 23,
+      "duration_ms": 134389,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 61,
+    "label": "bad",
+    "title": "Critic improvements: send_message task_id type + extract all messages",
+    "pass": false,
+    "failures": [
+      "tool_calls=30 (max 20)"
+    ],
+    "metrics": {
+      "tool_calls": 30,
+      "duration_ms": 103680,
+      "traceability_score": 0,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 62,
+    "label": "bad",
+    "title": "Eval Phase 1 — post-task scoring, DB tables, S-Deck warning badge",
+    "pass": false,
+    "failures": [
+      "tool_calls=41 (max 20)",
+      "duration=185s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 41,
+      "duration_ms": 184501,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 63,
+    "label": "good",
+    "title": "Eval Phase 2 — per-metric failure counter, proposal handover doc, session spawn",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 11,
+      "duration_ms": 65025,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 64,
+    "label": "bad",
+    "title": "Eval Phase 3 — S-Deck Proposals UI (list, gate, regenerate, deploy buttons)",
+    "pass": false,
+    "failures": [
+      "duration=134s (max 120s)"
+    ],
+    "metrics": {
+      "tool_calls": 19,
+      "duration_ms": 133691,
+      "traceability_score": 1,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 65,
+    "label": "good",
+    "title": "Eval Phase 5 — synapse eval apply CLI deploy command",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 11,
+      "duration_ms": 47215,
+      "traceability_score": 0,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 66,
+    "label": "good",
+    "title": "Fix approval button: send reply message to agent on approve/select-option",
+    "pass": true,
+    "failures": [],
+    "metrics": {
+      "tool_calls": 10,
+      "duration_ms": 40036,
+      "traceability_score": 0,
+      "has_commit": true
+    }
+  },
+  {
+    "id": 67,
+    "label": "bad",
+    "title": "Fix Eval tab: live DB results + per-metric failure counters",
+    "pass": false,
+    "failures": [
+      "tool_calls=31 (max 20)"
+    ],
+    "metrics": {
+      "tool_calls": 31,
+      "duration_ms": 107401,
+      "traceability_score": 0,
       "has_commit": true
     }
   }

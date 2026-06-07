@@ -1,0 +1,302 @@
+{
+  "id": 18,
+  "label": "good",
+  "task": {
+    "id": 18,
+    "agent_id": "cec50b17:3",
+    "title": "implement kill button — terminate Claude instance and tmux pane",
+    "status": "completed",
+    "started_at": 1780681582091,
+    "finished_at": 1780681699870,
+    "trigger_msg_id": 656,
+    "result_msg_id": 656,
+    "source_msg_id": null,
+    "commit_sha": "b1e640a"
+  },
+  "linked_msg_ids": [
+    656,
+    656
+  ],
+  "messages": [
+    {
+      "id": 656,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:3",
+      "content": "Implement a \"kill\" button on the S-Deck dashboard that terminates a Claude agent instance (kills its tmux pane) without respawning it.\n\n## What to build\n\n1. **Backend route** in `src/dashboard.ts` — add `POST /api/agents/:agentId/kill`:\n   - Look up the agent (same pattern as the restart handler around line 365)\n   - Validate: agent must exist and have a tmux_pane\n   - Kill the pane: `execSync(`tmux kill-pane -t ${tmux_pane}`)`\n   - Mark the agent ended: `db.prepare('UPDATE agent_status SET ended_at = ? WHERE agent_id = ?').run(Date.now(), agentId)`\n   - Call `reapGhostAgents()` and `purgeStaleAgents()` to clean up\n   - Return `{ ok: true }`\n   - Do NOT respawn — this is a kill, not a restart\n\n2. **Frontend** in `public/index.html` — add a \"kill\" item to the kebab menu on agent cards:\n   - The kebab menu is rendered in `renderAgents()` around line 1269\n   - Only show for non-orchestrator agents (slot > 0), same guard as the restart option\n   - Style it as a destructive action (red text or warning color)\n   - On click, call `fetch('/api/agents/${agentId}/kill', { method: 'POST' })`, then refresh the agent list\n\n## Key files\n- `src/dashboard.ts` — backend routes (restart handler is around line 365, use it as the model)\n- `public/index.html` — frontend (renderAgents function, kebab menu around line 1250-1375)\n- `src/db.ts` — `reapGhostAgents()`, `purgeStaleAgents()`, `getAgentById()` helpers\n\n## Notes\n- No schema changes needed — `ended_at` column already exists\n- The kill route is simpler than restart: kill pane, mark ended, done\n- For the orchestrator (slot 0), do NOT show the kill button\n- After implementing, call `report_done` with a summary of what changed",
+      "priority": 5,
+      "created_at": 1780681582091,
+      "read_at": 1780681585786,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 658,
+      "from_id": "cec50b17:3",
+      "to_id": "cec50b17:0",
+      "content": "DONE: Kill button implemented.\n\nFiles changed:\n- `src/db.ts`: Added `markAgentEnded(agentId)` helper (exports `UPDATE agent_status SET ended_at`)\n- `src/dashboard.ts`: Imported `markAgentEnded`; added `POST /api/agents/:agentId/kill` route — validates agent exists + has tmux pane + is not slot 0 + not already ended, kills pane, marks ended, reaps/purges\n- `public/index.html`: Added `kill-item` button to kebab menu (non-orchestrator only, red text via `color:var(--error)`), wired click handler with confirm dialog that POSTs to `/api/agents/:id/kill` then lets SSE refresh the list\n\nBuild: `tsc` passes clean, no errors.",
+      "priority": 5,
+      "created_at": 1780681677912,
+      "read_at": 1780681680313,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 659,
+      "from_id": "cec50b17:3",
+      "to_id": "human",
+      "content": "Kill button live: POST /api/agents/:id/kill + red kill item in kebab menu (non-orch only)",
+      "priority": 5,
+      "created_at": 1780681677912,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 3681,
+      "event_id": "evt_1780681585833_02vtu",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780681585833
+    },
+    {
+      "id": 3683,
+      "event_id": "evt_1780681588576_9xa5f",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780681588576
+    },
+    {
+      "id": 3685,
+      "event_id": "evt_1780681591985_9ka4f",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780681591985
+    },
+    {
+      "id": 3686,
+      "event_id": "evt_1780681592740_6694j",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780681592740
+    },
+    {
+      "id": 3687,
+      "event_id": "evt_1780681597347_6hj1e",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 43,
+      "timestamp": 1780681597347
+    },
+    {
+      "id": 3688,
+      "event_id": "evt_1780681600120_629ph",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "ToolSearch",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780681600120
+    },
+    {
+      "id": 3689,
+      "event_id": "evt_1780681602572_lemai",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__start_activity",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780681602572
+    },
+    {
+      "id": 3690,
+      "event_id": "evt_1780681610465_l3r0u",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780681610465
+    },
+    {
+      "id": 3691,
+      "event_id": "evt_1780681615008_wch83",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 435,
+      "timestamp": 1780681615008
+    },
+    {
+      "id": 3692,
+      "event_id": "evt_1780681618876_6u8cg",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780681618876
+    },
+    {
+      "id": 3693,
+      "event_id": "evt_1780681619705_e5xvw",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 65,
+      "timestamp": 1780681619705
+    },
+    {
+      "id": 3694,
+      "event_id": "evt_1780681623195_lj5uc",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 75,
+      "timestamp": 1780681623195
+    },
+    {
+      "id": 3695,
+      "event_id": "evt_1780681628064_7atg9",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 69,
+      "timestamp": 1780681628064
+    },
+    {
+      "id": 3696,
+      "event_id": "evt_1780681631951_x9jci",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780681631951
+    },
+    {
+      "id": 3697,
+      "event_id": "evt_1780681635392_2gq3x",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780681635392
+    },
+    {
+      "id": 3698,
+      "event_id": "evt_1780681639286_gizux",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780681639286
+    },
+    {
+      "id": 3699,
+      "event_id": "evt_1780681643192_8h7th",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780681643192
+    },
+    {
+      "id": 3700,
+      "event_id": "evt_1780681650466_lslu8",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780681650466
+    },
+    {
+      "id": 3701,
+      "event_id": "evt_1780681658234_96f3f",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780681658234
+    },
+    {
+      "id": 3702,
+      "event_id": "evt_1780681667153_se4h9",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 5830,
+      "timestamp": 1780681667153
+    },
+    {
+      "id": 3703,
+      "event_id": "evt_1780681670212_2lfr0",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780681670212
+    },
+    {
+      "id": 3704,
+      "event_id": "evt_1780681677958_36qfi",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__report_done",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780681677958
+    },
+    {
+      "id": 3706,
+      "event_id": "evt_1780681680403_rbi9k",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780681680403
+    }
+  ],
+  "metrics": {
+    "tool_calls": 23,
+    "duration_ms": 117779,
+    "traceability_score": 1,
+    "has_commit": true
+  }
+}

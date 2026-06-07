@@ -1,0 +1,278 @@
+{
+  "id": 42,
+  "label": "good",
+  "task": {
+    "id": 42,
+    "agent_id": "cec50b17:23",
+    "title": "Scope approve button to needs_approval messages",
+    "status": "completed",
+    "started_at": 1780744147265,
+    "finished_at": 1780744229137,
+    "trigger_msg_id": 843,
+    "result_msg_id": null,
+    "source_msg_id": 836,
+    "commit_sha": "831caa1"
+  },
+  "linked_msg_ids": [
+    836,
+    843
+  ],
+  "messages": [
+    {
+      "id": 843,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:23",
+      "content": "# Scoped approve button — three changes\n\n## Change 1: `needs_approval` field on messages\n\n**`src/db.ts`:**\n- Add migration: `ALTER TABLE messages ADD COLUMN needs_approval INTEGER NOT NULL DEFAULT 0`\n- Update `sendMessage()` function signature: add optional `needsApproval?: boolean` param (default false)\n- Write it: `INSERT INTO messages (..., needs_approval) VALUES (..., ?)`\n- Update the `Message` interface to include `needs_approval: number`\n\n**`src/mcp-server.ts`** — `send_message` tool:\n- Add optional boolean param `needs_approval` to tool schema (default false)\n- Destructure and pass to `sendMessage()`\n- Tool description note: \"Set needs_approval: true to show an Approve button to the operator on S-Deck.\"\n\n**`src/dashboard.ts`:**\n- The messages broadcast already sends all message fields via `SELECT *` / the full object — ensure `needs_approval` is included in the SSE payload (it should be automatic if using `SELECT *`)\n\n## Change 2: Frontend — approve button only on needs_approval messages\n\n**`public/app.js`** in `renderMessages()`:\n\nChange the `approveBtn` condition:\n```javascript\n// Before: shows on all agent→human messages\nconst approveBtn = !fromHuman ? `...` : '';\n\n// After: only when needs_approval is set\nconst approveBtn = (!fromHuman && m.needs_approval)\n  ? `<div class=\"message-actions\">\n       <button class=\"msg-approve-btn\" data-to=\"${esc(m.from_id)}\" data-msg-id=\"${m.id}\" data-priority=\"${m.priority}\">✓ approve</button>\n     </div>`\n  : '';\n```\n\nNote the added `data-msg-id=\"${m.id}\"` — the original message's ID.\n\n## Change 3: Approve sends reply with reference to original message\n\nWhen the approve button is clicked, send the reply with `in_reply_to` context. Since there's no formal `in_reply_to` DB field, embed it in the message content:\n\n```javascript\nbtn.addEventListener('click', async () => {\n  const toId = btn.dataset.to;\n  const msgId = btn.dataset.msgId;\n  const priority = parseInt(btn.dataset.priority ?? '5', 10);\n  btn.disabled = true;\n  btn.textContent = '✓ sent';\n  await fetch('/api/messages', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      to_id: toId,\n      content: 'Approved.',\n      priority,\n      in_reply_to: parseInt(msgId, 10),  // pass original msg ID\n    }),\n  });\n});\n```\n\n**`src/dashboard.ts`** — `POST /api/messages` handler:\n- Accept optional `in_reply_to` integer in the request body\n- If present, pass it as context to `sendMessage()` — but since messages table has no `in_reply_to` field, store it as part of the content or ignore it for now\n- Actually: just prepend it to the content as metadata: the message content stays `\"Approved.\"` but the DB could store the link later. For now, just have the backend accept and log it (no-op), and the frontend behavior is the signal.\n\nActually simpler: don't add `in_reply_to` to the API yet. The human's point is that when the agent receives \"Approved.\" and calls `delegate_task`, the `trigger_msg_id` on the resulting task should reference the original ask message, not the \"Approved.\" reply. That's the orchestrator's responsibility at `delegate_task` time — it should pass `source_msg_id` pointing to the human's \"Approved.\" message. The original ask context is already in the conversation. No DB change needed for this part.\n\nSo Change 3 is: **remove the `in_reply_to` idea entirely** — just add `data-msg-id` to the button for potential future use, but the approve click just sends `\"Approved.\"` as before.\n\n## Summary of actual changes needed\n1. DB: add `needs_approval` column to messages\n2. MCP: `send_message` tool gains `needs_approval` param\n3. Frontend: approve button only renders when `m.needs_approval` is truthy\n\nRun `npm run build`. Commit: `feat: needs_approval field on send_message; scope approve button to flagged messages`\n\nReport DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780744147265,
+      "read_at": 1780744148915,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 844,
+      "from_id": "cec50b17:23",
+      "to_id": "human",
+      "content": "✅ committed 831caa1: feat: needs_approval field on send_message; scope approve button to flagged messages",
+      "priority": 5,
+      "created_at": 1780744229137,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 4543,
+      "event_id": "evt_1780744148961_el681",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780744148961
+    },
+    {
+      "id": 4545,
+      "event_id": "evt_1780744150794_b4q9j",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780744150794
+    },
+    {
+      "id": 4546,
+      "event_id": "evt_1780744154186_2nssf",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 160,
+      "timestamp": 1780744154186
+    },
+    {
+      "id": 4547,
+      "event_id": "evt_1780744159094_khdwr",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 967,
+      "timestamp": 1780744159094
+    },
+    {
+      "id": 4548,
+      "event_id": "evt_1780744159389_0dqsi",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 74,
+      "timestamp": 1780744159389
+    },
+    {
+      "id": 4549,
+      "event_id": "evt_1780744161538_f3t0w",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 74,
+      "timestamp": 1780744161538
+    },
+    {
+      "id": 4550,
+      "event_id": "evt_1780744163513_ezpax",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780744163513
+    },
+    {
+      "id": 4551,
+      "event_id": "evt_1780744164083_1g2bu",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780744164083
+    },
+    {
+      "id": 4552,
+      "event_id": "evt_1780744166419_jwgmj",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780744166419
+    },
+    {
+      "id": 4553,
+      "event_id": "evt_1780744170595_n1o6c",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 57,
+      "timestamp": 1780744170595
+    },
+    {
+      "id": 4554,
+      "event_id": "evt_1780744173586_kl6jj",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780744173586
+    },
+    {
+      "id": 4555,
+      "event_id": "evt_1780744177038_2hh1n",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780744177038
+    },
+    {
+      "id": 4556,
+      "event_id": "evt_1780744180180_s6qo5",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 95,
+      "timestamp": 1780744180180
+    },
+    {
+      "id": 4557,
+      "event_id": "evt_1780744184162_0gjno",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780744184162
+    },
+    {
+      "id": 4558,
+      "event_id": "evt_1780744187653_7z03t",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780744187653
+    },
+    {
+      "id": 4559,
+      "event_id": "evt_1780744200755_tpebg",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780744200755
+    },
+    {
+      "id": 4560,
+      "event_id": "evt_1780744209303_r2sm3",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780744209303
+    },
+    {
+      "id": 4561,
+      "event_id": "evt_1780744214002_35zzb",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780744214002
+    },
+    {
+      "id": 4562,
+      "event_id": "evt_1780744217329_smh78",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 1270,
+      "timestamp": 1780744217329
+    },
+    {
+      "id": 4563,
+      "event_id": "evt_1780744221034_89y8o",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 65,
+      "timestamp": 1780744221034
+    },
+    {
+      "id": 4564,
+      "event_id": "evt_1780744223024_5itbf",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780744223024
+    },
+    {
+      "id": 4565,
+      "event_id": "evt_1780744229136_ihp80",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 112,
+      "timestamp": 1780744229136
+    }
+  ],
+  "metrics": {
+    "tool_calls": 22,
+    "duration_ms": 81872,
+    "traceability_score": 1,
+    "has_commit": true
+  }
+}

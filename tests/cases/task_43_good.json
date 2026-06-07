@@ -13,20 +13,11 @@
     "source_msg_id": 848,
     "commit_sha": "239afbf"
   },
+  "linked_msg_ids": [
+    848,
+    851
+  ],
   "messages": [
-    {
-      "id": 848,
-      "from_id": "human",
-      "to_id": "cec50b17:0",
-      "content": "How the UI show the button, the approval request is added into DB, so UI can read when loading?",
-      "priority": 5,
-      "created_at": 1780744308851,
-      "read_at": 1780744312066,
-      "needs_approval": 0,
-      "approved_at": null,
-      "request_options": null,
-      "selected_option": null
-    },
     {
       "id": 851,
       "from_id": "cec50b17:0",
@@ -38,7 +29,22 @@
       "needs_approval": 0,
       "approved_at": null,
       "request_options": null,
-      "selected_option": null
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 852,
+      "from_id": "cec50b17:23",
+      "to_id": "human",
+      "content": "✅ committed 239afbf: style: agent card — name before slot in header",
+      "priority": 5,
+      "created_at": 1780744440055,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
     }
   ],
   "tool_metrics": [

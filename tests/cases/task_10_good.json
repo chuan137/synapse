@@ -1,0 +1,223 @@
+{
+  "id": 10,
+  "label": "good",
+  "task": {
+    "id": 10,
+    "agent_id": "cec50b17:3",
+    "title": "Wire activity attach into worktree merge by slot",
+    "status": "completed",
+    "started_at": 1780678170022,
+    "finished_at": 1780678260133,
+    "trigger_msg_id": 4,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": null
+  },
+  "linked_msg_ids": [
+    4
+  ],
+  "messages": [
+    {
+      "id": 608,
+      "from_id": "cec50b17:3",
+      "to_id": "cec50b17:0",
+      "content": "DONE — worktree merge auto-attaches commit_sha by slot\n\n**Files changed:**\n- `src/db.ts` (+21): new `attachCommitToActivityBySlot(slot, commitSha)` — resolves slot→agent_id via `getAgentBySlot`, then updates the most recent `in_progress` activity with `commit_sha IS NULL` for that agent. Returns false if slot has no agent or no matching activity.\n- `src/index.ts` (+27/-2): added import of `attachCommitToActivityBySlot`; added `slotFromSlug(name)` and `attachMergeCommit(root, name)` helpers; wired `attachMergeCommit` into both the ff-only and squash merge success paths, before the prune step.\n\n**Build:** `bun run build` → clean\n\n**Regex:** `/^[a-z-]+?-(\\d+)(?:-|$)/` — the lazy `+?` on `[a-z-]+` expands just enough to consume the role (including hyphens in names like `code-reviewer`), then matches `-<digits>` followed by either a hyphen or end-of-string. Tested against `developer-19-foo` → 19, `code-reviewer-19-foo` → 19, `developer-3` → 3, `code-reviewer-3` → 3. ✓\n\n**Error handling:**\n- Regex miss (unparseable slug): logs a warning to stderr, skips attach, merge continues.\n- Slot has no agent (`getAgentBySlot` returns null): `attachCommitToActivityBySlot` returns false silently.\n- No in_progress activity for that agent: SQL UPDATE changes=0, returns false silently.\n- Any exception (DB error, git rev-parse failure): caught, logged to stderr, merge continues.",
+      "priority": 5,
+      "created_at": 1780678257709,
+      "read_at": 1780678261796,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 3440,
+      "event_id": "evt_1780678170065_cbvod",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "mcp__synapse-bus__start_activity",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780678170065
+    },
+    {
+      "id": 3441,
+      "event_id": "evt_1780678173470_8ehy7",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 86,
+      "timestamp": 1780678173470
+    },
+    {
+      "id": 3442,
+      "event_id": "evt_1780678176543_c46a5",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 96,
+      "timestamp": 1780678176543
+    },
+    {
+      "id": 3443,
+      "event_id": "evt_1780678179323_ayt1l",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 168,
+      "timestamp": 1780678179323
+    },
+    {
+      "id": 3444,
+      "event_id": "evt_1780678182263_1t27w",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780678182263
+    },
+    {
+      "id": 3445,
+      "event_id": "evt_1780678186059_kukvy",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 65,
+      "timestamp": 1780678186059
+    },
+    {
+      "id": 3446,
+      "event_id": "evt_1780678190238_bd58q",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 62,
+      "timestamp": 1780678190238
+    },
+    {
+      "id": 3447,
+      "event_id": "evt_1780678193784_hnjf6",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780678193784
+    },
+    {
+      "id": 3448,
+      "event_id": "evt_1780678200608_46lmn",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780678200608
+    },
+    {
+      "id": 3449,
+      "event_id": "evt_1780678205009_j77s0",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780678205009
+    },
+    {
+      "id": 3450,
+      "event_id": "evt_1780678209317_svhk3",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780678209317
+    },
+    {
+      "id": 3451,
+      "event_id": "evt_1780678219382_qe8u0",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780678219382
+    },
+    {
+      "id": 3452,
+      "event_id": "evt_1780678225462_0nxkd",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780678225462
+    },
+    {
+      "id": 3453,
+      "event_id": "evt_1780678230081_y5mqt",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780678230081
+    },
+    {
+      "id": 3454,
+      "event_id": "evt_1780678234711_eh4bs",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 2109,
+      "timestamp": 1780678234711
+    },
+    {
+      "id": 3455,
+      "event_id": "evt_1780678239351_j8ms7",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 89,
+      "timestamp": 1780678239351
+    },
+    {
+      "id": 3456,
+      "event_id": "evt_1780678245471_a263g",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 73,
+      "timestamp": 1780678245471
+    },
+    {
+      "id": 3457,
+      "event_id": "evt_1780678257755_zmayt",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780678257755
+    }
+  ],
+  "metrics": {
+    "tool_calls": 18,
+    "duration_ms": 90111,
+    "traceability_score": 2,
+    "has_commit": false
+  }
+}

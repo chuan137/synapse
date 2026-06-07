@@ -1,0 +1,117 @@
+{
+  "id": 29,
+  "label": "good",
+  "task": {
+    "id": 29,
+    "agent_id": "cec50b17:23",
+    "title": "Make Tasks default panel + rebuild stale dist/",
+    "status": "completed",
+    "started_at": 1780735017216,
+    "finished_at": 1780735037985,
+    "trigger_msg_id": 734,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "078f9fe"
+  },
+  "linked_msg_ids": [
+    734
+  ],
+  "messages": [
+    {
+      "id": 734,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:23",
+      "content": "Two quick changes, then build:\n\n1. **Make Tasks the default panel** in `public/app.js`: find the line `let rightPanelTab = 'events';` (near the top, around line 11) and change it to `let rightPanelTab = 'tasks';`\n\n2. **Rebuild** the TypeScript: run `npm run build` from the project root. The dist/ is stale from before the activities→tasks rename — the running dashboard is broadcasting `activities` key but app.js now reads `tasks`, which causes the empty task panel.\n\n3. Commit app.js change only (dist/ is gitignored): `git add public/app.js && git commit -m \"Tasks panel: make default tab; fix stale build\"`\n\nReport DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780735017216,
+      "read_at": 1780735019857,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 735,
+      "from_id": "cec50b17:23",
+      "to_id": "human",
+      "content": "✅ committed 078f9fe: Tasks panel: make default tab; fix stale build",
+      "priority": 5,
+      "created_at": 1780735037985,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 4094,
+      "event_id": "evt_1780735020128_vjnzl",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 275,
+      "timestamp": 1780735020128
+    },
+    {
+      "id": 4095,
+      "event_id": "evt_1780735022762_cqrhk",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 218,
+      "timestamp": 1780735022762
+    },
+    {
+      "id": 4096,
+      "event_id": "evt_1780735026010_5z694",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 200,
+      "timestamp": 1780735026010
+    },
+    {
+      "id": 4097,
+      "event_id": "evt_1780735028922_331w3",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 214,
+      "timestamp": 1780735028922
+    },
+    {
+      "id": 4098,
+      "event_id": "evt_1780735034635_xx2pp",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3284,
+      "timestamp": 1780735034635
+    },
+    {
+      "id": 4099,
+      "event_id": "evt_1780735037984_wm2yk",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 210,
+      "timestamp": 1780735037984
+    }
+  ],
+  "metrics": {
+    "tool_calls": 6,
+    "duration_ms": 20769,
+    "traceability_score": 2,
+    "has_commit": true
+  }
+}

@@ -13,20 +13,11 @@
     "source_msg_id": 929,
     "commit_sha": "c3df5a4"
   },
+  "linked_msg_ids": [
+    929,
+    933
+  ],
   "messages": [
-    {
-      "id": 929,
-      "from_id": "human",
-      "to_id": "cec50b17:0",
-      "content": "UI show the message id when hovering",
-      "priority": 5,
-      "created_at": 1780752156215,
-      "read_at": 1780752158664,
-      "needs_approval": 0,
-      "approved_at": null,
-      "request_options": null,
-      "selected_option": null
-    },
     {
       "id": 933,
       "from_id": "cec50b17:0",
@@ -38,7 +29,22 @@
       "needs_approval": 0,
       "approved_at": null,
       "request_options": null,
-      "selected_option": null
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 934,
+      "from_id": "cec50b17:25",
+      "to_id": "human",
+      "content": "✅ committed 1b32366: feat: add message ID tooltip to message rows",
+      "priority": 5,
+      "created_at": 1780752240715,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
     }
   ],
   "tool_metrics": [

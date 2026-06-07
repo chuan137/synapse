@@ -13,20 +13,11 @@
     "source_msg_id": 937,
     "commit_sha": "2a38ff5"
   },
+  "linked_msg_ids": [
+    937,
+    941
+  ],
   "messages": [
-    {
-      "id": 937,
-      "from_id": "human",
-      "to_id": "cec50b17:0",
-      "content": "Clicking #50 should focus on the human message (source msg). What is the source_msg_id recorded?",
-      "priority": 5,
-      "created_at": 1780752262466,
-      "read_at": 1780752308705,
-      "needs_approval": 0,
-      "approved_at": null,
-      "request_options": null,
-      "selected_option": null
-    },
     {
       "id": 941,
       "from_id": "cec50b17:0",
@@ -38,7 +29,22 @@
       "needs_approval": 0,
       "approved_at": null,
       "request_options": null,
-      "selected_option": null
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 942,
+      "from_id": "cec50b17:25",
+      "to_id": "human",
+      "content": "✅ committed 2a38ff5: fix: task row jump selects correct agent via source_msg_to_id",
+      "priority": 5,
+      "created_at": 1780752413603,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
     }
   ],
   "tool_metrics": [

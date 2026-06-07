@@ -1,0 +1,198 @@
+{
+  "id": 54,
+  "label": "good",
+  "task": {
+    "id": 54,
+    "agent_id": "cec50b17:26",
+    "title": "Add reply input to needs_approval message actions",
+    "status": "completed",
+    "started_at": 1780753048967,
+    "finished_at": 1780753089276,
+    "trigger_msg_id": 951,
+    "result_msg_id": null,
+    "source_msg_id": 949,
+    "commit_sha": "bfa4e52"
+  },
+  "linked_msg_ids": [
+    949,
+    951
+  ],
+  "messages": [
+    {
+      "id": 951,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:26",
+      "content": "Improve the `needs_approval` message UI to handle multi-option questions — add a text input next to the approve button so the human can type a specific reply (like \"option 1\") instead of just clicking the generic approve.\n\n**Work inside:** `.synapse/worktrees/developer-25-needs-approval-ux`\nCommit your changes to that branch. Do not push.\n\n---\n\n**Current behavior:**\nMessages with `needs_approval: true` show a `✓ approve` button. Clicking it calls `POST /api/messages/:id/approve` which sets `approved_at` in DB. There's no way to send a typed reply from that button area.\n\n**What to add:**\nWhen `needs_approval` is true and the message hasn't been approved yet, show a small inline reply input next to the approve button:\n\n```html\n<div class=\"message-actions\">\n  <input class=\"approval-reply-input\" type=\"text\" placeholder=\"reply (optional)\" />\n  <button class=\"msg-approve-btn\" data-msg-id=\"${m.id}\">✓ approve</button>\n</div>\n```\n\nWhen the approve button is clicked:\n1. Read the input value (if any)\n2. Call `POST /api/messages/:id/approve` (existing — marks approved_at)\n3. If the input has text, ALSO post a reply message to the agent: `POST /api/messages` with `{ to_id: m.from_id, content: inputValue, priority: m.priority }`\n\nThis way: clicking approve with no text = simple \"approved\" (same as before), clicking with text = sends the reply AND marks approved.\n\n**`public/app.js`** changes:\n- Update the `approveBtn` template to include the input\n- Update the delegated click handler on `#messages-list` to read the sibling input and post the reply if non-empty\n\n**`public/style.css`** — style the inline input:\n```css\n.approval-reply-input {\n  font-size: 10px;\n  padding: 2px 6px;\n  border-radius: 3px;\n  border: 1px solid var(--border);\n  background: var(--bg);\n  color: var(--text);\n  width: 120px;\n  font-family: inherit;\n}\n```\n\n**Build:** `npm run build` must pass. Commit. Report DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780753048967,
+      "read_at": 1780753050855,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 952,
+      "from_id": "cec50b17:26",
+      "to_id": "human",
+      "content": "✅ committed b349b64: ui: add inline reply input to needs_approval messages",
+      "priority": 5,
+      "created_at": 1780753089276,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 5051,
+      "event_id": "evt_1780753050910_mquuj",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780753050910
+    },
+    {
+      "id": 5052,
+      "event_id": "evt_1780753052770_veqwv",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780753052770
+    },
+    {
+      "id": 5056,
+      "event_id": "evt_1780753056024_n1ayv",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 695,
+      "timestamp": 1780753056024
+    },
+    {
+      "id": 5057,
+      "event_id": "evt_1780753057791_3427e",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "EnterWorktree",
+      "status": "ok",
+      "duration_ms": 66,
+      "timestamp": 1780753057791
+    },
+    {
+      "id": 5059,
+      "event_id": "evt_1780753060304_ysful",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 118,
+      "timestamp": 1780753060304
+    },
+    {
+      "id": 5060,
+      "event_id": "evt_1780753062434_tst9y",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 57,
+      "timestamp": 1780753062434
+    },
+    {
+      "id": 5062,
+      "event_id": "evt_1780753064769_8uwzq",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 84,
+      "timestamp": 1780753064769
+    },
+    {
+      "id": 5064,
+      "event_id": "evt_1780753066740_msyr4",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780753066740
+    },
+    {
+      "id": 5066,
+      "event_id": "evt_1780753072004_wlpb7",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 61,
+      "timestamp": 1780753072004
+    },
+    {
+      "id": 5069,
+      "event_id": "evt_1780753077434_wowum",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780753077434
+    },
+    {
+      "id": 5070,
+      "event_id": "evt_1780753081015_blw4o",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780753081015
+    },
+    {
+      "id": 5072,
+      "event_id": "evt_1780753084290_tlytp",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 883,
+      "timestamp": 1780753084290
+    },
+    {
+      "id": 5074,
+      "event_id": "evt_1780753086834_l3mi0",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 91,
+      "timestamp": 1780753086834
+    },
+    {
+      "id": 5075,
+      "event_id": "evt_1780753089274_42xn0",
+      "synapse_agent_id": "cec50b17:26",
+      "session_id": "6a014857-fcc2-4f4a-940a-83d452f18e50",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 105,
+      "timestamp": 1780753089274
+    }
+  ],
+  "metrics": {
+    "tool_calls": 14,
+    "duration_ms": 40309,
+    "traceability_score": 1,
+    "has_commit": true
+  }
+}

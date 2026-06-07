@@ -1,0 +1,207 @@
+{
+  "id": 23,
+  "label": "good",
+  "task": {
+    "id": 23,
+    "agent_id": "cec50b17:3",
+    "title": "Add task_file param to delegate_task MCP tool",
+    "status": "completed",
+    "started_at": 1780694870667,
+    "finished_at": 1780694944526,
+    "trigger_msg_id": null,
+    "result_msg_id": 681,
+    "source_msg_id": null,
+    "commit_sha": null
+  },
+  "linked_msg_ids": [
+    681
+  ],
+  "messages": [
+    {
+      "id": 681,
+      "from_id": "cec50b17:3",
+      "to_id": "cec50b17:0",
+      "content": "DONE: task_file param added to delegate_task.\n\nFiles changed:\n- `src/mcp-server.ts`: Added `task_file?: boolean` to `delegate_task` inputSchema. Handler: when true, calls `startActivity(null)` to get an activityId, writes brief to `.synapse/tasks/<activityId>.md`, sends a short pointer message to the worker. Normal path unchanged.\n- `.synapse/SYNAPSE-orchestrator.md`: Added note after step 1 explaining `task_file: true`, when to use it, and the worker instruction to `Read` the file.\n- `.gitignore`: `.synapse/` already covers task files — no change needed.\n\nBuild: `tsc` clean.",
+      "priority": 5,
+      "created_at": 1780694944526,
+      "read_at": 1780694947399,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 682,
+      "from_id": "cec50b17:3",
+      "to_id": "human",
+      "content": "delegate_task now supports task_file:true — large specs written to .synapse/tasks/<id>.md",
+      "priority": 5,
+      "created_at": 1780694944526,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 3798,
+      "event_id": "evt_1780694870716_0o0xs",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__start_activity",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780694870716
+    },
+    {
+      "id": 3799,
+      "event_id": "evt_1780694873212_u9vod",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780694873212
+    },
+    {
+      "id": 3800,
+      "event_id": "evt_1780694873975_mr3td",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780694873975
+    },
+    {
+      "id": 3801,
+      "event_id": "evt_1780694877711_4nc9n",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780694877711
+    },
+    {
+      "id": 3802,
+      "event_id": "evt_1780694878824_wcabo",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 111,
+      "timestamp": 1780694878824
+    },
+    {
+      "id": 3803,
+      "event_id": "evt_1780694885819_s9fh0",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 62,
+      "timestamp": 1780694885819
+    },
+    {
+      "id": 3804,
+      "event_id": "evt_1780694893712_d1mur",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780694893712
+    },
+    {
+      "id": 3805,
+      "event_id": "evt_1780694896908_ea735",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 67,
+      "timestamp": 1780694896908
+    },
+    {
+      "id": 3806,
+      "event_id": "evt_1780694899918_xsmgq",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780694899918
+    },
+    {
+      "id": 3807,
+      "event_id": "evt_1780694904462_sj463",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 75,
+      "timestamp": 1780694904462
+    },
+    {
+      "id": 3808,
+      "event_id": "evt_1780694917777_kt52s",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780694917777
+    },
+    {
+      "id": 3809,
+      "event_id": "evt_1780694921296_ac2fo",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 73,
+      "timestamp": 1780694921296
+    },
+    {
+      "id": 3810,
+      "event_id": "evt_1780694924575_nudw7",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 55,
+      "timestamp": 1780694924575
+    },
+    {
+      "id": 3811,
+      "event_id": "evt_1780694930638_khaos",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780694930638
+    },
+    {
+      "id": 3812,
+      "event_id": "evt_1780694937448_1z21i",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3906,
+      "timestamp": 1780694937448
+    }
+  ],
+  "metrics": {
+    "tool_calls": 15,
+    "duration_ms": 73859,
+    "traceability_score": 2,
+    "has_commit": false
+  }
+}

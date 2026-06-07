@@ -1,0 +1,178 @@
+{
+  "id": 58,
+  "label": "good",
+  "task": {
+    "id": 58,
+    "agent_id": "cec50b17:25",
+    "title": "Synapse-Evolve Phase 3: critic agent — reads failed trajectory, proposes rule patch",
+    "status": "completed",
+    "started_at": 1780755504233,
+    "finished_at": 1780755686383,
+    "trigger_msg_id": 975,
+    "result_msg_id": null,
+    "source_msg_id": 964,
+    "commit_sha": "7bf8e1b"
+  },
+  "linked_msg_ids": [
+    964,
+    975
+  ],
+  "messages": [
+    {
+      "id": 975,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:25",
+      "content": "Synapse-Evolve Phase 3: critic agent script — reads a failed trajectory case + protocol docs, calls Claude API to propose a rule patch for SYNAPSE-orchestrator.md.\n\n**Work inside:** `.synapse/worktrees/developer-25-eval-phase3-critic`\nCommit. Do not push. Report DONE to cec50b17:0.\n\n---\n\n## Goal\n\nCreate `src/eval/critic.ts` — a script that:\n1. Reads a failed trajectory JSON from `tests/cases/`\n2. Reads `templates/SYNAPSE-orchestrator.md` (the canonical rule source)\n3. Calls the Claude API (claude-sonnet-4-6) with a critic prompt\n4. Outputs a proposed patch (diff-like text or new section) to `tests/patches/task_<id>_patch.md`\n\n---\n\n## Implementation\n\n**`src/eval/critic.ts`:**\n\n```ts\nimport Anthropic from '@anthropic-ai/sdk';\nimport { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';\nimport { join } from 'path';\nimport type { TrajectoryCase } from './extract.js';\nimport type { EvalResult } from './evaluator.js';\n\nexport async function runCritic(\n  caseFile: string,\n  rulesFile: string,\n  outDir: string\n): Promise<string> {\n  const traj: TrajectoryCase = JSON.parse(readFileSync(caseFile, 'utf8'));\n  const rules = readFileSync(rulesFile, 'utf8');\n  const task = traj.task as any;\n\n  const prompt = `You are a critic reviewing a failed AI agent trajectory in the Synapse multi-agent system.\n\n## Failed Trajectory\n\nTask #${traj.id}: \"${task.title}\"\nStatus: ${task.status}\nAgent: ${task.agent_id}\nDuration: ${Math.round((traj.metrics.duration_ms ?? 0) / 1000)}s\nTool calls: ${traj.metrics.tool_calls}\nTraceability missing fields: ${traj.metrics.traceability_score}/3\n  - source_msg_id: ${task.source_msg_id ? 'present' : 'MISSING'}\n  - trigger_msg_id: ${task.trigger_msg_id ? 'present' : 'MISSING'}\n  - result_msg_id: ${task.result_msg_id ? 'present' : 'MISSING'}\nHas commit: ${traj.metrics.has_commit}\n\n## Messages linked to this task\n${traj.messages.map((m: any) => `[${m.from_id} → ${m.to_id}]: ${String(m.content).slice(0, 200)}`).join('\\n')}\n\n## Current orchestrator rules (SYNAPSE-orchestrator.md)\n${rules}\n\n## Your task\n\nIdentify the most likely reason this trajectory failed (missing traceability fields, excessive tool calls, no commit, etc.).\n\nThen propose a SPECIFIC addition or edit to the orchestrator rules that would have prevented this failure. Output:\n\n1. **Root cause** (2-3 sentences)\n2. **Proposed rule change** (exact text to add/modify in SYNAPSE-orchestrator.md, formatted as a diff or clearly marked addition)\n3. **Expected impact** (what metric improves and by how much)\n\nBe concrete and actionable. Do not suggest vague \"be more careful\" rules.`;\n\n  const client = new Anthropic();\n  const response = await client.messages.create({\n    model: 'claude-sonnet-4-6',\n    max_tokens: 1024,\n    messages: [{ role: 'user', content: prompt }],\n  });\n\n  const patch = (response.content[0] as any).text as string;\n\n  mkdirSync(outDir, { recursive: true });\n  const outFile = join(outDir, `task_${traj.id}_patch.md`);\n  writeFileSync(outFile, `# Critic patch for Task #${traj.id}\\n\\n${patch}\\n`);\n  return patch;\n}\n```\n\n**Update `src/index.ts`** — add `synapse eval --critic` flag:\n\nIn the eval command, add option `--critic` that runs critic on all failed trajectories:\n```ts\nprogram\n  .command('eval')\n  .description('Extract and evaluate agent trajectory cases')\n  .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')\n  .action(async (options) => {\n    const { extractCases } = await import('./eval/extract.js');\n    const { evaluateCases } = await import('./eval/evaluator.js');\n    // ... existing extract + evaluate logic ...\n    \n    if (options.critic) {\n      const { runCritic } = await import('./eval/critic.js');\n      const rulesFile = join(process.cwd(), 'templates', 'SYNAPSE-orchestrator.md');\n      const patchDir = join(process.cwd(), 'tests', 'patches');\n      const failed = results.filter((r: any) => !r.pass);\n      process.stdout.write(`\\nRunning critic on ${failed.length} failed trajectories...\\n`);\n      for (const r of failed) {\n        const caseFile = join(casesDir, `task_${r.id}_${r.label}.json`);\n        process.stdout.write(`  Critic analyzing #${r.id}...\\n`);\n        const patch = await runCritic(caseFile, rulesFile, patchDir);\n        process.stdout.write(`  → ${patch.slice(0, 100).replace(/\\n/g, ' ')}...\\n`);\n      }\n      process.stdout.write(`\\nPatches written to tests/patches/\\n`);\n    }\n  });\n```\n\n**Install Anthropic SDK** if not already present:\nCheck `package.json` — if `@anthropic-ai/sdk` is not there, run `npm install @anthropic-ai/sdk` in the worktree.\n\n**Run the critic on the worst trajectory** (task #1 or #27) to generate at least one patch file:\n```bash\nnpm run build && ANTHROPIC_API_KEY=$(cat ~/.anthropic_key 2>/dev/null || echo $ANTHROPIC_API_KEY) node dist/index.js eval --critic\n```\n\nIf ANTHROPIC_API_KEY is not available in the environment, just build successfully and note that the critic requires the key at runtime — don't fail the build.\n\nCommit everything including any generated `tests/patches/*.md` files. Report DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780755504233,
+      "read_at": 1780755508279,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 976,
+      "from_id": "cec50b17:25",
+      "to_id": "human",
+      "content": "✅ committed 7bf8e1b: feat: eval Phase 3 — critic agent proposes rule patches for failed trajectories",
+      "priority": 5,
+      "created_at": 1780755686383,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 5207,
+      "event_id": "evt_1780755513773_vxi8v",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "ExitWorktree",
+      "status": "ok",
+      "duration_ms": null,
+      "timestamp": 1780755513773
+    },
+    {
+      "id": 5208,
+      "event_id": "evt_1780755516988_r0qco",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "EnterWorktree",
+      "status": "ok",
+      "duration_ms": 77,
+      "timestamp": 1780755516988
+    },
+    {
+      "id": 5209,
+      "event_id": "evt_1780755520768_86pjr",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 63,
+      "timestamp": 1780755520768
+    },
+    {
+      "id": 5210,
+      "event_id": "evt_1780755521536_m7d7a",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 75,
+      "timestamp": 1780755521536
+    },
+    {
+      "id": 5211,
+      "event_id": "evt_1780755550787_b5thr",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 25771,
+      "timestamp": 1780755550787
+    },
+    {
+      "id": 5212,
+      "event_id": "evt_1780755562653_mycab",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Write",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780755562653
+    },
+    {
+      "id": 5213,
+      "event_id": "evt_1780755566133_ic8al",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 74,
+      "timestamp": 1780755566133
+    },
+    {
+      "id": 5214,
+      "event_id": "evt_1780755578445_3mtwd",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780755578445
+    },
+    {
+      "id": 5215,
+      "event_id": "evt_1780755584244_672re",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 2079,
+      "timestamp": 1780755584244
+    },
+    {
+      "id": 5216,
+      "event_id": "evt_1780755677085_6qclr",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 89110,
+      "timestamp": 1780755677085
+    },
+    {
+      "id": 5217,
+      "event_id": "evt_1780755680393_4v7rj",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 68,
+      "timestamp": 1780755680393
+    },
+    {
+      "id": 5218,
+      "event_id": "evt_1780755686382_xeubq",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 130,
+      "timestamp": 1780755686382
+    }
+  ],
+  "metrics": {
+    "tool_calls": 12,
+    "duration_ms": 182150,
+    "traceability_score": 1,
+    "has_commit": true
+  }
+}

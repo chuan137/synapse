@@ -1,0 +1,168 @@
+{
+  "id": 63,
+  "label": "good",
+  "task": {
+    "id": 63,
+    "agent_id": "cec50b17:25",
+    "title": "Eval Phase 2 — per-metric failure counter, proposal handover doc, session spawn",
+    "status": "completed",
+    "started_at": 1780783094411,
+    "finished_at": 1780783159436,
+    "trigger_msg_id": null,
+    "result_msg_id": 1052,
+    "source_msg_id": 1043,
+    "commit_sha": "b63dae7"
+  },
+  "linked_msg_ids": [
+    1043,
+    1052
+  ],
+  "messages": [
+    {
+      "id": 1049,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:25",
+      "content": "Task brief at .synapse/tasks/63.md\n\n# Eval Phase 2 — Per-metric failure counter + proposal generation\n\nYour orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-25-eval-phase2`. Commit your changes there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780783094412,
+      "read_at": 1780783097403,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 1051,
+      "from_id": "cec50b17:25",
+      "to_id": "human",
+      "content": "✅ committed b63dae7: feat: eval Phase 2 — threshold trigger + proposal session spawner",
+      "priority": 5,
+      "created_at": 1780783159436,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 5680,
+      "event_id": "evt_1780783106777_ssyzf",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 78,
+      "timestamp": 1780783106777
+    },
+    {
+      "id": 5681,
+      "event_id": "evt_1780783109651_wmp1n",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 70,
+      "timestamp": 1780783109651
+    },
+    {
+      "id": 5682,
+      "event_id": "evt_1780783110279_f4swn",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 66,
+      "timestamp": 1780783110279
+    },
+    {
+      "id": 5683,
+      "event_id": "evt_1780783117212_ng0xt",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780783117212
+    },
+    {
+      "id": 5684,
+      "event_id": "evt_1780783119991_7gjnn",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 68,
+      "timestamp": 1780783119991
+    },
+    {
+      "id": 5685,
+      "event_id": "evt_1780783137166_pjw0h",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Write",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780783137166
+    },
+    {
+      "id": 5686,
+      "event_id": "evt_1780783141009_rsfxc",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780783141009
+    },
+    {
+      "id": 5687,
+      "event_id": "evt_1780783145358_40xas",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780783145358
+    },
+    {
+      "id": 5688,
+      "event_id": "evt_1780783147794_zuvsp",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 57,
+      "timestamp": 1780783147794
+    },
+    {
+      "id": 5689,
+      "event_id": "evt_1780783151988_yu41s",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 1016,
+      "timestamp": 1780783151988
+    },
+    {
+      "id": 5690,
+      "event_id": "evt_1780783159434_8p23v",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 138,
+      "timestamp": 1780783159434
+    }
+  ],
+  "metrics": {
+    "tool_calls": 11,
+    "duration_ms": 65025,
+    "traceability_score": 1,
+    "has_commit": true
+  }
+}

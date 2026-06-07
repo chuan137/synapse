@@ -1,0 +1,232 @@
+{
+  "id": 20,
+  "label": "good",
+  "task": {
+    "id": 20,
+    "agent_id": "cec50b17:3",
+    "title": "split --update into update command; start opens browser",
+    "status": "completed",
+    "started_at": 1780689587187,
+    "finished_at": 1780689653750,
+    "trigger_msg_id": 663,
+    "result_msg_id": 663,
+    "source_msg_id": null,
+    "commit_sha": "28559e2"
+  },
+  "linked_msg_ids": [
+    663,
+    663
+  ],
+  "messages": [
+    {
+      "id": 663,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:3",
+      "content": "Two changes to `src/index.ts`:\n\n## 1. New `synapse update` command\n\nCurrently `synapse init --update` re-applies templates and refreshes CLAUDE.md. Split this into a standalone `synapse update [path]` command.\n\n- Add a new Commander command `update [path]` with the same description as the flag: \"re-apply latest templates and refresh CLAUDE.md in an existing project\"\n- It should call `synapseInit(resolvedPath, true)` (the `update=true` path), same as the existing `--update` branch in the `init` handler\n- Keep the `--update` / `-u` flag on `init` as well for backwards compatibility (or remove it — your call, but if you remove it, note it)\n- The `path` argument should default to `process.cwd()` same as `init`\n\nKey reference: the `init` command handler is around line 185–228 in `src/index.ts`. The `synapseInit` function is lines 71–184.\n\n## 2. `synapse start` opens the dashboard URL in the browser\n\nAfter the dashboard starts (after `startDashboard(port)` is called, around line 350), open the URL in the default browser.\n\n- Use Node's built-in approach: `import { exec } from 'child_process'` (already imported as `execSync`/`spawnSync` — use `exec` or `execSync` with the right command)\n- Cross-platform open: `open` on macOS, `xdg-open` on Linux, `start` on Windows. Use `process.platform` to pick the right one. A simple helper is fine.\n- Open `http://localhost:${port}` (the same URL already printed to stderr)\n- Do this only once, non-blocking — don't wait for it to complete\n\n## Key file\n- `src/index.ts` — all changes are here\n\nAfter implementing, run `npm run build` (or `tsc`) to verify it compiles clean, then call `report_done` with a summary.",
+      "priority": 5,
+      "created_at": 1780689587187,
+      "read_at": 1780689590242,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 665,
+      "from_id": "cec50b17:3",
+      "to_id": "cec50b17:0",
+      "content": "DONE: Two changes to src/index.ts.\n\n1. **`synapse update [path]` command** (line 226):\n   - New Commander command added between `init` and `run`\n   - Calls `synapseInit(resolve(targetPath ?? '.'), true)` (update=true path)\n   - `--update` / `-u` flag on `init` is kept for backwards compatibility\n\n2. **Browser open on `synapse start`** (lines 365-368):\n   - `startDashboard` return value captured as `actualPort`\n   - Cross-platform opener: `open` (macOS) / `start` (Windows) / `xdg-open` (Linux)\n   - Uses `exec()` (non-blocking, fire-and-forget) — not `execSync`\n   - Added `exec` to the `child_process` import on line 7\n\nBuild: `tsc` passes clean.",
+      "priority": 5,
+      "created_at": 1780689643521,
+      "read_at": 1780689645777,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 666,
+      "from_id": "cec50b17:3",
+      "to_id": "human",
+      "content": "synapse update command added; synapse start now opens dashboard URL in browser",
+      "priority": 5,
+      "created_at": 1780689643521,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 3740,
+      "event_id": "evt_1780689590288_3lof5",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780689590288
+    },
+    {
+      "id": 3742,
+      "event_id": "evt_1780689593698_vveab",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780689593698
+    },
+    {
+      "id": 3744,
+      "event_id": "evt_1780689595851_4io4x",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__start_activity",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780689595851
+    },
+    {
+      "id": 3745,
+      "event_id": "evt_1780689598781_iptya",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780689598781
+    },
+    {
+      "id": 3746,
+      "event_id": "evt_1780689599327_z4upg",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780689599327
+    },
+    {
+      "id": 3747,
+      "event_id": "evt_1780689602246_pnr6s",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780689602246
+    },
+    {
+      "id": 3748,
+      "event_id": "evt_1780689602965_sn2u3",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780689602965
+    },
+    {
+      "id": 3749,
+      "event_id": "evt_1780689606967_cj64f",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 81,
+      "timestamp": 1780689606967
+    },
+    {
+      "id": 3750,
+      "event_id": "evt_1780689612947_7ldx2",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 62,
+      "timestamp": 1780689612947
+    },
+    {
+      "id": 3751,
+      "event_id": "evt_1780689617252_ha3m6",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780689617252
+    },
+    {
+      "id": 3752,
+      "event_id": "evt_1780689621903_vnm3z",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780689621903
+    },
+    {
+      "id": 3753,
+      "event_id": "evt_1780689625784_nvfcz",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780689625784
+    },
+    {
+      "id": 3754,
+      "event_id": "evt_1780689633219_xwg93",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3835,
+      "timestamp": 1780689633219
+    },
+    {
+      "id": 3755,
+      "event_id": "evt_1780689636375_ioc50",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 83,
+      "timestamp": 1780689636375
+    },
+    {
+      "id": 3756,
+      "event_id": "evt_1780689643573_gm5pv",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__report_done",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780689643573
+    },
+    {
+      "id": 3757,
+      "event_id": "evt_1780689645829_kwu1h",
+      "synapse_agent_id": "cec50b17:3",
+      "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 55,
+      "timestamp": 1780689645829
+    }
+  ],
+  "metrics": {
+    "tool_calls": 16,
+    "duration_ms": 66563,
+    "traceability_score": 1,
+    "has_commit": true
+  }
+}

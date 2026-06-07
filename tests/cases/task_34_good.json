@@ -1,0 +1,197 @@
+{
+  "id": 34,
+  "label": "good",
+  "task": {
+    "id": 34,
+    "agent_id": "cec50b17:23",
+    "title": "Fix diff newlines + prompt modal protocol content",
+    "status": "completed",
+    "started_at": 1780738131604,
+    "finished_at": 1780738211494,
+    "trigger_msg_id": 773,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "680df21"
+  },
+  "linked_msg_ids": [
+    773
+  ],
+  "messages": [
+    {
+      "id": 773,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:23",
+      "content": "Two fixes needed. Both in the main working tree (no worktree needed — sequential).\n\n---\n\n## Fix 1: Diff modal extra blank lines\n\n**Root cause:** In `public/app.js`, `renderDiff()` wraps each line in `<span>` with `display: block` CSS and joins them with `'\\n'`. The `\\n` adds a blank line after every block-level span.\n\n**Fix in `public/app.js`:** Change the `.join('\\n')` at the end of `renderDiff` to `.join('')` — the block spans already create their own line breaks.\n\n```javascript\n// Before:\n}).join('\\n');\n// After:\n}).join('');\n```\n\n---\n\n## Fix 2: Agent prompt modal — show protocol docs, not just boot task\n\nThe operator wants to see the agent's **effective system instructions**, not just the boot task. The real instructions are:\n- For all agents: `.synapse/SYNAPSE.md` (base protocol)\n- For orchestrator (slot 0): `.synapse/SYNAPSE-orchestrator.md`\n- For workers (slot > 0): `.synapse/SYNAPSE-worker.md`\n- Plus role body (already included)\n- Boot task (already included, but less interesting — move it to the bottom)\n\n**`src/dashboard.ts`** — update `GET /api/agents/:agentId/prompt`:\n```typescript\n// Also read the synapse protocol docs\nconst synapseDir = join(process.cwd(), '.synapse');\nconst baseProtocol = existsSync(join(synapseDir, 'SYNAPSE.md'))\n  ? readFileSync(join(synapseDir, 'SYNAPSE.md'), 'utf8').trim()\n  : null;\nconst slotDoc = agent.slot === 0\n  ? (existsSync(join(synapseDir, 'SYNAPSE-orchestrator.md')) ? readFileSync(join(synapseDir, 'SYNAPSE-orchestrator.md'), 'utf8').trim() : null)\n  : (existsSync(join(synapseDir, 'SYNAPSE-worker.md')) ? readFileSync(join(synapseDir, 'SYNAPSE-worker.md'), 'utf8').trim() : null);\n\nres.json({\n  boot_task: agent.boot_task ?? null,\n  role: agent.role ?? null,\n  role_body: roleBody,\n  base_protocol: baseProtocol,\n  slot_doc: slotDoc,\n});\n```\n\n**`public/app.js`** — update `openPromptModal()` to render sections in this order:\n1. **Base Protocol** (`base_protocol`) — most important, show first\n2. **Role** (`slot_doc` + `role_body`) — slot-specific doc, then role body\n3. **Boot Task** (`boot_task`) — least important, show last (it's just the spawn instruction)\n\nEach section uses the existing `.prompt-section` + `.prompt-section-label` + `.prompt-pre` structure. Show section only if content is non-null.\n\n---\n\n## After changes\n\nRun `npm run build` to rebuild dist/.\n\nCommit: `fix: diff extra newlines (join('')); prompt modal shows full protocol stack`\n\nReport DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780738131604,
+      "read_at": 1780738136539,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 774,
+      "from_id": "cec50b17:23",
+      "to_id": "human",
+      "content": "✅ committed 680df21: fix: diff extra newlines (join('')); prompt modal shows full protocol stack",
+      "priority": 5,
+      "created_at": 1780738211494,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 4289,
+      "event_id": "evt_1780738145862_v7p4b",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 93,
+      "timestamp": 1780738145862
+    },
+    {
+      "id": 4290,
+      "event_id": "evt_1780738149073_z9m7c",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 87,
+      "timestamp": 1780738149073
+    },
+    {
+      "id": 4291,
+      "event_id": "evt_1780738152466_nikun",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 66,
+      "timestamp": 1780738152466
+    },
+    {
+      "id": 4292,
+      "event_id": "evt_1780738155177_aboaj",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780738155177
+    },
+    {
+      "id": 4293,
+      "event_id": "evt_1780738158304_tkx0t",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 92,
+      "timestamp": 1780738158304
+    },
+    {
+      "id": 4294,
+      "event_id": "evt_1780738162024_vn626",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 81,
+      "timestamp": 1780738162024
+    },
+    {
+      "id": 4295,
+      "event_id": "evt_1780738169593_xoc3g",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 122,
+      "timestamp": 1780738169593
+    },
+    {
+      "id": 4296,
+      "event_id": "evt_1780738173519_plijk",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 99,
+      "timestamp": 1780738173519
+    },
+    {
+      "id": 4297,
+      "event_id": "evt_1780738186453_bj9y8",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780738186453
+    },
+    {
+      "id": 4298,
+      "event_id": "evt_1780738190043_c4v2j",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 72,
+      "timestamp": 1780738190043
+    },
+    {
+      "id": 4299,
+      "event_id": "evt_1780738192601_bj8mc",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780738192601
+    },
+    {
+      "id": 4300,
+      "event_id": "evt_1780738200427_sm1xl",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 85,
+      "timestamp": 1780738200427
+    },
+    {
+      "id": 4301,
+      "event_id": "evt_1780738206695_qfq8l",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3334,
+      "timestamp": 1780738206695
+    },
+    {
+      "id": 4302,
+      "event_id": "evt_1780738211493_ucego",
+      "synapse_agent_id": "cec50b17:23",
+      "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 97,
+      "timestamp": 1780738211493
+    }
+  ],
+  "metrics": {
+    "tool_calls": 14,
+    "duration_ms": 79890,
+    "traceability_score": 2,
+    "has_commit": true
+  }
+}

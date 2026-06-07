@@ -1,0 +1,105 @@
+{
+  "id": 45,
+  "label": "good",
+  "task": {
+    "id": 45,
+    "agent_id": "cec50b17:0",
+    "title": "Include message ID in read_messages output",
+    "status": "completed",
+    "started_at": 1780749449288,
+    "finished_at": 1780749468017,
+    "trigger_msg_id": null,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "4a0c52f"
+  },
+  "linked_msg_ids": [],
+  "messages": [
+    {
+      "id": 872,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:25",
+      "content": "New task: Fix `read_messages` in `src/mcp-server.ts` to include the message ID in each formatted message.\n\n**Problem:** The `read_messages` handler formats messages but omits `m.id`. Agents have no way to extract the message ID and cannot pass a correct `source_msg_id` to `delegate_task`.\n\n**Location:** `src/mcp-server.ts` around line 388–397 (the `read_messages` handler):\n\n```ts\nconst formatted = msgs\n  .map((m) => {\n    const ts = new Date(m.created_at).toISOString();\n    const label = m.priority === 0 ? '[P0 — URGENT]' : '[P5]';\n    return `${label} From: ${m.from_id} at ${ts}\\n${m.content}`;\n  })\n  .join('\\n\\n---\\n\\n');\n```\n\n**Fix:** Add `[id=${m.id}]` to the label line:\n\n```ts\nreturn `${label} [id=${m.id}] From: ${m.from_id} at ${ts}\\n${m.content}`;\n```\n\nThe `Message` interface in `src/db.ts` already exposes `id: number` — no type changes needed.\n\nAlso update the `source_msg_id` parameter description for `delegate_task` in `src/mcp-server.ts` (around line 341) to say: \"get the ID from the `[id=N]` tag in the `read_messages` output\".\n\n**Deliverable:** Edit `src/mcp-server.ts` only. `npm run build` must pass. Commit when done. Report DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780749454311,
+      "read_at": 1780749479243,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 873,
+      "from_id": "cec50b17:0",
+      "to_id": "human",
+      "content": "FINDING — root cause of wrong source_msg_id on task 44:\n\nThe `read_messages` tool formats each message as `[P5] From: <id> at <ts>\\n<content>` — it never includes `m.id` in the output. So when I got the human message \"Revisit last commit…\", I had no way to extract its ID (860). I got an error saying `source_msg_id` was required, so I passed `1` as a placeholder — which the DB apparently resolved to message 861 (my own outbound task message to the worker).\n\n**Fix in progress:** I've asked developer :25 to add `[id=N]` to each message line in `read_messages`, and update the `source_msg_id` description to tell agents to extract it from that tag. Once committed this will be a systemic fix — agents will always be able to link tasks back to the triggering human message.",
+      "priority": 5,
+      "created_at": 1780749461720,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 4673,
+      "event_id": "evt_1780749449334_nquj4",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__start_activity",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780749449334
+    },
+    {
+      "id": 4676,
+      "event_id": "evt_1780749454356_9t0k4",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780749454356
+    },
+    {
+      "id": 4679,
+      "event_id": "evt_1780749461764_dmabm",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780749461764
+    },
+    {
+      "id": 4680,
+      "event_id": "evt_1780749463736_ux3u5",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780749463736
+    },
+    {
+      "id": 4682,
+      "event_id": "evt_1780749466429_nsrob",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780749466429
+    }
+  ],
+  "metrics": {
+    "tool_calls": 5,
+    "duration_ms": 18729,
+    "traceability_score": 3,
+    "has_commit": true
+  }
+}

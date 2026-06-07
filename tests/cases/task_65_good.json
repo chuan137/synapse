@@ -1,0 +1,169 @@
+{
+  "id": 65,
+  "label": "good",
+  "task": {
+    "id": 65,
+    "agent_id": "cec50b17:25",
+    "title": "Eval Phase 5 — synapse eval apply CLI deploy command",
+    "status": "completed",
+    "started_at": 1780783413462,
+    "finished_at": 1780783460677,
+    "trigger_msg_id": 1058,
+    "result_msg_id": 1060,
+    "source_msg_id": 1043,
+    "commit_sha": "533a58f"
+  },
+  "linked_msg_ids": [
+    1043,
+    1058,
+    1060
+  ],
+  "messages": [
+    {
+      "id": 1058,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:25",
+      "content": "# Eval Phase 5 — `synapse eval apply` CLI deploy command\n\nYour orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-25-eval-phase5`. Commit your changes there. Do not push.\n\n## Context\n\nPhases 1-3 are done. The S-Deck Deploy button calls `POST /api/proposals/:filename/deploy` which applies the patch, runs `synapse update .`, commits, resets the counter, and marks the proposal deployed. \n\nNow add a CLI equivalent so deploys can also be triggered headlessly: `synapse eval apply <proposal-file>`.\n\n## What to build (src/index.ts)\n\nIn the `synapse eval` commander command, add a subcommand `apply`:\n\n```\nprogram\n  .command('eval apply <proposal-file>')\n  .description('Apply a gate-approved proposal patch to the target rule file, commit, and reset the failure counter')\n  .action(async (proposalFile) => {\n    // 1. Read the proposal markdown\n    // 2. Parse Target-file and Proposed rule change (same logic as dashboard POST /deploy)\n    // 3. Append the proposed change to the target file\n    // 4. Run `synapse update .`\n    // 5. git commit with message: fix(<metric>): apply rule patch from proposal <basename>\n    // 6. Reset metric_failure_counts.count = 0 for that metric\n    // 7. Update Status: deployed in the proposal file\n    // 8. Print success summary\n  });\n```\n\nLook at `src/dashboard.ts` `POST /api/proposals/:filename/deploy` handler for the exact logic to replicate (it was just built in Phase 3). Keep the implementation consistent.\n\n## Build\n\n`npm run build` must pass clean.\n",
+      "priority": 5,
+      "created_at": 1780783413462,
+      "read_at": 1780783415734,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 1059,
+      "from_id": "cec50b17:25",
+      "to_id": "human",
+      "content": "✅ committed 533a58f: feat: add synapse eval apply <proposal-file> CLI command",
+      "priority": 5,
+      "created_at": 1780783460677,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 5736,
+      "event_id": "evt_1780783422718_wh9ng",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 267,
+      "timestamp": 1780783422718
+    },
+    {
+      "id": 5737,
+      "event_id": "evt_1780783426136_dsc4l",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 90,
+      "timestamp": 1780783426136
+    },
+    {
+      "id": 5738,
+      "event_id": "evt_1780783426902_d3w2o",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 75,
+      "timestamp": 1780783426902
+    },
+    {
+      "id": 5739,
+      "event_id": "evt_1780783429383_aqwiy",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780783429383
+    },
+    {
+      "id": 5740,
+      "event_id": "evt_1780783430412_ea8rt",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 72,
+      "timestamp": 1780783430412
+    },
+    {
+      "id": 5741,
+      "event_id": "evt_1780783435442_zbsjc",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780783435442
+    },
+    {
+      "id": 5742,
+      "event_id": "evt_1780783437927_gh66n",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780783437927
+    },
+    {
+      "id": 5743,
+      "event_id": "evt_1780783441493_wxw4g",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 62,
+      "timestamp": 1780783441493
+    },
+    {
+      "id": 5744,
+      "event_id": "evt_1780783451425_bn1zd",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780783451425
+    },
+    {
+      "id": 5745,
+      "event_id": "evt_1780783455206_wbg2i",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 1006,
+      "timestamp": 1780783455206
+    },
+    {
+      "id": 5746,
+      "event_id": "evt_1780783460676_nk2sc",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 101,
+      "timestamp": 1780783460676
+    }
+  ],
+  "metrics": {
+    "tool_calls": 11,
+    "duration_ms": 47215,
+    "traceability_score": 0,
+    "has_commit": true
+  }
+}

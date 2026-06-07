@@ -1,0 +1,468 @@
+{
+  "id": 62,
+  "label": "good",
+  "task": {
+    "id": 62,
+    "agent_id": "cec50b17:25",
+    "title": "Eval Phase 1 — post-task scoring, DB tables, S-Deck warning badge",
+    "status": "completed",
+    "started_at": 1780782854323,
+    "finished_at": 1780783038824,
+    "trigger_msg_id": null,
+    "result_msg_id": 1047,
+    "source_msg_id": 1041,
+    "commit_sha": "59f1439"
+  },
+  "linked_msg_ids": [
+    1041,
+    1047
+  ],
+  "messages": [
+    {
+      "id": 1042,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:25",
+      "content": "Task brief at .synapse/tasks/62.md\n\n# Eval Phase 1 — Post-task eval hook, DB tables, S-Deck warning badge\n\nYour orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-25-eval-phase1`. Commit your changes there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780782854324,
+      "read_at": 1780782857241,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 1046,
+      "from_id": "cec50b17:25",
+      "to_id": "human",
+      "content": "✅ committed 59f1439: feat: eval Phase 1 — post-task eval hook, DB tables, S-Deck warning badge",
+      "priority": 5,
+      "created_at": 1780783038823,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 5622,
+      "event_id": "evt_1780782864941_j4blo",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 80,
+      "timestamp": 1780782864941
+    },
+    {
+      "id": 5624,
+      "event_id": "evt_1780782869641_ggpvz",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 74,
+      "timestamp": 1780782869641
+    },
+    {
+      "id": 5626,
+      "event_id": "evt_1780782872234_hc6u6",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780782872234
+    },
+    {
+      "id": 5627,
+      "event_id": "evt_1780782872728_3bjy9",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780782872728
+    },
+    {
+      "id": 5628,
+      "event_id": "evt_1780782875366_hxklk",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 61,
+      "timestamp": 1780782875366
+    },
+    {
+      "id": 5629,
+      "event_id": "evt_1780782875938_6238u",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 209,
+      "timestamp": 1780782875938
+    },
+    {
+      "id": 5630,
+      "event_id": "evt_1780782879925_bfils",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 95,
+      "timestamp": 1780782879925
+    },
+    {
+      "id": 5631,
+      "event_id": "evt_1780782882086_pv6n4",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 65,
+      "timestamp": 1780782882086
+    },
+    {
+      "id": 5632,
+      "event_id": "evt_1780782884412_8apo8",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780782884412
+    },
+    {
+      "id": 5633,
+      "event_id": "evt_1780782885160_hk2nc",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780782885160
+    },
+    {
+      "id": 5634,
+      "event_id": "evt_1780782887973_ix0ot",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 63,
+      "timestamp": 1780782887973
+    },
+    {
+      "id": 5635,
+      "event_id": "evt_1780782888657_7zqhy",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 71,
+      "timestamp": 1780782888657
+    },
+    {
+      "id": 5636,
+      "event_id": "evt_1780782890927_vkkdv",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780782890927
+    },
+    {
+      "id": 5637,
+      "event_id": "evt_1780782893511_x11c1",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780782893511
+    },
+    {
+      "id": 5638,
+      "event_id": "evt_1780782894083_y8wyn",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780782894083
+    },
+    {
+      "id": 5639,
+      "event_id": "evt_1780782896611_j08xs",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 183,
+      "timestamp": 1780782896611
+    },
+    {
+      "id": 5640,
+      "event_id": "evt_1780782899435_gn0n3",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 76,
+      "timestamp": 1780782899435
+    },
+    {
+      "id": 5641,
+      "event_id": "evt_1780782902858_vgnz4",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 132,
+      "timestamp": 1780782902858
+    },
+    {
+      "id": 5642,
+      "event_id": "evt_1780782905558_3c0su",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780782905558
+    },
+    {
+      "id": 5643,
+      "event_id": "evt_1780782908350_3qai3",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780782908350
+    },
+    {
+      "id": 5646,
+      "event_id": "evt_1780782914043_rvx1v",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780782914043
+    },
+    {
+      "id": 5648,
+      "event_id": "evt_1780782916805_te2n9",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 95,
+      "timestamp": 1780782916805
+    },
+    {
+      "id": 5650,
+      "event_id": "evt_1780782918985_0dwqa",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780782918985
+    },
+    {
+      "id": 5652,
+      "event_id": "evt_1780782926146_eg3n3",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780782926146
+    },
+    {
+      "id": 5653,
+      "event_id": "evt_1780782931390_xfoxs",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780782931390
+    },
+    {
+      "id": 5654,
+      "event_id": "evt_1780782937568_o48y4",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780782937568
+    },
+    {
+      "id": 5655,
+      "event_id": "evt_1780782951568_tdob1",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780782951568
+    },
+    {
+      "id": 5656,
+      "event_id": "evt_1780782957886_0nt69",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780782957886
+    },
+    {
+      "id": 5657,
+      "event_id": "evt_1780782962042_49hep",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780782962042
+    },
+    {
+      "id": 5658,
+      "event_id": "evt_1780782973260_yhdi9",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780782973260
+    },
+    {
+      "id": 5659,
+      "event_id": "evt_1780782976240_6a9ow",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 77,
+      "timestamp": 1780782976240
+    },
+    {
+      "id": 5660,
+      "event_id": "evt_1780782985635_h78gu",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780782985635
+    },
+    {
+      "id": 5661,
+      "event_id": "evt_1780782990760_tm0ld",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780782990760
+    },
+    {
+      "id": 5662,
+      "event_id": "evt_1780782997842_gbpce",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780782997842
+    },
+    {
+      "id": 5663,
+      "event_id": "evt_1780783000501_22k2l",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780783000501
+    },
+    {
+      "id": 5664,
+      "event_id": "evt_1780783006252_zdl3f",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780783006252
+    },
+    {
+      "id": 5665,
+      "event_id": "evt_1780783011682_zfrco",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 62,
+      "timestamp": 1780783011682
+    },
+    {
+      "id": 5666,
+      "event_id": "evt_1780783018030_5wbtr",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780783018030
+    },
+    {
+      "id": 5667,
+      "event_id": "evt_1780783024255_098ot",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780783024255
+    },
+    {
+      "id": 5668,
+      "event_id": "evt_1780783030426_oggta",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3489,
+      "timestamp": 1780783030426
+    },
+    {
+      "id": 5669,
+      "event_id": "evt_1780783038822_pzfv7",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "48d74a04-da45-4cc0-b0a7-0d09ae3559aa",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 133,
+      "timestamp": 1780783038822
+    }
+  ],
+  "metrics": {
+    "tool_calls": 41,
+    "duration_ms": 184501,
+    "traceability_score": 1,
+    "has_commit": true
+  }
+}

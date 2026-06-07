@@ -1,0 +1,91 @@
+{
+  "id": 46,
+  "label": "good",
+  "task": {
+    "id": 46,
+    "agent_id": "cec50b17:0",
+    "title": "Implement JSON envelope for read_messages output",
+    "status": "completed",
+    "started_at": 1780749911532,
+    "finished_at": 1780749949202,
+    "trigger_msg_id": null,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "4a5f03a"
+  },
+  "linked_msg_ids": [],
+  "messages": [
+    {
+      "id": 882,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:25",
+      "content": "New task: Change `read_messages` in `src/mcp-server.ts` to return a JSON array envelope instead of plain text, while keeping message body as plain text.\n\n**Current output format** (plain text):\n```\n2 new message(s):\n\n[P5] [id=860] From: human at 2026-06-06T11:26:54.823Z\nRevisit last commit...\n\n---\n\n[P5] [id=861] From: cec50b17:25 at ...\nDONE — fix...\n\n[Synapse] Now call update_status to report your current state.\n```\n\n**New output format** — return a JSON array as the main content block, plus the reminder as a separate plain-text block:\n\n```json\n[\n  {\n    \"id\": 860,\n    \"from\": \"human\",\n    \"priority\": 5,\n    \"at\": \"2026-06-06T11:26:54.823Z\",\n    \"content\": \"Revisit last commit...\"\n  },\n  {\n    \"id\": 861,\n    \"from\": \"cec50b17:25\",\n    \"priority\": 5,\n    \"at\": \"2026-06-06T11:30:55.097Z\",\n    \"content\": \"DONE — fix...\"\n  }\n]\n```\n\n**Implementation details:**\n- In the `read_messages` handler in `src/mcp-server.ts` (currently around line 378–401)\n- Replace the `formatted` string approach with a JSON array of objects: `{ id, from: m.from_id, priority: m.priority, at: new Date(m.created_at).toISOString(), content: m.content }`\n- Return two MCP content blocks: first block `type: 'text'` with `JSON.stringify(array, null, 2)`, second block `type: 'text'` with the reminder string\n- The \"No new messages\" path can stay as plain text — no change needed there\n- Remove the now-unused `label` variable and the `---` separator logic\n- Also update the `read_messages` tool description (around line 89) to document the JSON structure so agents know what fields to expect\n\n**Build:** `npm run build` must pass. Commit. Report DONE to cec50b17:0.",
+      "priority": 5,
+      "created_at": 1780749923159,
+      "read_at": 1780749924968,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 4716,
+      "event_id": "evt_1780749911578_qbfkz",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__start_activity",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780749911578
+    },
+    {
+      "id": 4717,
+      "event_id": "evt_1780749923205_b8eq5",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780749923205
+    },
+    {
+      "id": 4719,
+      "event_id": "evt_1780749925729_3hd8u",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780749925729
+    },
+    {
+      "id": 4721,
+      "event_id": "evt_1780749927898_wmk2w",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780749927898
+    },
+    {
+      "id": 4723,
+      "event_id": "evt_1780749929860_6gjqb",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780749929860
+    }
+  ],
+  "metrics": {
+    "tool_calls": 5,
+    "duration_ms": 37670,
+    "traceability_score": 3,
+    "has_commit": true
+  }
+}

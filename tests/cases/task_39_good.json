@@ -13,6 +13,10 @@
     "source_msg_id": null,
     "commit_sha": "c9d442d"
   },
+  "linked_msg_ids": [
+    825,
+    827
+  ],
   "messages": [
     {
       "id": 825,
@@ -25,7 +29,22 @@
       "needs_approval": 0,
       "approved_at": null,
       "request_options": null,
-      "selected_option": null
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 826,
+      "from_id": "cec50b17:23",
+      "to_id": "human",
+      "content": "✅ committed c9d442d: feat: lint check — require source_msg_id on delegate_task calls",
+      "priority": 5,
+      "created_at": 1780743271504,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
     },
     {
       "id": 827,
@@ -38,7 +57,22 @@
       "needs_approval": 0,
       "approved_at": null,
       "request_options": null,
-      "selected_option": null
+      "selected_option": null,
+      "task_id": null
+    },
+    {
+      "id": 828,
+      "from_id": "cec50b17:23",
+      "to_id": "human",
+      "content": "DONE: delegate_task guard requires source_msg_id (c9d442d)",
+      "priority": 5,
+      "created_at": 1780743277863,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null
     }
   ],
   "tool_metrics": [
