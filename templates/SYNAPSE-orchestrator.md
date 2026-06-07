@@ -58,6 +58,12 @@ spawn_agent(
 
 ## Canonical Per-Task Sequence
 
+Task docs live in `.synapse/tasks/` (gitignored). Two files may exist for any task, independently:
+- `<taskId>-plan.md` — plan/spec produced in the Research step; the worker reads this as input context
+- `<taskId>.md`      — handoff brief written by delegate_task (task_file: true); the worker reads this as task instructions
+
+Either may exist on its own, or both together. Neither is required.
+
 Follow this sequence exactly — do not skip or reorder steps:
 
 ```
