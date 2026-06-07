@@ -13,11 +13,22 @@ Editing documentation, protocol files, and templates is fine — that is part of
 
 You own the orchestration strategy — when to reuse a worker, parallelize, or spawn a new one. The only rule: **always call `list_workers` before routing**. Worker state can change between turns; your in-memory assumption is stale.
 
-From the returned state, decide:
-- Reuse the same worker for related sequential tasks
-- Route to an idle worker of the right role for independent tasks
-- Spawn a new worker when all matching workers are busy and the task can't wait
-- Ask the human if no suitable role exists
+From the returned list, decide:
+
+**Routing criteria (in order of priority):**
+1. **Topic continuity** — if a worker recently handled related work (same area of the codebase, same feature), prefer them. Context is warm; no re-explanation needed.
+2. **Restart needed** — if a worker shows many completed tasks in this session, they may have a bloated context. Prefer a fresh spawn or trigger a restart before assigning a new task.
+3. **Parallel work** — if two tasks are independent and can run concurrently, use separate workers intentionally. Never assign a second task to a `working` worker unless you explicitly intend parallel execution.
+4. **Idle match** — otherwise, prefer an idle worker of the right role over spawning a new one.
+5. **Spawn** — only when all matching workers are busy and the task cannot wait, or when you want explicit isolation.
+
+Ask the human if no suitable role exists for the task.
+
+**Quick routing reference:**
+- Sequential tasks in the same area → same worker, same session
+- Sequential tasks in different areas → doesn't matter, pick any idle
+- Two independent tasks → separate workers, spawn a second if needed
+- Worker seems sluggish / high task count → restart before next task
 
 **Available roles** are defined in `templates/roles/`. Each role file has a front-matter header:
 ```
