@@ -993,10 +993,10 @@
     promptSlotSection.style.display = 'none';
     promptRoleSection.style.display = 'none';
     promptBootSection.style.display = 'none';
-    promptBaseProto.textContent = '';
-    promptSlotDoc.textContent = '';
-    promptRoleBody.textContent = '';
-    promptBootTask.textContent = 'loading…';
+    promptBaseProto.innerHTML = '';
+    promptSlotDoc.innerHTML = '';
+    promptRoleBody.innerHTML = '';
+    promptBootTask.innerHTML = '<span style="color:var(--muted)">loading…</span>';
     promptBootSection.style.display = '';
     promptBackdrop.classList.remove('hidden');
     try {
@@ -1004,20 +1004,20 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.base_protocol) {
-        promptBaseProto.textContent = data.base_protocol;
+        promptBaseProto.innerHTML = renderMarkdown(data.base_protocol);
         promptBaseSection.style.display = '';
       }
       if (data.slot_doc) {
-        promptSlotDoc.textContent = data.slot_doc;
+        promptSlotDoc.innerHTML = renderMarkdown(data.slot_doc);
         promptSlotSection.style.display = '';
       }
       if (data.role_body) {
-        promptRoleBody.textContent = data.role_body;
+        promptRoleBody.innerHTML = renderMarkdown(data.role_body);
         promptRoleSection.style.display = '';
       }
-      promptBootTask.textContent = data.boot_task ?? '(none recorded)';
+      promptBootTask.innerHTML = renderMarkdown(data.boot_task ?? '*(none recorded)*');
     } catch (e) {
-      promptBootTask.textContent = `Error: ${e.message}`;
+      promptBootTask.innerHTML = `<span style="color:var(--p0)">Error: ${esc(e.message)}</span>`;
     }
   }
 
