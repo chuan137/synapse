@@ -15,7 +15,9 @@ Milestones (DONE / FINDING / BLOCKED) to `human` are EXPECTED — that's how the
 
 ```
 1. Read          — read_messages to receive the task
-                   • if message references .synapse/tasks/<id>.md, Read that file first
+                   • if message references .synapse/tasks/<id>.md, Read that file for the full task brief
+                   • if .synapse/tasks/<id>-plan.md exists, Read that too — it contains the plan/spec
+                     context produced by the orchestrator's research step
 2. update_status — state="working", current_task="<short description>"
 3. Execute       — implement the task
 4. report_done   — sends full DONE to orchestrator + one-liner milestone to human
