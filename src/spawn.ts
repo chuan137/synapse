@@ -41,6 +41,8 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
   const ENV_VARS_TO_FORWARD = [
     'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN',
     'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS',
+    'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_MODEL',
   ];
   const envLines = ENV_VARS_TO_FORWARD
     .filter(k => process.env[k])
