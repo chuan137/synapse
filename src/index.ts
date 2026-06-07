@@ -645,6 +645,18 @@ program
     writeFileSync(reportPath, JSON.stringify(results, null, 2));
     process.stdout.write(`\nWrote ${results.length} results to ${reportPath}\n`);
 
+    // Also persist results to eval_results DB table
+    const { writeEvalResults } = await import('./db.js');
+    for (const r of results) {
+      writeEvalResults(r.id, [
+        { metric: 'traceability', passed: r.metrics.traceability_score <= 1, value: r.metrics.traceability_score },
+        { metric: 'tool_calls',   passed: r.metrics.tool_calls <= 20,          value: r.metrics.tool_calls },
+        { metric: 'duration',     passed: (r.metrics.duration_ms ?? 0) <= 120_000, value: r.metrics.duration_ms },
+        { metric: 'has_commit',   passed: r.metrics.has_commit,                 value: null },
+      ]);
+    }
+    process.stdout.write(`Persisted ${results.length} eval results to DB\n`);
+
     if (options.critic) {
       const { runCritic } = await import('./eval/critic.js');
       const rulesFile = join(process.cwd(), 'templates', 'SYNAPSE-orchestrator.md');
