@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -578,6 +578,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         env: { ...process.env },
       });
       child.unref();
+    }
+    // Auto-restart after AUTO_RESTART_AFTER_TASKS completed tasks
+    const AUTO_RESTART_AFTER_TASKS = parseInt(process.env.SYNAPSE_AUTO_RESTART_TASKS ?? '5', 10);
+    if (!isNaN(AUTO_RESTART_AFTER_TASKS) && AUTO_RESTART_AFTER_TASKS > 0 && status === 'completed') {
+      const sessionStart = getAgentSessionStart(AGENT_ID);
+      if (sessionStart) {
+        const completedCount = countCompletedTasksForAgent(AGENT_ID, sessionStart);
+        if (completedCount >= AUTO_RESTART_AFTER_TASKS) {
+          const deckPort = process.env.SYNAPSE_DECK_PORT ?? '3001';
+          const http = await import('http');
+          const req = http.request(`http://127.0.0.1:${deckPort}/api/agents/${encodeURIComponent(AGENT_ID)}/restart`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          req.on('error', () => {}); // ignore — best-effort
+          req.end();
+        }
+      }
     }
     return { content: [{ type: 'text', text: ok ? `Task ${task_id} marked ${status}.` : `Task ${task_id} not found or already finished.` }] };
   }

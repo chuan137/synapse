@@ -1091,3 +1091,16 @@ export function resetMetricCount(metric: string): void {
     ON CONFLICT(metric) DO UPDATE SET count = 0, last_reset_at = ?
   `).run(metric, Date.now(), Date.now());
 }
+
+export function countCompletedTasksForAgent(agentId: string, since: number): number {
+  const row = db.prepare(`
+    SELECT COUNT(*) as cnt FROM tasks
+    WHERE agent_id = ? AND status = 'completed' AND finished_at >= ?
+  `).get(agentId, since) as { cnt: number };
+  return row?.cnt ?? 0;
+}
+
+export function getAgentSessionStart(agentId: string): number | null {
+  const row = db.prepare('SELECT updated_at FROM agent_status WHERE agent_id = ?').get(agentId) as { updated_at: number } | null;
+  return row?.updated_at ?? null;
+}

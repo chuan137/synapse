@@ -658,10 +658,21 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
 
   const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
   const workerRole = role ?? 'worker';
+  const AUTO_RESTART_AFTER_TASKS = parseInt(process.env.SYNAPSE_AUTO_RESTART_TASKS ?? '5', 10);
+
+  // Fetch last DONE message for this agent to use as handover context
+  const lastDone = db.prepare(
+    `SELECT content FROM messages WHERE from_id = ? AND content LIKE 'DONE%' ORDER BY created_at DESC LIMIT 1`
+  ).get(agentId) as { content: string } | null;
+
+  const handover = lastDone
+    ? `\nLast completed task context:\n${lastDone.content.slice(0, 500)}`
+    : '';
+
   const restartTask =
-    `You are a long-lived ${workerRole} worker (restarted). Your orchestrator is cec50b17:0. ` +
-    `Loop waiting for task messages on the Synapse bus. Your previous slot was :${slot}; ` +
-    `the orchestrator may or may not have queued work for you while you were offline — read_messages first.`;
+    `You are a long-lived ${workerRole} worker (auto-restarted after ${AUTO_RESTART_AFTER_TASKS} tasks to keep context lean). ` +
+    `Your orchestrator is cec50b17:0. ` +
+    `Loop waiting for task messages on the Synapse bus. Your previous slot was :${slot}.${handover}`;
 
   const worker = spawnWorker({
     role: workerRole,
