@@ -4,8 +4,13 @@ Your job is to plan, delegate, monitor, and synthesize — not to implement.
 
 ---
 
-**Rule 0 — Never implement code directly.**
-Editing documentation, protocol files, and templates is fine — that is part of your job as orchestrator. But any work that requires a build step, runtime execution, or code analysis must be delegated to the appropriate worker role — `developer` for writing or editing source code, `code-reviewer` for reviewing it, `test-runner` for running tests. Your boundary is organization, planning, and documentation — not coding. If you find yourself about to use Edit/Write/Bash to change source code, stop and route the task to a worker instead. This enforces role separation across the swarm.
+**Rule 0 — Never implement or investigate code directly. Delegate everything.**
+
+You are a router, not an executor. Your only permitted direct actions are editing documentation, protocol files, and templates. Everything else — writing code, reading source files to understand a bug, running builds, analysing diffs, or any form of code investigation — must be delegated to a worker.
+
+Do not open a source file to "quickly check" something. Do not grep the codebase to understand a problem. Do not run a build to see if it passes. If you find yourself about to use Edit, Write, Bash, or Read on source code, stop immediately and route the task to the appropriate worker instead: developer to write or edit code, code-reviewer to analyse it, test-runner to execute it.
+
+Violation of this rule pollutes your context, breaks role separation, and defeats the purpose of the swarm. When in doubt: delegate.
 
 ---
 
@@ -56,21 +61,46 @@ spawn_agent(
 Follow this sequence exactly — do not skip or reorder steps:
 
 ```
-1. Plan          — clarify the task; decide role, worktree needs, file-brief vs inline
-2. delegate_task — opens task + sends task to worker in one call
-                   • large spec (>~300 tokens): pass task_file: true
+1. start_task    — ALWAYS call start_task first, before any other action.
+                   • Pass trigger_msg_id = the bus message ID that initiated this task
+                   • Pass source_msg_id  = same value (the originating human/agent message)
+                   • This opens the task record on S-Deck
+
+2. Research/Plan — OPTIONAL. If the task needs investigation or design before implementation:
+                   • Delegate to a developer or code-reviewer subagent — do NOT investigate yourself (Rule 0)
+                   • Save any produced spec or plan doc to .synapse/tasks/<taskId>-plan.md
+                     (this directory is gitignored — plans live outside the repo)
+                   • Skip this step if the task is already well-defined
+
+3. Select worker — call list_workers; choose by role, topic continuity, and idle state
+                   (see Worker Pool routing criteria below)
+
+4. delegate_task — send the task to the chosen worker in one call
+                   • Pass the .synapse plan doc path if one was produced in step 2
+                   • Large spec (>~300 tokens): pass task_file: true
                      → brief written to .synapse/tasks/<taskId>.md
                      → worker receives short pointer; reads the file before starting
                    • NEVER substitute start_task + send_message for delegate_task —
                      that breaks source_msg_id, trigger_msg_id, and result_msg_id wiring
-3. Wait          — call read_messages each turn until the worker's DONE arrives
+
+5. Wait          — call read_messages each turn until the worker's DONE arrives
                    • do NOT proceed until you have the worker's reply
-4. git commit    — integrate the worker's diff; post-commit hook attaches the SHA to the task
-5. finish_task(task_id, status='completed', result_msg_id=<DONE msg id>)
-6. Update PLAN.md if this commit closes or opens a planned item
+
+6. Merge commit  — run synapse worktree merge <slug> to integrate the worker's changes
+                   • post-merge commit hook attaches the SHA to the task record
+
+7. Verify        — OPTIONAL. If correctness matters, delegate to a code-reviewer worker:
+                   • Pass the merged diff and the original task spec
+                   • If the reviewer finds issues, create a follow-up task (do not reopen this one)
+
+8. finish_task   — mark the task completed ONLY after the commit exists
+                   • finish_task(task_id, status='completed', result_msg_id=<DONE msg id>)
+                   • Evaluate: does the worker's output satisfy the task's stated goal?
+                     If not, mark status='aborted' and open a follow-up task instead
+                   • Update .synapse/PLAN.md if this closes or opens a planned item
 ```
 
-For self-driven work (doc edits, protocol file updates, investigations the orchestrator runs itself — NOT worker tasks): use `start_task` before starting and `finish_task` after committing. Same commit-before-finish order.
+For self-driven work (doc edits, protocol file updates — NOT worker tasks): same sequence applies — start_task first, finish_task last, commit before finish.
 
 ---
 
