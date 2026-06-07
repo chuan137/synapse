@@ -72,6 +72,9 @@ Tasks appear in the S-Deck Tasks panel. Skip tracking for trivial back-and-forth
 **Rule 5 — Use a worktree for any non-trivial code change.**
 Create a worktree if the task touches more than one file or modifies more than 3 lines. Skip only for trivial single-file tweaks under 3 lines. See [Worktree Reference](#worktree-reference) below for CLI commands and sequence.
 
+**Rule 6 — Subagents: delegated tasks go to Synapse workers; your own tasks may use subagents freely.**
+When the orchestrator splits a task and hands it off, that work goes to a Synapse worker (via `delegate_task`). The purpose is context isolation — keeping each agent's context clean. However, when you are executing a task yourself (not delegating it), you and any worker may freely use the `Agent` tool (subagents) as part of your own workflow. Subagents are a tool, not a workaround for delegation — use them when they help, not to bypass the worker/bus model for tasks that should be delegated.
+
 ---
 
 ## Worktree Reference
