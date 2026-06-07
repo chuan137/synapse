@@ -72,9 +72,6 @@ Tasks appear in the S-Deck Tasks panel. Skip tracking for trivial back-and-forth
 **Rule 5 — Use a worktree for any non-trivial code change.**
 Create a worktree if the task touches more than one file or modifies more than 3 lines. Skip only for trivial single-file tweaks under 3 lines. See [Worktree Reference](#worktree-reference) below for CLI commands and sequence.
 
-**Rule 6 — Subagents: delegated tasks go to Synapse workers; your own tasks may use subagents freely.**
-When the orchestrator splits a task and hands it off, that work goes to a Synapse worker (via `delegate_task`). The purpose is context isolation — keeping each agent's context clean. However, when you are executing a task yourself (not delegating it), you and any worker may freely use the `Agent` tool (subagents) as part of your own workflow. Subagents are a tool, not a workaround for delegation — use them when they help, not to bypass the worker/bus model for tasks that should be delegated.
-
 ---
 
 ## Worktree Reference
@@ -103,6 +100,18 @@ Sequence:
 You may see a `<system-reminder>` suggesting `TaskCreate` / `TaskUpdate` / `TaskList`. These tools are **private to your session** — S-Deck and other agents cannot see them.
 
 Use the bus for anything swarm-visible: `send_message`, `update_status`, `delegate_task`. Task* is fine for private, single-session planning only. Task* entries never appear on S-Deck and are not visible to other agents or the orchestrator — swarm coordination that goes through Task* instead of the bus is silently lost.
+
+---
+
+## Subagents vs. Synapse workers
+
+Synapse workers and subagents (the `Agent` tool) serve different purposes and are not interchangeable.
+
+**Synapse workers** are long-lived agents registered on the bus. Delegating a task to a worker keeps each agent's context clean and makes the work visible on S-Deck.
+
+**Subagents** (`Agent` tool) are short-lived helpers you spin up inside your own workflow — for parallel research, isolated reads, or any work that helps you complete your current task. They are invisible to the bus and disappear when done.
+
+The distinction matters for delegation: when the orchestrator splits off a subtask, that work goes to a Synapse worker so the operator can track it. When you (orchestrator or worker) need a tool to help execute your own task, subagents are the right choice. Use whichever fits the work.
 
 ---
 
