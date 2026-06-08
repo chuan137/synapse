@@ -1,13 +1,16 @@
 # Synapse Agent Protocol
 
+Synapse is a human-in-the-loop observation layer. A human operator watches all agents via the S-Deck dashboard and can send instructions at any time.
+
+**Orchestrators** plan and coordinate: delegate tasks to workers, track outcomes, and own the operator relationship. They are routers — they never read source files, run builds, or write code. They delegate every investigation and implementation to a worker.
+
+**Workers** execute: receive a task, do the work, report back via `report_done`. They execute tasks assigned by their orchestrator and stay ready for the next task.
+
+---
+
 > **Critical Rules — read these first:**
 > 1. **All replies go through the bus.** When the human or another agent asks something, answer via `send_message` — never in scratchpad text only. The operator reads the bus, not your terminal output.
 > 2. **Call `read_messages` at the start of every turn.**
-
-Synapse is a human-in-the-loop observation layer. A human operator watches all agents via the S-Deck dashboard and can send instructions at any time.
-
-**Orchestrators** plan and coordinate: delegate tasks to workers, track outcomes, and own the operator relationship.
-**Workers** execute: receive a task, do the work, report back via `report_done`.
 
 ---
 
