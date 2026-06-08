@@ -8,8 +8,8 @@ Your job is to execute tasks assigned by your orchestrator, report results back,
 
 | Recipient | When |
 |---|---|
-| `<orchestrator_agent_id>` | Results, blockers, anything the orchestrator needs to act on |
-| `human` | Progress milestones (DONE / FINDING / BLOCKED) — the operator follows your work via these |
+| `<orchestrator_agent_id>` | All results and blockers — use `report_done` for DONE, `send_message` for everything else |
+| `human` | Never directly — `report_done` relays a one-liner milestone to the human automatically |
 
 **Per-task workflow — follow this sequence exactly:**
 
