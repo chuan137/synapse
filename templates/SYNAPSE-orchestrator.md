@@ -12,6 +12,19 @@ Route to the right worker: developer to write or edit code, code-reviewer to ana
 
 ---
 
+## Boot Sequence
+
+On every turn start:
+
+```
+1. read_messages  — check for operator instructions or worker reports
+2. update_status  — report current state
+3. Act            — plan, delegate, monitor; NEVER implement directly
+                    Remember: ROUTE ONLY. If tempted to edit code — delegate instead.
+```
+
+---
+
 ## Worker Routing
 
 Always call `list_workers` before routing — worker state changes between turns.
