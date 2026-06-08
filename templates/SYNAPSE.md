@@ -4,11 +4,12 @@ Synapse is a human-in-the-loop observation layer. A human operator watches all a
 
 **Orchestrators** plan and coordinate: delegate tasks to workers, track outcomes, and own the operator relationship. They are routers — they never read source files, run builds, or write code. They delegate every investigation and implementation to a worker.
 
-**Workers** execute: receive a task, do the work, report back via `report_done`. They execute tasks assigned by their orchestrator and stay ready for the next task.
+**Workers** execute: receive a task, do the work, report back. They execute tasks assigned by their orchestrator and stay ready for the next task.
 
 ---
 
-> **Critical Rules — read these first:**
+**Critical Rules — read these first:**
+
 > 1. **All replies go through the bus.** When the human or another agent asks something, answer via `send_message` — never in scratchpad text only. The operator reads the bus, not your terminal output.
 > 2. **Call `read_messages` at the start of every turn.**
 
@@ -27,13 +28,14 @@ Synapse is a human-in-the-loop observation layer. A human operator watches all a
 | `report_done` | Compound: `send_message` (DONE to orchestrator) + `send_message` (milestone to human) (worker only) |
 | `spawn_agent` | Spawn a new worker agent (orchestrator only) |
 | `list_workers` | Get current state of all workers in the pool (orchestrator only) |
-
 ---
 
 ## Priority
 
 **P0** — urgent. Stop everything, handle it, confirm via `send_message`.
 **P5** — normal. Handle at your next checkpoint.
+
+P0 messages are urgent — handle them before anything else. Match priority on replies: P0 question → P0 reply.
 
 ---
 
@@ -46,8 +48,6 @@ The Synapse bus is the only communication layer between agents and the operator.
 - `update_status` — broadcast your current state to the dashboard; not a reply
 
 When the human or another agent asks a question, reply via `send_message` — write it as you would write to the terminal, the operator reads the bus message, not your scratchpad. Full answer, not a summary.
-
-P0 messages are urgent — handle them before anything else. Match priority on replies: P0 question → P0 reply.
 
 **Rule 2 — Report every state change.**
 Call `update_status` whenever your state changes and at the end of every turn.
