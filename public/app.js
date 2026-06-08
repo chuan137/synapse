@@ -759,21 +759,14 @@
     }
     const optBtn = e.target.closest('.msg-option-btn');
     if (optBtn) {
-      const { msgId, optionIndex, fromId, priority } = optBtn.dataset;
+      const { msgId, optionIndex } = optBtn.dataset;
       optBtn.closest('.message-actions').querySelectorAll('.msg-option-btn').forEach(b => b.disabled = true);
       optBtn.classList.add('selected');
-      await Promise.all([
-        fetch(`/api/messages/${msgId}/select-option`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ option_index: parseInt(optionIndex, 10) }),
-        }),
-        fetch('/api/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to_id: fromId, content: optBtn.textContent, priority: parseInt(priority, 10) }),
-        }),
-      ]);
+      await fetch(`/api/messages/${msgId}/select-option`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ option_index: parseInt(optionIndex, 10) }),
+      });
     }
   });
 
