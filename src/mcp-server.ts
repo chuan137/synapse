@@ -144,10 +144,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           type: {
             type: 'string',
             enum: ['message', 'done', 'decision', 'finding', 'blocked', 'commit'],
-            description: 'Optional message type. Auto-detected from content prefix (DONE/DECISION/FINDING/BLOCKED/COMMIT) if not provided.',
+            default: 'message',
+            description: 'Message type. Use "done" when reporting task completion, "decision" for choices made, "finding" for discoveries, "blocked" when stuck, "commit" for commit notifications. Defaults to "message".',
           },
         },
-        required: ['to_id', 'content'],
+        required: ['to_id', 'content', 'type'],
       },
     },
     {
