@@ -614,42 +614,45 @@ export function getMostRecentInProgressTask(agentId: string): { id: number } | n
  * and mark it completed. Prefers tasks recorded for the committing agent, falls
  * back to the most recently started in-progress task across all agents.
  */
-export function attachCommitToCurrentTask(agentId: string, commitSha: string): boolean {
-  const r = db.prepare(`
+export function attachCommitToCurrentTask(agentId: string, commitSha: string): number | null {
+  const row = db.prepare(`
+    SELECT id FROM tasks
+    WHERE status = 'in_progress' AND commit_sha IS NULL
+    ORDER BY (agent_id = ?) DESC, started_at DESC LIMIT 1
+  `).get(agentId) as { id: number } | undefined;
+  if (!row) return null;
+  db.prepare(`
     UPDATE tasks
        SET commit_sha  = ?,
            status      = 'completed',
            finished_at = COALESCE(finished_at, ?)
-     WHERE id = (
-       SELECT id FROM tasks
-       WHERE status = 'in_progress' AND commit_sha IS NULL
-       ORDER BY (agent_id = ?) DESC, started_at DESC LIMIT 1
-     )
-  `).run(commitSha, Date.now(), agentId);
-  return r.changes > 0;
+     WHERE id = ?
+  `).run(commitSha, Date.now(), row.id);
+  return row.id;
 }
 
 /**
  * Attach a commit_sha to the most recent in_progress task owned by the worker at
  * the given slot, and mark it completed. Used by `synapse worktree merge` to link the
- * integration commit to the worker's task. Returns true if a row was updated, false
- * if the slot has no agent or no matching in_progress task.
+ * integration commit to the worker's task. Returns the task ID if updated, null otherwise.
  */
-export function attachCommitToTaskBySlot(slot: number, commitSha: string): boolean {
+export function attachCommitToTaskBySlot(slot: number, commitSha: string): number | null {
   const agent = getAgentBySlot(slot);
-  if (!agent) return false;
-  const r = db.prepare(`
+  if (!agent) return null;
+  const row = db.prepare(`
+    SELECT id FROM tasks
+    WHERE agent_id = ? AND status = 'in_progress' AND commit_sha IS NULL
+    ORDER BY started_at DESC LIMIT 1
+  `).get(agent.agent_id) as { id: number } | undefined;
+  if (!row) return null;
+  db.prepare(`
     UPDATE tasks
        SET commit_sha  = ?,
            status      = 'completed',
            finished_at = COALESCE(finished_at, ?)
-     WHERE id = (
-       SELECT id FROM tasks
-       WHERE agent_id = ? AND status = 'in_progress' AND commit_sha IS NULL
-       ORDER BY started_at DESC LIMIT 1
-     )
-  `).run(commitSha, Date.now(), agent.agent_id);
-  return r.changes > 0;
+     WHERE id = ?
+  `).run(commitSha, Date.now(), row.id);
+  return row.id;
 }
 
 export function listTasksForAgent(agentId: string, limit = 100): Task[] {

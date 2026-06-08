@@ -11,7 +11,9 @@
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
 import { ingestEvent, setLivenessBySession, markAgentEndedBySession, postMilestoneOnce, attachCommitToCurrentTask, getAgentIdBySession } from '../db.js';
 
 const MAX_LEN = 500;
@@ -120,7 +122,18 @@ function emitDeterministicMilestones(hookType: string, sessionId: string, payloa
   // Attach the commit SHA to this agent's current in_progress task (if any).
   const agentId = getAgentIdBySession(sessionId);
   if (agentId) {
-    try { attachCommitToCurrentTask(agentId, hash); } catch { /* telemetry must not block */ }
+    try {
+      const taskId = attachCommitToCurrentTask(agentId, hash);
+      if (taskId !== null) {
+        const indexJs = join(dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
+        const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(taskId)], {
+          detached: true,
+          stdio: 'ignore',
+          env: { ...process.env },
+        });
+        child.unref();
+      }
+    } catch { /* telemetry must not block */ }
   }
 }
 

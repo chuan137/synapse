@@ -4,7 +4,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from 'os';
 import { join, resolve, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { exec, execFileSync, execSync } from 'child_process';
+import { exec, execFileSync, execSync, spawn } from 'child_process';
 import { openDb, attachCommitToTaskBySlot, resetMetricCount } from './db.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { parseRoleFile } from './roles.js';
@@ -389,8 +389,17 @@ function attachMergeCommit(root: string, name: string): void {
   }
   try {
     const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-    const ok = attachCommitToTaskBySlot(slot, headSha);
-    if (ok) process.stderr.write(`[worktree merge] attached ${headSha.slice(0, 7)} to slot :${slot} task\n`);
+    const taskId = attachCommitToTaskBySlot(slot, headSha);
+    if (taskId !== null) {
+      process.stderr.write(`[worktree merge] attached ${headSha.slice(0, 7)} to slot :${slot} task\n`);
+      const indexJs = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
+      const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(taskId)], {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env },
+      });
+      child.unref();
+    }
   } catch (e) {
     process.stderr.write(`[worktree merge] task attach failed: ${e}\n`);
   }
