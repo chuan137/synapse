@@ -480,7 +480,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: `Worker spawned in tmux window "${windowName}" but has not registered yet. Check S-Deck.` }] };
     }
 
-    recordSpawnIntent(worker.agent_id, task);
+    recordSpawnIntent(worker.agent_id, task, AGENT_ID);
+    sendMessage(
+      AGENT_ID,
+      worker.agent_id,
+      JSON.stringify({ type: 'handshake', orchestrator_id: AGENT_ID, worker_id: worker.agent_id }),
+      5,
+    );
 
     return {
       content: [

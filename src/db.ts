@@ -127,6 +127,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE agent_status ADD COLUMN ended_at INTEGER`,
     `ALTER TABLE agent_status ADD COLUMN role TEXT`,
     `ALTER TABLE agent_status ADD COLUMN boot_task TEXT`,
+    `ALTER TABLE agent_status ADD COLUMN orchestrator_id TEXT`,
     // Rename activities → tasks. On fresh DBs: activities was just created above, rename succeeds.
     // On existing DBs pre-rename: activities exists, rename succeeds.
     // On existing DBs already renamed: tasks exists, rename fails → swallowed (idempotent).
@@ -203,6 +204,7 @@ export interface AgentStatus {
   updated_at: number;
   ended_at: number | null;
   boot_task: string | null;
+  orchestrator_id: string | null;
 }
 
 // An EventRecord as emitted by the inspector hook (inspector/types.ts shape,
@@ -734,18 +736,19 @@ export function setAgentName(agentId: string, name: string): void {
 
 /** Pre-populate a slot row with the boot task text before the worker registers,
  *  so it's immediately readable via /api/agents/:id/prompt. */
-export function recordSpawnIntent(agentId: string, bootTask: string): void {
+export function recordSpawnIntent(agentId: string, bootTask: string, orchestratorId?: string): void {
   db.prepare(`
-    INSERT INTO agent_status (agent_id, slot, state, boot_task, updated_at)
+    INSERT INTO agent_status (agent_id, slot, state, boot_task, orchestrator_id, updated_at)
     VALUES (
       ?,
       (SELECT COALESCE(MAX(slot) + 1, 1) FROM agent_status WHERE slot > 0),
       'idle',
       ?,
+      ?,
       ?
     )
-    ON CONFLICT(agent_id) DO UPDATE SET boot_task = excluded.boot_task
-  `).run(agentId, bootTask, Date.now());
+    ON CONFLICT(agent_id) DO UPDATE SET boot_task = excluded.boot_task, orchestrator_id = COALESCE(excluded.orchestrator_id, orchestrator_id)
+  `).run(agentId, bootTask, orchestratorId ?? null, Date.now());
 }
 
 export function getAgentConfigBySlot(

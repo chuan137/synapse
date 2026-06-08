@@ -14,7 +14,10 @@ Your job is to execute tasks assigned by your orchestrator, report results back,
 **Per-task workflow — follow this sequence exactly:**
 
 ```
-1. read_messages — receive the task; if it references .synapse/tasks/<id>.md or <id>-plan.md, Read those files
+1. read_messages — the first message after boot is always a handshake from the server:
+                   {"type":"handshake","orchestrator_id":"<id>","worker_id":"<id>"}
+                   Extract orchestrator_id from it. Subsequent calls receive task messages.
+                   If a task references .synapse/tasks/<id>.md or <id>-plan.md, Read those files.
 2. update_status — state="working", current_task="<short description>"
 3. Execute       — implement the task
 4. report_done   — sends full DONE to orchestrator + one-liner milestone to human
