@@ -8,6 +8,10 @@
   let planContent      = '';
   let selectedAgentId  = null;
   let middlePanelTab   = 'messages'; // 'messages' | 'plan'
+  // Local tracking of clicked approval buttons — persists across SSE re-renders
+  // until approved_at propagates from the server.
+  const approvedMsgIds   = new Set();   // msg IDs where simple approve was clicked
+  const selectedOptions  = new Map();   // msg ID → option index chosen
   let rightPanelTab    = 'tasks';    // 'events'   | 'tasks'
 
   // ── Theme ────────────────────────────────────────────────────────────────
@@ -752,20 +756,24 @@
   messagesList.addEventListener('click', async (e) => {
     const btn = e.target.closest('.msg-approve-btn');
     if (btn) {
+      const msgId = btn.dataset.msgId;
       btn.disabled = true;
       btn.textContent = '✓ approved';
-      await fetch(`/api/messages/${btn.dataset.msgId}/approve`, { method: 'POST' });
+      approvedMsgIds.add(msgId);
+      await fetch(`/api/messages/${msgId}/approve`, { method: 'POST' });
       return;
     }
     const optBtn = e.target.closest('.msg-option-btn');
     if (optBtn) {
       const { msgId, optionIndex } = optBtn.dataset;
+      const idx = parseInt(optionIndex, 10);
+      selectedOptions.set(msgId, idx);
       optBtn.closest('.message-actions').querySelectorAll('.msg-option-btn').forEach(b => b.disabled = true);
       optBtn.classList.add('selected');
       await fetch(`/api/messages/${msgId}/select-option`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ option_index: parseInt(optionIndex, 10) }),
+        body: JSON.stringify({ option_index: idx }),
       });
     }
   });
@@ -804,20 +812,28 @@
         const approveBtn = (!fromHuman && m.needs_approval)
           ? (() => {
               if (m.approved_at !== null && m.approved_at !== undefined) {
+                // Server confirmed — drop local tracking for this message
+                approvedMsgIds.delete(String(m.id));
+                selectedOptions.delete(String(m.id));
                 const opts = m.request_options ? JSON.parse(m.request_options) : null;
                 const badge = (opts && m.selected_option != null)
                   ? `<span class="msg-approved-badge">✓ ${esc(opts[m.selected_option])}</span>`
                   : `<span class="msg-approved-badge">✓ approved</span>`;
                 return `<div class="message-actions">${badge}</div>`;
               }
+              const msgIdStr = String(m.id);
               const opts = m.request_options ? JSON.parse(m.request_options) : null;
               if (opts && opts.length > 0) {
-                const btns = opts.map((opt, i) =>
-                  `<button class="msg-option-btn" data-msg-id="${m.id}" data-option-index="${i}" data-from-id="${esc(m.from_id)}" data-priority="${m.priority}">${esc(opt)}</button>`
-                ).join('');
+                const localSel = selectedOptions.get(msgIdStr);
+                const btns = opts.map((opt, i) => {
+                  const isSelected = localSel === i;
+                  const isDisabled = localSel !== undefined;
+                  return `<button class="msg-option-btn${isSelected ? ' selected' : ''}" ${isDisabled ? 'disabled' : ''} data-msg-id="${m.id}" data-option-index="${i}" data-from-id="${esc(m.from_id)}" data-priority="${m.priority}">${esc(opt)}</button>`;
+                }).join('');
                 return `<div class="message-actions message-options">${btns}</div>`;
               }
-              return `<div class="message-actions"><button class="msg-approve-btn" data-msg-id="${m.id}">✓ approve</button></div>`;
+              const wasApproved = approvedMsgIds.has(msgIdStr);
+              return `<div class="message-actions"><button class="msg-approve-btn" data-msg-id="${m.id}"${wasApproved ? ' disabled' : ''}>✓ ${wasApproved ? 'approved' : 'approve'}</button></div>`;
             })()
           : '';
         return `
@@ -850,9 +866,8 @@
   const msgInput = document.getElementById('msg-input');
 
   msgInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.altKey)   { e.preventDefault(); send(0); }
-    else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(5); }
-    // Shift+Enter falls through to default textarea newline behaviour
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) { e.preventDefault(); send(5); }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.shiftKey)  { e.preventDefault(); send(0); }
   });
   // Auto-resize floor/ceiling — floor matches the CSS --msg-input-min (~4 rows).
   const MSG_INPUT_MIN = 92;

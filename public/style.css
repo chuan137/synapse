@@ -1340,7 +1340,7 @@ input, select, textarea {
       align-self: auto;
     }
     .msg-approve-btn:hover:not(:disabled) { border-color: var(--idle); color: var(--idle); opacity: 1; }
-    .msg-approve-btn:disabled { opacity: 0.5; cursor: default; }
+    .msg-approve-btn:disabled { background: var(--idle); color: var(--bg); border-color: var(--idle); opacity: 1; cursor: default; }
     .msg-approved-badge { font-size: 10px; color: var(--muted); opacity: 0.6; }
     .msg-type-badge {
       display: inline-block;
