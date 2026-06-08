@@ -348,7 +348,8 @@
       background: color-mix(in srgb, var(--muted) 4%, var(--surface));
     }
     .agent-card.selected {
-      background: color-mix(in srgb, var(--muted) 8%, var(--surface));
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+      border-left: 2px solid var(--accent);
     }
 
     /* ── Card body padding ── */
