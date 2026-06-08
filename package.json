@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "start": "tsx src/index.ts",
     "mcp": "node dist/mcp-server.js",
     "dashboard": "node dist/dashboard.js",
