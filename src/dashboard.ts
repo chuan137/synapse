@@ -671,10 +671,16 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
     ? `\nLast completed task context:\n${lastDone.content.slice(0, 500)}`
     : '';
 
-  const restartTask =
-    `You are a long-lived ${workerRole} worker (auto-restarted after ${AUTO_RESTART_AFTER_TASKS} tasks to keep context lean). ` +
-    `Your orchestrator is cec50b17:0. ` +
-    `Loop waiting for task messages on the Synapse bus. Your previous slot was :${slot}.${handover}`;
+  const restartTemplate = readFileSync(
+    join(__dirname, '..', 'templates', 'boot-worker-restart.md'), 'utf8'
+  ).trim();
+  const orchestratorId = agent.orchestrator_id ?? 'unknown';
+  const restartTask = restartTemplate
+    .replace('{role}', workerRole)
+    .replace('{autoRestartTasks}', String(AUTO_RESTART_AFTER_TASKS))
+    .replace('{orchestratorId}', orchestratorId)
+    .replace('{slot}', String(slot))
+    .replace('{handover}', handover);
 
   const worker = spawnWorker({
     role: workerRole,
