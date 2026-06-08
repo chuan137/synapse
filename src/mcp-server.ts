@@ -467,11 +467,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     const windowName = (workerName ?? workerRole).replace(/[^a-zA-Z0-9_-]/g, '-');
 
+    const taskWithOrch = task + `\nYour orchestrator is ${AGENT_ID}.`;
     const worker = spawnWorker({
       role: workerRole,
       name: workerName,
       slot: forcedSlot,
-      task,
+      task: taskWithOrch,
       projectDir: process.cwd(),
       dbPath,
     });
@@ -480,7 +481,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: `Worker spawned in tmux window "${windowName}" but has not registered yet. Check S-Deck.` }] };
     }
 
-    recordSpawnIntent(worker.agent_id, task, AGENT_ID);
+    recordSpawnIntent(worker.agent_id, taskWithOrch, AGENT_ID);
     sendMessage(
       AGENT_ID,
       worker.agent_id,
