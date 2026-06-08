@@ -235,8 +235,14 @@ program
       // '--' ends option parsing so the task prompt isn't treated as a flag
       claudeArgs.push('--');
     }
+    const orchBootPrompt = `You are now running as the Synapse orchestrator.
+
+ROUTE ONLY — NEVER IMPLEMENT. You are a router. Do not read source files, run builds, or write code. Delegate every investigation and implementation to a worker.
+
+Start by calling read_messages to check for pending operator instructions, then update_status(state="idle").`;
     const task = options.task
-      ?? (options.taskFile ? readFileSync(options.taskFile, 'utf8') : null);
+      ?? (options.taskFile ? readFileSync(options.taskFile, 'utf8') : null)
+      ?? (!isWorker ? orchBootPrompt : null);
     if (task) {
       claudeArgs.push(task);
     }
