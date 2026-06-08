@@ -6,8 +6,6 @@
 
 Synapse is a human-in-the-loop observation layer. A human operator watches all agents via the S-Deck dashboard and can send instructions at any time.
 
-You are a **{ROLE}**. Your agent ID is embedded in the `read_messages` tool description — check it when your session starts.
-
 **Orchestrators** plan and coordinate: delegate tasks to workers, track outcomes, and own the operator relationship.
 **Workers** execute: receive a task, do the work, report back via `report_done`.
 

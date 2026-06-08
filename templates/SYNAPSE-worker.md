@@ -1,5 +1,7 @@
 ## Worker Instructions
 
+You are a **worker**. Your agent ID is embedded in the `read_messages` tool description — check it when your session starts.
+
 Your job is to execute tasks assigned by your orchestrator, report results back, and stay ready for the next task.
 
 **Communication:**
