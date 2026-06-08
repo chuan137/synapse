@@ -850,8 +850,9 @@
   const msgInput = document.getElementById('msg-input');
 
   msgInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) { e.preventDefault(); send(5); }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.shiftKey)  { e.preventDefault(); send(0); }
+    if (e.key === 'Enter' && e.altKey)   { e.preventDefault(); send(0); }
+    else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(5); }
+    // Shift+Enter falls through to default textarea newline behaviour
   });
   // Auto-resize floor/ceiling — floor matches the CSS --msg-input-min (~4 rows).
   const MSG_INPUT_MIN = 92;
