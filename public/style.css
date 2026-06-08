@@ -1333,6 +1333,21 @@ input, select, textarea {
     .msg-approve-btn:hover:not(:disabled) { border-color: var(--idle); color: var(--idle); opacity: 1; }
     .msg-approve-btn:disabled { opacity: 0.5; cursor: default; }
     .msg-approved-badge { font-size: 10px; color: var(--muted); opacity: 0.6; }
+    .msg-type-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 1px 5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      vertical-align: middle;
+    }
+    .msg-type-done     { background: color-mix(in srgb, var(--idle) 18%, transparent); color: var(--idle); }
+    .msg-type-blocked  { background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); }
+    .msg-type-decision { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+    .msg-type-finding  { background: color-mix(in srgb, #d4a017 18%, transparent); color: #d4a017; }
+    .msg-type-commit   { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
     .msg-option-btn {
       font-size: 10px;
       padding: 3px 10px;

@@ -141,6 +141,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             oneOf: [{ type: 'number' }, { type: 'null' }],
             description: 'The task this message is associated with. Pass the task_id from start_task or delegate_task, or null if not task-scoped.',
           },
+          type: {
+            type: 'string',
+            enum: ['message', 'done', 'decision', 'finding', 'blocked', 'commit'],
+            description: 'Optional message type. Auto-detected from content prefix (DONE/DECISION/FINDING/BLOCKED/COMMIT) if not provided.',
+          },
         },
         required: ['to_id', 'content'],
       },
@@ -393,7 +398,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'send_message') {
-    const { to_id, content, priority = 5, report_file = false, needs_approval = false, request_options, task_id } = args as {
+    const { to_id, content, priority = 5, report_file = false, needs_approval = false, request_options, task_id, type } = args as {
       to_id: string;
       content: string;
       priority?: number;
@@ -401,6 +406,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       needs_approval?: boolean;
       request_options?: string[];
       task_id?: number | null;
+      type?: string | null;
     };
 
     if (report_file && to_id === 'human') {
@@ -412,11 +418,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const lines = content.split('\n');
       const summary = lines.slice(0, 10).join('\n');
       const shortMsg = `${summary}${lines.length > 10 ? '\n…' : ''}\n\n[Full report: .synapse/reports/${filename}]`;
-      sendMessage(AGENT_ID, to_id, shortMsg, priority, needs_approval, request_options, task_id ?? null);
+      sendMessage(AGENT_ID, to_id, shortMsg, priority, needs_approval, request_options, task_id ?? null, type ?? null);
       return { content: [{ type: 'text', text: 'Message sent (report filed).' }] };
     }
 
-    sendMessage(AGENT_ID, to_id, content, priority, needs_approval, request_options, task_id ?? null);
+    sendMessage(AGENT_ID, to_id, content, priority, needs_approval, request_options, task_id ?? null, type ?? null);
 
     return {
       content: [

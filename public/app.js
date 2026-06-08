@@ -806,6 +806,9 @@
         const senderLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}${agent.name && agent.name !== agent.agent_id ? ' ' + agent.name : ''}` : senderId);
         const avatarLabel = fromHuman ? 'you' : (agent ? `:${agent.slot}` : senderId.slice(-3));
         const p0badge = isP0 ? ` <span style="font-size:10px;color:var(--p0);font-weight:700;">P0</span>` : '';
+        const typeBadge = (m.type && m.type !== 'message')
+          ? ` <span class="msg-type-badge msg-type-${m.type}">${esc(m.type)}</span>`
+          : '';
         const approveBtn = (!fromHuman && m.needs_approval)
           ? (() => {
               if (m.approved_at !== null && m.approved_at !== undefined) {
@@ -830,7 +833,7 @@
             <div class="message-avatar">${esc(avatarLabel)}</div>
             <div class="message-body">
               <div class="message-header">
-                ${p0badge}
+                ${p0badge}${typeBadge}
                 <span class="message-time">${t}</span>
                 <span class="msg-id-label">#${m.id}</span>
               </div>

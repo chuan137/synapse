@@ -137,6 +137,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE messages ADD COLUMN request_options TEXT`,
     `ALTER TABLE messages ADD COLUMN selected_option INTEGER`,
     `ALTER TABLE messages ADD COLUMN task_id INTEGER`,
+    `ALTER TABLE messages ADD COLUMN type TEXT`,
     // Safety: if the prior bug left rows in a stale activities table, rescue them.
     `INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha) SELECT id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha FROM activities`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_results_unique ON eval_results(task_id, metric)`,
@@ -173,6 +174,19 @@ export interface Message {
   request_options: string | null;
   selected_option: number | null;
   task_id: number | null;
+  type: string | null;
+}
+
+export type MessageType = 'message' | 'done' | 'decision' | 'finding' | 'blocked' | 'commit';
+
+export function detectMessageType(content: string): MessageType {
+  const upper = content.trimStart().toUpperCase();
+  if (upper.startsWith('DONE'))     return 'done';
+  if (upper.startsWith('DECISION')) return 'decision';
+  if (upper.startsWith('FINDING'))  return 'finding';
+  if (upper.startsWith('BLOCKED'))  return 'blocked';
+  if (upper.startsWith('COMMIT'))   return 'commit';
+  return 'message';
 }
 
 export interface AgentStatus {
@@ -238,9 +252,9 @@ const stmts = {
     UPDATE messages SET read_at = ? WHERE to_id = ? AND read_at IS NULL
   `),
 
-  insertMessage: db.prepare<[string, string, string, number, number, number, string | null, number | null]>(`
-    INSERT INTO messages (from_id, to_id, content, priority, created_at, needs_approval, request_options, task_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  insertMessage: db.prepare<[string, string, string, number, number, number, string | null, number | null, string]>(`
+    INSERT INTO messages (from_id, to_id, content, priority, created_at, needs_approval, request_options, task_id, type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
 
   insertAgent: db.prepare<[string, number, number], void>(`
@@ -474,8 +488,10 @@ export function sendMessage(
   needsApproval: boolean = false,
   options?: string[],
   taskId?: number | null,
+  type?: string | null,
 ): number {
-  const r = stmts.insertMessage.run(fromId, toId, content, priority, Date.now(), needsApproval ? 1 : 0, options ? JSON.stringify(options) : null, taskId ?? null);
+  const resolvedType = type ?? detectMessageType(content);
+  const r = stmts.insertMessage.run(fromId, toId, content, priority, Date.now(), needsApproval ? 1 : 0, options ? JSON.stringify(options) : null, taskId ?? null, resolvedType);
   return Number(r.lastInsertRowid);
 }
 
@@ -940,7 +956,7 @@ export function postMilestoneOnce(sessionId: string, content: string, priority =
     `SELECT 1 FROM messages WHERE from_id = ? AND to_id = 'human' AND content = ? LIMIT 1`
   ).get(agent.agent_id, content);
   if (dup) return;
-  stmts.insertMessage.run(agent.agent_id, 'human', content, priority, Date.now(), 0, null, null);
+  stmts.insertMessage.run(agent.agent_id, 'human', content, priority, Date.now(), 0, null, null, detectMessageType(content));
 }
 
 export function getRecentEvents(limit = 200): EventRow[] {
