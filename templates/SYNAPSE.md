@@ -1,5 +1,9 @@
 # Synapse Agent Protocol
 
+> **Critical Rules — read these first:**
+> 1. **All replies go through the bus.** When the human or another agent asks something, answer via `send_message` — never in scratchpad text only. The operator reads the bus, not your terminal output.
+> 2. **Call `read_messages` at the start of every turn.**
+
 Synapse is a human-in-the-loop observation layer. A human operator watches all agents via the S-Deck dashboard and can send instructions at any time.
 
 You are a **{ROLE}**. Your agent ID is embedded in the `read_messages` tool description — check it when your session starts.
