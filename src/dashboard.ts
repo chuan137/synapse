@@ -675,14 +675,7 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
     ? join(process.cwd(), '.synapse', 'boot-worker-restart.md')
     : join(__dirname, '..', 'templates', 'boot-worker-restart.md');
   const restartTemplate = readFileSync(bootPath, 'utf8').trim();
-  let orchestratorId = agent.orchestrator_id;
-  if (!orchestratorId) {
-    // Try to recover from the handshake message sent to this agent at spawn time
-    const handshakeMsg = db.prepare(
-      `SELECT from_id FROM messages WHERE to_id = ? AND content LIKE '%"type":"handshake"%' ORDER BY created_at ASC LIMIT 1`
-    ).get(agentId) as { from_id: string } | null;
-    orchestratorId = handshakeMsg?.from_id ?? 'unknown';
-  }
+  const orchestratorId = agent.orchestrator_id ?? `${agentId.split(':')[0]}:0`;
   const restartTask = restartTemplate
     .replace('{role}', workerRole)
     .replace('{autoRestartTasks}', String(AUTO_RESTART_AFTER_TASKS))
