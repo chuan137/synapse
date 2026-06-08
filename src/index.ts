@@ -280,7 +280,9 @@ program
   .command('start', { isDefault: true })
   .description('Start the S-Deck dashboard and launch an orchestrator (slot :0) if none is running')
   .option('-p, --port <number>', 'Dashboard port (0 = random free port)', '0')
+  .option('--debug', 'Show verbose debug logs (HTTP requests, internal events)')
   .action(async (options) => {
+    if (options.debug) process.env.SYNAPSE_DEBUG = '1';
     const cwd = process.cwd();
 
     // Rename the current tmux window to the project name

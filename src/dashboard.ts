@@ -86,7 +86,7 @@ function broadcastPlan() {
 const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
-  if (!req.path.startsWith('/events')) {
+  if (process.env.SYNAPSE_DEBUG && !req.path.startsWith('/events')) {
     process.stderr.write(`[Synapse] ${req.method} ${req.path}\n`);
   }
   next();
