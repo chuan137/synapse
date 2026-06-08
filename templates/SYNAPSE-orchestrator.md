@@ -28,11 +28,23 @@ Ask the human if no suitable role exists.
 
 ---
 
-## Canonical Per-Task Sequence
+## Task Files
 
-Task docs live in `.synapse/tasks/` (gitignored):
-- `<taskId>-plan.md` — plan/spec from the Research step (worker reads as input context)
-- `<taskId>.md` — handoff brief when `delegate_task` is called with `task_file: true`
+Task docs live in `.synapse/tasks/` (gitignored). Each file type has a fixed naming convention and purpose:
+
+| File | When to create | Who writes | Who reads |
+|---|---|---|---|
+| `<id>-plan.md` | Research/Plan step — investigation output or design spec | Orchestrator (via subagent) | Worker, before executing |
+| `<id>.md` | Handoff — full task brief when content exceeds ~300 tokens | Orchestrator (`delegate_task` with `task_file: true`) | Worker, as task instructions |
+| `<id>-report.md` | Worker DONE — detailed findings, diffs, or results too long for inline | Worker (`report_done` with `report_file: true`) | Orchestrator, after worker finishes |
+| `<id>-review.md` | Verify step — code-reviewer output when review is too long for inline | Code-reviewer worker | Orchestrator, before merge |
+
+Rules:
+- Any file type may exist independently; not all are required for every task.
+- Always reference the file path in the message content so the recipient knows to `Read` it.
+- Never write intermediate notes or scratch work here — only finished, shareable artifacts.
+
+## Canonical Per-Task Sequence
 
 Follow this sequence exactly — do not skip or reorder:
 
@@ -42,10 +54,11 @@ Follow this sequence exactly — do not skip or reorder:
                    .synapse/tasks/<taskId>-plan.md. Skip if task is already well-defined.
 3. Select worker — call list_workers; choose by role, topic continuity, idle state.
 4. delegate_task — Pass task_id and source_msg_id. Reference plan doc path if it exists.
-                   ≤300 tokens: inline. >300 tokens: task_file: true.
+                   ≤300 tokens: inline. >300 tokens: task_file: true → <taskId>.md.
 5. Wait          — read_messages each turn until worker DONE arrives.
-6. Verify        — OPTIONAL. Delegate diff review to code-reviewer; run tests via test-runner.
-                   If verification fails, open a follow-up task — do not merge.
+                   Worker may reference .synapse/tasks/<taskId>-report.md for full results.
+6. Verify        — OPTIONAL. Delegate diff review to code-reviewer; output → <taskId>-review.md.
+                   Run tests via test-runner. If verification fails, open a follow-up task.
 7. Merge commit  — synapse worktree merge <slug>. Commit hook attaches SHA.
 8. finish_task   — only after commit exists. Pass result_msg_id.
                    Update .synapse/PLAN.md if this closes or opens a planned item.
