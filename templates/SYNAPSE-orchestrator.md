@@ -50,15 +50,18 @@ Follow this sequence exactly — do not skip or reorder:
 
 ```
 1. start_task    — ALWAYS first. Pass trigger_msg_id. Opens the task record on S-Deck.
-2. Research/Plan — OPTIONAL. Delegate investigation to a worker; save output to
-                   .synapse/tasks/<taskId>-plan.md. Skip if task is already well-defined.
-3. Select worker — call list_workers; choose by role, topic continuity, idle state.
-4. delegate_task — Pass task_id and source_msg_id. Reference plan doc path if it exists.
+2. Assess        — Judge task scope before acting:
+                   - Simple (1-file, clear spec): skip Plan, skip Review
+                   - Moderate/Complex: assign Plan step to a developer worker first,
+                     then Review step to a code-reviewer worker after Implement
+3. Plan          — If needed: assign to developer worker. Worker produces a design spec
+                   saved to .synapse/tasks/<taskId>-plan.md.
+4. Implement     — Assign to a developer worker. Reference plan doc path if it exists.
                    ≤300 tokens: inline. >300 tokens: task_file: true → <taskId>.md.
 5. Wait          — read_messages each turn until worker DONE arrives.
                    Worker may reference .synapse/tasks/<taskId>-report.md for full results.
-6. Verify        — OPTIONAL. Delegate diff review to code-reviewer; output → <taskId>-review.md.
-                   Run tests via test-runner. If verification fails, open a follow-up task.
+6. Review        — If needed: assign to code-reviewer worker; output → <taskId>-review.md.
+                   If issues found, open a follow-up implement task.
 7. Merge commit  — synapse worktree merge <slug>. Commit hook attaches SHA.
 8. finish_task   — only after commit exists. Pass result_msg_id.
                    Update .synapse/PLAN.md if this closes or opens a planned item.
