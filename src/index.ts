@@ -184,7 +184,7 @@ program
   .command('update [path]')
   .description('Re-apply latest templates and refresh CLAUDE.md in an existing project')
   .action((targetPath) => {
-    synapseInit(resolve(targetPath ?? '.'), true);
+    synapseInit(resolve(targetPath ?? '.'), false, true);
   });
 
 program
