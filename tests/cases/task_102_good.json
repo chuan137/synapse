@@ -9,12 +9,13 @@
     "started_at": 1780927556312,
     "finished_at": 1780927677664,
     "trigger_msg_id": null,
-    "result_msg_id": null,
+    "result_msg_id": 1417,
     "source_msg_id": 1414,
     "commit_sha": "e0e1728"
   },
   "linked_msg_ids": [
-    1414
+    1414,
+    1417
   ],
   "messages": [
     {
@@ -353,7 +354,7 @@
   "metrics": {
     "tool_calls": 30,
     "duration_ms": 121352,
-    "traceability_score": 2,
+    "traceability_score": 1,
     "has_commit": true
   }
 }

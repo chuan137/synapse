@@ -1,4 +1,6 @@
 
+**Update SYNAPSE protocol** update `templates/SYNAPSE*.md`, then copy to `.synapse/SYNAPSE*.md`
+
 ## Synapse
 
 This project uses Synapse for multi-agent orchestration.
