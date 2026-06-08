@@ -671,9 +671,10 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
     ? `\nLast completed task context:\n${lastDone.content.slice(0, 500)}`
     : '';
 
-  const restartTemplate = readFileSync(
-    join(__dirname, '..', 'templates', 'boot-worker-restart.md'), 'utf8'
-  ).trim();
+  const bootPath = existsSync(join(process.cwd(), '.synapse', 'boot-worker-restart.md'))
+    ? join(process.cwd(), '.synapse', 'boot-worker-restart.md')
+    : join(__dirname, '..', 'templates', 'boot-worker-restart.md');
+  const restartTemplate = readFileSync(bootPath, 'utf8').trim();
   const orchestratorId = agent.orchestrator_id ?? 'unknown';
   const restartTask = restartTemplate
     .replace('{role}', workerRole)

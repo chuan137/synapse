@@ -37,7 +37,8 @@ function synapseInit(projectRoot: string, silent = false, update = false): boole
   mkdirSync(synapseDir, { recursive: true });
 
   // Copy instruction templates into .synapse/ (always refresh)
-  for (const f of ['SYNAPSE.md', 'SYNAPSE-orchestrator.md', 'SYNAPSE-worker.md']) {
+  for (const f of ['SYNAPSE.md', 'SYNAPSE-orchestrator.md', 'SYNAPSE-worker.md',
+                    'boot-orchestrator.md', 'boot-worker-restart.md']) {
     copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'templates', f), join(synapseDir, f));
   }
 
@@ -235,8 +236,11 @@ program
       // '--' ends option parsing so the task prompt isn't treated as a flag
       claudeArgs.push('--');
     }
+    const bootOrchPath = existsSync(join(cwd, '.synapse', 'boot-orchestrator.md'))
+      ? join(cwd, '.synapse', 'boot-orchestrator.md')
+      : join(SYNAPSE_INSTALL_ROOT, 'templates', 'boot-orchestrator.md');
     const orchBootPrompt = !isWorker
-      ? readFileSync(join(SYNAPSE_INSTALL_ROOT, 'templates', 'boot-orchestrator.md'), 'utf8').trim()
+      ? readFileSync(bootOrchPath, 'utf8').trim()
       : null;
     const task = options.task
       ?? (options.taskFile ? readFileSync(options.taskFile, 'utf8') : null)
