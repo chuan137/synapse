@@ -1,0 +1,224 @@
+{
+  "id": 107,
+  "label": "good",
+  "task": {
+    "id": 107,
+    "agent_id": "cec50b17:0",
+    "title": "Investigate worker boot showing \"Your orchestrator is unknown\"",
+    "status": "completed",
+    "started_at": 1780932288413,
+    "finished_at": 1780932514537,
+    "trigger_msg_id": 1473,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "d86efb2"
+  },
+  "linked_msg_ids": [
+    1473
+  ],
+  "messages": [
+    {
+      "id": 1474,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:33",
+      "content": "When a worker boots, its boot message contains \"Your orchestrator is unknown.\" — this is wrong. The orchestrator agent ID should be injected into the worker's boot context so it knows who to report back to.\n\nInvestigate:\n1. Find where the worker boot/handshake message is generated — look in `src/` for the code that sends the initial message to a newly spawned worker.\n2. Find where the orchestrator ID is (or should be) injected into that message.\n3. Identify why it shows \"unknown\" — is the orchestrator ID missing from context at spawn time, or is the template not being filled?\n\nReport your findings with file paths and line numbers. Do NOT fix yet — just investigate and report back.",
+      "priority": 5,
+      "created_at": 1780932295754,
+      "read_at": 1780932298477,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    },
+    {
+      "id": 1475,
+      "from_id": "cec50b17:33",
+      "to_id": "cec50b17:0",
+      "content": "FINDING — Worker boot shows \"Your orchestrator is unknown\"\n\n**Root cause:** The worker's initial boot task string is written at spawn time by the orchestrator calling `spawn_agent`. That task string is passed via `--task-file` to `synapse run`, which pushes it directly as the initial Claude prompt (`src/index.ts:246–249`). The task string is **whatever the orchestrator wrote** — it has no `{orchestratorId}` placeholder, so the orchestrator ID never gets injected there.\n\nThe `{orchestratorId}` placeholder and its substitution only exist in the **restart** path (`src/dashboard.ts:678–682`), using the `boot-worker-restart.md` template. The restart path correctly reads `agent.orchestrator_id` from the DB (set by `recordSpawnIntent` in `src/mcp-server.ts:483`) and substitutes it.\n\n**First-boot path (broken):**\n- `src/mcp-server.ts:470–477`: `spawnWorker({ ..., task })` — `task` is the raw string the orchestrator provided\n- `src/mcp-server.ts:483`: `recordSpawnIntent(worker.agent_id, task, AGENT_ID)` — orchestrator ID stored in DB here, but too late to affect the already-written task file\n- `src/spawn.ts:38–41`: task written to temp file before any DB record exists\n- `src/index.ts:246–249`: task file read and passed as Claude's initial prompt — no substitution happens\n\n**Restart path (working):**\n- `src/dashboard.ts:674–684`: reads `agent.orchestrator_id` from DB, substitutes `{orchestratorId}` into `boot-worker-restart.md` template before spawning\n\n**Why \"unknown\" appears in the title bar:**\nThe current conversation's system prompt says \"Your orchestrator is unknown\" — this comes from the `boot-worker-restart.md` template with `orchestrator_id ?? 'unknown'` fallback at `src/dashboard.ts:678`. The DB row for this worker has `orchestrator_id = NULL` because when the worker was restarted, the restart endpoint doesn't re-fetch who the original spawner was — or the record was never populated for manually-started workers.\n\n**Two distinct bugs to fix:**\n1. **Fresh spawn**: The initial task string passed by `spawn_agent` has no `{orchestratorId}` substitution. The orchestrator ID needs to be appended/injected into the task before writing the temp file (in `src/mcp-server.ts` around line 470, after `recordSpawnIntent`).\n2. **Restart**: `agent.orchestrator_id` is NULL for workers whose DB row doesn't have it set (manual starts, old rows). The fallback `'unknown'` at `src/dashboard.ts:678` surfaces as \"unknown\" in the restart boot message.\n\n**Key files:**\n- `src/mcp-server.ts:456–499` — `spawn_agent` handler; task is passed as-is\n- `src/spawn.ts:38–41` — task written to temp file\n- `src/index.ts:245–249` — task file read and pushed as Claude prompt\n- `src/dashboard.ts:674–684` — restart path (works; has substitution)\n- `templates/boot-worker-restart.md` + `.synapse/boot-worker-restart.md` — restart template with `{orchestratorId}` placeholder\n",
+      "priority": 5,
+      "created_at": 1780932354693,
+      "read_at": 1780932356296,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "finding"
+    },
+    {
+      "id": 1477,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:33",
+      "content": "Task brief at .synapse/tasks/108.md\n\n# Fix: Worker boot shows \"Your orchestrator is unknown\"\n\nWork inside `.synapse/worktrees/developer-33-fix-worker-boot-orchestrator-id`. Commit all changes there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780932378470,
+      "read_at": 1780932380478,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    },
+    {
+      "id": 1479,
+      "from_id": "cec50b17:33",
+      "to_id": "cec50b17:0",
+      "content": "DONE — Fix worker boot shows \"Your orchestrator is unknown\"\n\n**Files changed:**\n- `src/mcp-server.ts`: In `spawn_agent` handler, build `taskWithOrch = task + \"\\nYour orchestrator is <AGENT_ID>.\"` before calling `spawnWorker` and `recordSpawnIntent`. Worker's initial prompt now always includes the orchestrator ID.\n- `src/dashboard.ts`: When `agent.orchestrator_id` is NULL on restart, query the messages table for a handshake message sent to this agent (`content LIKE '%\"type\":\"handshake\"%'`) to recover the sender's ID, before falling back to `'unknown'`.\n\n**Build:** `tsc` — clean.\n**Commit:** `559ce72` on branch `synapse/developer-33-fix-worker-boot-orchestrator-id`\n\nNo follow-ups needed. Both paths now provide the orchestrator ID to the worker at boot time.",
+      "priority": 5,
+      "created_at": 1780932451027,
+      "read_at": 1780932453082,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "done"
+    },
+    {
+      "id": 1481,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:33",
+      "content": "The worktree has uncommitted changes — the merge failed with \"uncommitted changes in worktree; commit or stash before merging\". Please check `git status` in the worktree, stage and commit everything, then report back.",
+      "priority": 5,
+      "created_at": 1780932461929,
+      "read_at": 1780932500576,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 7852,
+      "event_id": "evt_1780932288466_qc86s",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780932288466
+    },
+    {
+      "id": 7853,
+      "event_id": "evt_1780932295800_veebh",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780932295800
+    },
+    {
+      "id": 7871,
+      "event_id": "evt_1780932356340_vywz1",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780932356340
+    },
+    {
+      "id": 7872,
+      "event_id": "evt_1780932359258_0jru3",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780932359258
+    },
+    {
+      "id": 7874,
+      "event_id": "evt_1780932362392_xidv3",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 495,
+      "timestamp": 1780932362392
+    },
+    {
+      "id": 7876,
+      "event_id": "evt_1780932364622_ntm5d",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780932364622
+    },
+    {
+      "id": 7877,
+      "event_id": "evt_1780932378515_rtzh1",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780932378515
+    },
+    {
+      "id": 7879,
+      "event_id": "evt_1780932380888_wacn6",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780932380888
+    },
+    {
+      "id": 7899,
+      "event_id": "evt_1780932453129_3thcj",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780932453129
+    },
+    {
+      "id": 7901,
+      "event_id": "evt_1780932455487_yhpoz",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 55,
+      "timestamp": 1780932455487
+    },
+    {
+      "id": 7902,
+      "event_id": "evt_1780932461974_dzjfx",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780932461974
+    },
+    {
+      "id": 7903,
+      "event_id": "evt_1780932464213_d4p6j",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "37eb922a-bb8e-404a-bf44-edfd184e031e",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780932464213
+    }
+  ],
+  "metrics": {
+    "tool_calls": 12,
+    "duration_ms": 226124,
+    "traceability_score": 2,
+    "has_commit": true
+  }
+}
