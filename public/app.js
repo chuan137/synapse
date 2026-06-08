@@ -72,10 +72,10 @@
 
   function connect() {
     const es = new EventSource('/events');
+    const connStatus = document.getElementById('conn-status');
 
     es.onopen = () => {
-      dot.style.background = 'var(--idle)';
-      dot.style.boxShadow  = '0 0 6px var(--idle)';
+      if (connStatus) { connStatus.textContent = '● live'; connStatus.dataset.state = 'connected'; }
       dot.classList.add('connected');
       label.textContent    = 'live';
     };
@@ -98,8 +98,7 @@
     };
 
     es.onerror = () => {
-      dot.style.background = 'var(--error)';
-      dot.style.boxShadow  = 'none';
+      if (connStatus) { connStatus.textContent = '● disconnected'; connStatus.dataset.state = 'disconnected'; }
       dot.classList.remove('connected');
       label.textContent    = 'disconnected — retrying…';
       es.close();

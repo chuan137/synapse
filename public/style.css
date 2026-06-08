@@ -65,63 +65,72 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 14px 20px;
-      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      height: 44px;
       background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      transition: border-color 0.3s;
+    }
+
+    header:has(#conn-status[data-state="disconnected"]) {
+      border-bottom-color: var(--error);
     }
 
     .logo {
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 700;
-      letter-spacing: 0.05em;
-      color: var(--accent);
+      letter-spacing: 0.08em;
+      color: var(--text);
+      padding-right: 12px;
+      border-right: 1px solid var(--border);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
-    .logo span { color: var(--muted); font-weight: 400; }
+    .logo span { display: none; }
 
     .project-name {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text);
-      letter-spacing: 0.02em;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: monospace;
     }
 
-    .dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: var(--idle);
-      box-shadow: 0 0 6px var(--idle);
-      margin-left: auto;
+    #conn-status {
+      font-size: 11px;
+      font-family: monospace;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid;
+      transition: color 0.3s, border-color 0.3s, background 0.3s;
     }
 
-    .dot.connected {
-      animation: pulse 2s infinite;
+    #conn-status[data-state="connected"] {
+      color: var(--idle);
+      border-color: color-mix(in srgb, var(--idle) 40%, transparent);
+      background: color-mix(in srgb, var(--idle) 8%, transparent);
     }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.4; }
+    #conn-status[data-state="disconnected"] {
+      color: var(--error);
+      border-color: color-mix(in srgb, var(--error) 40%, transparent);
+      background: color-mix(in srgb, var(--error) 8%, transparent);
     }
 
-    .dot-label { color: var(--text); font-size: 12px; }
-
-    /* Header ghost buttons (Roles, theme toggle) */
     .header-btn {
       background: none;
       border: none;
       color: var(--muted);
-      font-size: 11px;
-      font-weight: 500;
-      font-family: inherit;
       padding: 4px 10px;
-      border-radius: 6px;
+      font-size: 13px;
       cursor: pointer;
-      transition: background 0.12s, color 0.12s;
-      white-space: nowrap;
-      align-self: center;
+      border-radius: 4px;
     }
+
     .header-btn:hover {
-      background: color-mix(in srgb, var(--muted) 12%, transparent);
+      background: var(--border);
       color: var(--text);
     }
 
