@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync, mkdirSync } from 'fs';
 import { execSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
+import { buildSystemPrompt } from './system-prompt.js';
 import {
   db,
   getAllStatuses,
@@ -715,41 +716,19 @@ app.post('/api/agents/:agentId/kill', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// Return boot_task + role body + protocol docs for the agent system prompt modal
+// Return boot_task + resolved system prompt for the agent system prompt modal
 app.get('/api/agents/:agentId/prompt', (req: Request, res: Response) => {
   const agentId = String(req.params.agentId);
   const agent = getAgentById(agentId);
   if (!agent) { res.status(404).json({ error: 'Agent not found' }); return; }
 
-  let roleBody: string | null = null;
-  if (agent.role) {
-    const rolePath = join(ROLES_DIR, `${agent.role}.md`);
-    if (existsSync(rolePath)) {
-      const raw = readFileSync(rolePath, 'utf8');
-      // Strip front-matter so only the body text is returned
-      roleBody = raw.replace(/^---\n[\s\S]*?\n---\n*/, '').trim();
-    }
-  }
-
-  const synapseDir = join(process.cwd(), '.synapse');
-  const baseProtocolPath = join(synapseDir, 'SYNAPSE.md');
-  const slotDocPath = agent.slot === 0
-    ? join(synapseDir, 'SYNAPSE-orchestrator.md')
-    : join(synapseDir, 'SYNAPSE-worker.md');
-
-  const baseProtocol = existsSync(baseProtocolPath)
-    ? readFileSync(baseProtocolPath, 'utf8').trim()
-    : null;
-  const slotDoc = existsSync(slotDocPath)
-    ? readFileSync(slotDocPath, 'utf8').trim()
-    : null;
+  const role = agent.role ?? (agent.slot === 0 ? 'orchestrator' : 'worker');
+  const resolved = buildSystemPrompt(role);
 
   res.json({
     boot_task: agent.boot_task ?? null,
     role: agent.role ?? null,
-    role_body: roleBody,
-    base_protocol: baseProtocol,
-    slot_doc: slotDoc,
+    resolved_prompt: resolved,
   });
 });
 

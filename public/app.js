@@ -1016,18 +1016,14 @@
   });
 
   // ── Agent prompt modal ────────────────────────────────────────────────────
-  const promptBackdrop    = document.getElementById('agent-prompt-backdrop');
-  const promptAgentSlot   = document.getElementById('prompt-agent-slot');
-  const promptRoleBadge   = document.getElementById('prompt-role-badge');
-  const promptBaseSection = document.getElementById('prompt-base-section');
-  const promptBaseProto   = document.getElementById('prompt-base-protocol');
-  const promptSlotSection = document.getElementById('prompt-slot-section');
-  const promptSlotDoc     = document.getElementById('prompt-slot-doc');
-  const promptRoleSection = document.getElementById('prompt-role-section');
-  const promptRoleBody    = document.getElementById('prompt-role-body');
-  const promptBootSection = document.getElementById('prompt-boot-section');
-  const promptBootTask    = document.getElementById('prompt-boot-task');
-  const promptClose       = document.getElementById('prompt-close');
+  const promptBackdrop      = document.getElementById('agent-prompt-backdrop');
+  const promptAgentSlot     = document.getElementById('prompt-agent-slot');
+  const promptRoleBadge     = document.getElementById('prompt-role-badge');
+  const promptResolvedSection = document.getElementById('prompt-resolved-section');
+  const promptResolved      = document.getElementById('prompt-resolved');
+  const promptBootSection   = document.getElementById('prompt-boot-section');
+  const promptBootTask      = document.getElementById('prompt-boot-task');
+  const promptClose         = document.getElementById('prompt-close');
 
   function closePromptModal() {
     promptBackdrop.classList.add('hidden');
@@ -1039,13 +1035,9 @@
     promptRoleBadge.textContent = agent?.role ?? '';
     promptRoleBadge.style.display = agent?.role ? '' : 'none';
     // Reset all sections
-    promptBaseSection.style.display = 'none';
-    promptSlotSection.style.display = 'none';
-    promptRoleSection.style.display = 'none';
+    promptResolvedSection.style.display = 'none';
     promptBootSection.style.display = 'none';
-    promptBaseProto.innerHTML = '';
-    promptSlotDoc.innerHTML = '';
-    promptRoleBody.innerHTML = '';
+    promptResolved.innerHTML = '';
     promptBootTask.innerHTML = '<span style="color:var(--muted)">loading…</span>';
     promptBootSection.style.display = '';
     promptBackdrop.classList.remove('hidden');
@@ -1053,17 +1045,9 @@
       const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/prompt`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (data.base_protocol) {
-        promptBaseProto.innerHTML = renderMarkdown(data.base_protocol);
-        promptBaseSection.style.display = '';
-      }
-      if (data.slot_doc) {
-        promptSlotDoc.innerHTML = renderMarkdown(data.slot_doc);
-        promptSlotSection.style.display = '';
-      }
-      if (data.role_body) {
-        promptRoleBody.innerHTML = renderMarkdown(data.role_body);
-        promptRoleSection.style.display = '';
+      if (data.resolved_prompt) {
+        promptResolved.innerHTML = renderMarkdown(data.resolved_prompt);
+        promptResolvedSection.style.display = '';
       }
       promptBootTask.innerHTML = renderMarkdown(data.boot_task ?? '*(none recorded)*');
     } catch (e) {
