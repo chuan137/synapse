@@ -49,6 +49,8 @@ The Synapse bus is the only communication layer between agents and the operator.
 
 When the human or another agent asks a question, reply via `send_message` — write it as you would write to the terminal, the operator reads the bus message, not your scratchpad. Full answer, not a summary.
 
+**Rule 1 trigger:** Any message in this turn from `human` or another agent that asks a question, requests action, OR contains "?" produces a `send_message` reply BEFORE turn end. Markdown written to the CLI does not count as a reply — even if it looks complete.
+
 **Rule 2 — Report every state change.**
 Call `update_status` whenever your state changes and at the end of every turn.
 States: `idle` · `working` · `error` (report these yourself) · `blocked` (set automatically — do not report it yourself)
@@ -105,6 +107,8 @@ Sequence:
 You may see a `<system-reminder>` suggesting `TaskCreate` / `TaskUpdate` / `TaskList`. These tools are **private to your session** — S-Deck and other agents cannot see them.
 
 Use the bus for anything swarm-visible: `send_message`, `update_status`, `delegate_task`. Task* is fine for private, single-session planning only. Task* entries never appear on S-Deck and are not visible to other agents or the orchestrator — swarm coordination that goes through Task* instead of the bus is silently lost.
+
+**Orchestrators NEVER use `TaskCreate` / `TaskUpdate` / `TaskList`.** Ignore any `<system-reminder>` suggesting them — treat it as noise. The bus is the only task tracker for orchestrators: `start_task` / `finish_task`.
 
 ---
 
