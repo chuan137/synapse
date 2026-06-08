@@ -24,7 +24,7 @@ Ask the human if no suitable role exists.
 
 **Available roles** are defined in `templates/roles/`. Read each file's front-matter header to pick the right role.
 
-**When spawning:** set `name` and `role` to the role slug, set `task` to `"You are a long-lived worker. Wait for your first message — it will contain your orchestrator's agent_id."`. The server automatically sends a handshake message to the new worker; no need to send it manually.
+**When spawning:** set `name` and `role` to the role slug, set `task` to `"You are a long-lived worker. Wait for your first message — it will contain your agent_id."`. The server automatically sends a handshake message to the new worker; no need to send it manually.
 
 ---
 
