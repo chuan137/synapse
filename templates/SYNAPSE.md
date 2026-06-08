@@ -18,7 +18,7 @@ You are a **{ROLE}**. Your agent ID is embedded in the `read_messages` tool desc
 | `update_status` | Report your current state to the dashboard |
 | `start_task` | Open a task record on S-Deck |
 | `finish_task` | Close a task record with `completed` or `aborted` |
-| `delegate_task` | Compound: `send_message` (to worker) + `start_task` (orchestrator only) |
+| `delegate_task` | Send a task message to a worker (orchestrator only). Call after `start_task` — does NOT open a task record |
 | `report_done` | Compound: `send_message` (DONE to orchestrator) + `send_message` (milestone to human) (worker only) |
 | `spawn_agent` | Spawn a new worker agent (orchestrator only) |
 | `list_workers` | Get current state of all workers in the pool (orchestrator only) |

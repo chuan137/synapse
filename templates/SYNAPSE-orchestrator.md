@@ -60,7 +60,7 @@ spawn_agent(
 
 Task docs live in `.synapse/tasks/` (gitignored). Two files may exist for any task, independently:
 - `<taskId>-plan.md` — plan/spec produced in the Research step; the worker reads this as input context
-- `<taskId>.md`      — handoff brief written by delegate_task (task_file: true); the worker reads this as task instructions
+- `<taskId>.md`      — handoff brief written when delegate_task is called with task_file: true; the worker reads this as task instructions
 
 Either may exist on its own, or both together. Neither is required.
 
@@ -69,8 +69,8 @@ Follow this sequence exactly — do not skip or reorder steps:
 ```
 1. start_task    — ALWAYS call start_task first, before any other action.
                    • Pass trigger_msg_id = the bus message ID that initiated this task
-                   • Pass source_msg_id  = same value (the originating human/agent message)
                    • This opens the task record on S-Deck
+                   • Applies to both delegated tasks AND self-driven work
 
 2. Research/Plan — OPTIONAL. If the task needs investigation or design before implementation:
                    • Delegate to a developer or code-reviewer subagent — do NOT investigate yourself (Rule 0)
@@ -79,19 +79,21 @@ Follow this sequence exactly — do not skip or reorder steps:
 
 3. Select worker — call list_workers; choose by role, topic continuity, and idle state
                    (see Worker Pool routing criteria below)
+                   • Skip for self-driven work (no worker involved)
 
-4. delegate_task — send the task to the chosen worker.
-                   Two things happen in one call:
-                   (1) the task message is delivered to the worker
-                   (2) a task record is opened on S-Deck (linked via source_msg_id)
+4. delegate_task — send the task to the chosen worker (does NOT open a task record — start_task already did that)
+                   • Pass task_id = the id returned by start_task
+                   • Pass source_msg_id = the bus message ID that initiated this task
                    • If a plan doc exists (.synapse/tasks/<taskId>-plan.md), reference its path
                      in the content so the worker reads it before starting
                    • Short handoff (≤~300 tokens): pass full content inline
                    • Long handoff (>~300 tokens): pass task_file: true — content is written to
                      .synapse/tasks/<taskId>.md and the worker receives a short pointer
+                   • Skip for self-driven work
 
 5. Wait          — call read_messages each turn until the worker's DONE arrives
                    • do NOT proceed until you have the worker's reply
+                   • Skip for self-driven work
 
 6. Verify        — OPTIONAL. Verify the worker's output before merging.
                    • Delegate to a code-reviewer worker: pass the diff and the original task spec
@@ -102,6 +104,7 @@ Follow this sequence exactly — do not skip or reorder steps:
 
 7. Merge commit  — run synapse worktree merge <slug> to integrate the worker's changes
                    • post-merge commit hook attaches the SHA to the task record
+                   • For self-driven work: commit directly
 
 8. finish_task   — mark the task completed ONLY after the commit exists
                    • finish_task(task_id, status='completed', result_msg_id=<DONE msg id>)
@@ -109,8 +112,6 @@ Follow this sequence exactly — do not skip or reorder steps:
                      If not, mark status='aborted' and open a follow-up task instead
                    • Update .synapse/PLAN.md if this closes or opens a planned item
 ```
-
-For self-driven work (doc edits, protocol file updates — NOT worker tasks): same sequence applies — start_task first, finish_task last, commit before finish.
 
 ---
 

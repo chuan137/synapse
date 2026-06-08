@@ -139,7 +139,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           task_id: {
             oneOf: [{ type: 'number' }, { type: 'null' }],
-            description: 'The task this message is associated with. Pass the task_id from start_task or delegate_task, or null if not task-scoped.',
+            description: 'The task this message is associated with. Pass the task_id from start_task, or null if not task-scoped.',
           },
           type: {
             type: 'string',
@@ -321,9 +321,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'delegate_task',
       description:
-        'Send a task to a worker and record the activity in one call. ' +
-        'Use this instead of separate send_message + start_task when delegating a substantive task. ' +
-        'Returns { message_id, task_id }. Skip for trivial messages (clarifications, status checks).',
+        'Send a task to a worker. Call this after start_task — the task record must already exist. ' +
+        'Returns { message_id }. Skip for trivial messages (clarifications, status checks).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -335,6 +334,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'boolean',
             description: 'If true, write the task content to .synapse/tasks/<taskId>.md and send a short reference message instead of the full content inline. Use for large task specs (>~300 tokens).',
             default: false,
+          },
+          task_id: {
+            type: 'number',
+            description: 'The task_id returned by start_task. Required when task_file is true (used as the filename).',
           },
           source_msg_id: {
             type: 'number',
@@ -609,33 +612,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'delegate_task') {
-    const { to_id, title, content, priority = 5, task_file = false, source_msg_id } = args as {
+    const { to_id, title, content, priority = 5, task_file = false, task_id, source_msg_id } = args as {
       to_id: string;
       title: string;
       content: string;
       priority?: number;
       task_file?: boolean;
+      task_id?: number;
       source_msg_id?: number;
     };
     let outboundContent = content;
-    // For large specs, stage the brief to a file and send a short pointer message.
-    // We need the taskId for the filename, so start the task with null trigger first,
-    // then send the message and record it via the existing trigger_msg_id path.
     if (task_file) {
-      // Start task without trigger so we have an id for the filename
-      const taskId = startTask(to_id, title, null, source_msg_id ?? null);
+      const fileId = task_id ?? Date.now();
       const tasksDir = join(process.cwd(), '.synapse', 'tasks');
       mkdirSync(tasksDir, { recursive: true });
-      writeFileSync(join(tasksDir, `${taskId}.md`), content, 'utf8');
+      writeFileSync(join(tasksDir, `${fileId}.md`), content, 'utf8');
       const lines = content.split('\n');
       const preview = lines.slice(0, 3).join('\n');
-      outboundContent = `Task brief at .synapse/tasks/${taskId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
-      const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
-      return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, task_id=${taskId}` }] };
+      outboundContent = `Task brief at .synapse/tasks/${fileId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
     }
     const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
-    const taskId = startTask(to_id, title, messageId, source_msg_id ?? null);
-    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}, task_id=${taskId}` }] };
+    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}` }] };
   }
 
   if (name === 'report_done') {
