@@ -80,22 +80,22 @@
     .logo span { color: var(--muted); font-weight: 400; }
 
     .project-name {
-      font-size: 13px;
-      font-weight: 600;
+      font-size: 16px;
+      font-weight: 700;
       color: var(--text);
-      padding: 2px 8px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
+      letter-spacing: 0.02em;
     }
 
     .dot {
-      width: 8px; height: 8px;
+      width: 10px; height: 10px;
       border-radius: 50%;
       background: var(--idle);
       box-shadow: 0 0 6px var(--idle);
-      animation: pulse 2s infinite;
       margin-left: auto;
+    }
+
+    .dot.connected {
+      animation: pulse 2s infinite;
     }
 
     @keyframes pulse {
@@ -103,7 +103,7 @@
       50%       { opacity: 0.4; }
     }
 
-    .dot-label { color: var(--muted); font-size: 11px; }
+    .dot-label { color: var(--text); font-size: 12px; }
 
     /* Header ghost buttons (Roles, theme toggle) */
     .header-btn {

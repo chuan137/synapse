@@ -76,6 +76,7 @@
     es.onopen = () => {
       dot.style.background = 'var(--idle)';
       dot.style.boxShadow  = '0 0 6px var(--idle)';
+      dot.classList.add('connected');
       label.textContent    = 'live';
     };
 
@@ -99,6 +100,7 @@
     es.onerror = () => {
       dot.style.background = 'var(--error)';
       dot.style.boxShadow  = 'none';
+      dot.classList.remove('connected');
       label.textContent    = 'disconnected — retrying…';
       es.close();
       setTimeout(connect, 3000);
