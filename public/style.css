@@ -1415,6 +1415,7 @@ input, select, textarea {
     .diff-add  { display: block; background: rgba(34,197,94,0.10); color: inherit; }
     .diff-del  { display: block; background: rgba(239,68,68,0.10);  color: inherit; }
     .diff-hunk { display: block; color: var(--accent); font-weight: 600; }
+    .diff-hdr  { display: block; color: var(--muted); }
 
     /* sha badge: make it look interactive when it's a diff trigger */
     .task-sha.diff-trigger {

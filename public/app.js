@@ -1229,11 +1229,11 @@ Describe the role's responsibilities here.
   function renderDiff(text) {
     return text.split('\n').map(line => {
       const escaped = esc(line);
-      if (line.startsWith('+++') || line.startsWith('---')) return `<span>${escaped}</span>`;
+      if (line.startsWith('+++') || line.startsWith('---')) return `<span class="diff-hdr">${escaped}</span>`;
       if (line.startsWith('+')) return `<span class="diff-add">${escaped}</span>`;
       if (line.startsWith('-')) return `<span class="diff-del">${escaped}</span>`;
       if (line.startsWith('@@')) return `<span class="diff-hunk">${escaped}</span>`;
-      return `<span>${escaped}</span>`;
+      return `${escaped}\n`;
     }).join('');
   }
 
