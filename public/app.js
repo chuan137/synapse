@@ -866,6 +866,7 @@
   const msgInput = document.getElementById('msg-input');
 
   msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) return;
     if (e.key === 'Enter' && e.altKey)             { e.preventDefault(); send(0); }
     else if (e.key === 'Enter' && !e.shiftKey)     { e.preventDefault(); send(5); }
     // Shift+Enter falls through to default textarea newline behaviour
