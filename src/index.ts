@@ -822,6 +822,30 @@ program
   });
 
 program
+  .command('eval-summarize')
+  .description('LLM-powered summarizer: reads retros, window reports, and patches → concrete proposals')
+  .option('--since <duration>', 'How far back to gather sources (e.g. 2w, 7d)', '2w')
+  .option('--output <path>', 'Explicit output path (default: .synapse/reports/<ts>-summary.md)')
+  .option('--model <id>', 'Claude model to use', 'claude-sonnet-4-6')
+  .option('--dry-run', 'Show sources and estimated prompt size; do not invoke the LLM')
+  .action(async (options) => {
+    const { generateSummary } = await import('./eval/summarize.js');
+    const report = await generateSummary({
+      since: options.since,
+      outputPath: options.output,
+      model: options.model,
+      dryRun: !!options.dryRun,
+    });
+    if (!options.dryRun) {
+      process.stdout.write(`\nReport written to ${report.outputPath}\n`);
+      process.stdout.write(`Proposals: ${report.proposals.length}\n`);
+      report.proposals.forEach((p, i) => {
+        process.stdout.write(`  ${i + 1}. [${p.category}] ${p.title}\n`);
+      });
+    }
+  });
+
+program
   .command('eval-select [task_id]')
   .description('Select/deselect a raw case for the curated test corpus, or list the curated set')
   .option('--label <label>', 'Override label (good|bad) — inferred from filename if omitted')

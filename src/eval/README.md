@@ -220,11 +220,45 @@ See `tests/patches/README.md` for the patch frontmatter reference.
 
 ---
 
+## Summarize
+
+`synapse eval-summarize` reads retros, window reports, and critic patches, then invokes an LLM (sonnet) to produce up to 5 concrete improvement proposals.
+
+```bash
+synapse eval-summarize --since 2w           # produce proposals from last 2 weeks
+synapse eval-summarize --dry-run            # check source counts without LLM call
+synapse eval-summarize --since 7d --output my-summary.md
+```
+
+**Sources read:**
+- `.synapse/retros/*.md` — orchestrator self-retros (`/retro` skill outputs)
+- `.synapse/reports/*-window-*.md` — window-report aggregates
+- `tests/gate_results/gate_*_patch.json` — gate-approved critic patches
+- `tests/patches/*_patch.md` — all recent critic patches
+
+**Output:**
+- `.synapse/reports/<ts>-summary.md` — numbered proposals (human-readable)
+- `.synapse/reports/<ts>-summary.json` — `SummaryReport` struct with `Proposal[]`
+
+Each `Proposal` has: `category` (protocol_patch | new_skill | threshold_adjustment | role_tweak), `target_file`, `title`, `body`, `evidence[]` (≥2 citations), `impact_estimate`.
+
+Nothing auto-merges. Proposals are operator-reviewed before any SYNAPSE*.md is touched.
+
+Use the `/eval-summarize` skill to run the CLI and add an interpretation layer.
+
+Implementation: `src/eval/summarize.ts` (~260 lines).
+
+---
+
 ## Tests
 
 ```sh
 node tests/eval-v2.test.mjs
 node tests/eval-window.test.mjs
+node tests/eval-select.test.mjs
+node tests/critic-gate-v2.test.mjs
+node tests/eval-summarize.test.mjs
+```
 ```
 
 `eval-v2`: v2 schema shape, calibration output + min-sample guard, evaluator regression.
