@@ -1082,6 +1082,10 @@
       color: var(--text);
     }
 
+    .message-row.from-agent.p0:hover .message-content {
+      color: var(--p0-text);
+    }
+
     :root.bright .message-row.from-agent {
       background: rgba(0, 0, 0, 0.02);
       transition: background 0.15s, border-left-color 0.15s, box-shadow 0.15s;
@@ -1342,7 +1346,7 @@ input, select, textarea {
     }
     .msg-approve-btn:hover:not(:disabled) { border-color: var(--idle); color: var(--idle); opacity: 1; }
     .msg-approve-btn:disabled { background: var(--idle); color: var(--bg); border-color: var(--idle); opacity: 1; cursor: default; }
-    .msg-approved-badge { font-size: 10px; color: var(--muted); opacity: 0.6; }
+    .msg-approved-badge { font-size: 10px; color: var(--idle); }
     .msg-type-badge {
       display: inline-block;
       font-size: 9px;
