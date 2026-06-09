@@ -1,6 +1,5 @@
 {
   "id": 19,
-  "label": "good",
   "task": {
     "id": 19,
     "agent_id": "cec50b17:3",
@@ -29,7 +28,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 659,
@@ -43,7 +43,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -203,5 +204,252 @@
     "duration_ms": 75387,
     "traceability_score": 2,
     "has_commit": false
+  },
+  "schema_version": 2,
+  "task_id": 19,
+  "title": "Implement kill button for S-Deck agent cards",
+  "trigger_msg_id": null,
+  "source_msg_id": null,
+  "result_msg_id": 658,
+  "commit_sha": null,
+  "started_at": 1780681602525,
+  "finished_at": 1780681677912,
+  "total_duration_ms": 75387,
+  "agents": {
+    "developer:3": {
+      "agent_id": "cec50b17:3",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 6,
+          "avg_ms": 54,
+          "p90_ms": 60,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 1295,
+          "p90_ms": 5830,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 3,
+          "avg_ms": 47,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 2,
+      "active_duration_ms": 6990
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 658,
+        "from_id": "cec50b17:3",
+        "to_id": "cec50b17:0",
+        "content": "DONE: Kill button implemented.\n\nFiles changed:\n- `src/db.ts`: Added `markAgentEnded(agentId)` helper (exports `UPDATE agent_status SET ended_at`)\n- `src/dashboard.ts`: Imported `markAgentEnded`; added `POST /api/agents/:agentId/kill` route — validates agent exists + has tmux pane + is not slot 0 + not already ended, kills pane, marks ended, reaps/purges\n- `public/index.html`: Added `kill-item` button to kebab menu (non-orchestrator only, red text via `color:var(--error)`), wired click handler with confirm dialog that POSTs to `/api/agents/:id/kill` then lets SSE refresh the list\n\nBuild: `tsc` passes clean, no errors.",
+        "priority": 5,
+        "created_at": 1780681677912,
+        "read_at": 1780681680313,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 659,
+        "from_id": "cec50b17:3",
+        "to_id": "human",
+        "content": "Kill button live: POST /api/agents/:id/kill + red kill item in kebab menu (non-orch only)",
+        "priority": 5,
+        "created_at": 1780681677912,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 3689,
+        "event_id": "evt_1780681602572_lemai",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780681602572
+      },
+      {
+        "id": 3690,
+        "event_id": "evt_1780681610465_l3r0u",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 60,
+        "timestamp": 1780681610465
+      },
+      {
+        "id": 3691,
+        "event_id": "evt_1780681615008_wch83",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 435,
+        "timestamp": 1780681615008
+      },
+      {
+        "id": 3692,
+        "event_id": "evt_1780681618876_6u8cg",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780681618876
+      },
+      {
+        "id": 3693,
+        "event_id": "evt_1780681619705_e5xvw",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 65,
+        "timestamp": 1780681619705
+      },
+      {
+        "id": 3694,
+        "event_id": "evt_1780681623195_lj5uc",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780681623195
+      },
+      {
+        "id": 3695,
+        "event_id": "evt_1780681628064_7atg9",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780681628064
+      },
+      {
+        "id": 3696,
+        "event_id": "evt_1780681631951_x9jci",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780681631951
+      },
+      {
+        "id": 3697,
+        "event_id": "evt_1780681635392_2gq3x",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780681635392
+      },
+      {
+        "id": 3698,
+        "event_id": "evt_1780681639286_gizux",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780681639286
+      },
+      {
+        "id": 3699,
+        "event_id": "evt_1780681643192_8h7th",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780681643192
+      },
+      {
+        "id": 3700,
+        "event_id": "evt_1780681650466_lslu8",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780681650466
+      },
+      {
+        "id": 3701,
+        "event_id": "evt_1780681658234_96f3f",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780681658234
+      },
+      {
+        "id": 3702,
+        "event_id": "evt_1780681667153_se4h9",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 5830,
+        "timestamp": 1780681667153
+      },
+      {
+        "id": 3703,
+        "event_id": "evt_1780681670212_2lfr0",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780681670212
+      }
+    ]
   }
 }

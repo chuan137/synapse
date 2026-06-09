@@ -1,6 +1,5 @@
 {
   "id": 47,
-  "label": "good",
   "task": {
     "id": 47,
     "agent_id": "cec50b17:0",
@@ -27,7 +26,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -67,5 +67,110 @@
     "duration_ms": 38181,
     "traceability_score": 3,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 47,
+  "title": "Add needs_approval lint to guard hook for send_message to human",
+  "trigger_msg_id": null,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "45c2ffe",
+  "started_at": 1780750147697,
+  "finished_at": 1780750185878,
+  "total_duration_ms": 38181,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 1,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 155
+    },
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 890,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "New task: Add a lint check to the guard hook in `src/hooks/guard.ts` for `send_message` calls to `human` that appear to be asking for a decision but omit `needs_approval: true`.\n\n**Context:**\nThe guard already lints `delegate_task` for missing `source_msg_id` (lines 66–76). We want a similar check for `send_message`: when an agent sends a message to `human` that looks like it's asking for approval/confirmation but doesn't set `needs_approval: true`, deny and explain.\n\n**Rule to implement:**\nIn the `guard()` function, add a check for `tool === 'mcp__synapse-bus__send_message'`:\n\n```ts\nif (tool === 'mcp__synapse-bus__send_message') {\n  const toId = String(input.to_id ?? '');\n  const content = String(input.content ?? '');\n  const needsApproval = input.needs_approval === true;\n\n  if (toId === 'human' && !needsApproval && looksLikeApprovalRequest(content)) {\n    return deny(\n      'This message to the human appears to be asking for a decision or approval, ' +\n      'but needs_approval is not set. Pass needs_approval: true so the operator sees an approve button.'\n    );\n  }\n  return allow();\n}\n```\n\nImplement `looksLikeApprovalRequest(content: string): boolean` that returns true if the content matches approval-seeking patterns:\n- Ends with a `?` (question mark at end of any line or the whole string)\n- Contains phrases like: \"shall I\", \"should I\", \"want me to\", \"do you want\", \"proceed?\", \"confirm\", \"approve\"\n\nKeep the regex simple — this is a heuristic, not a parser. False positives are OK (the agent can retry without the pattern); false negatives are expected for edge cases.\n\n**Place the check BEFORE the `guardReason` / destructive-action checks** so it short-circuits early for `send_message`.\n\nAlso add `mcp__synapse-bus__send_message` to the tool description comment at the top of `guard()` (or in the `DESIGN.md §3.4` reference) if there's a summary list — otherwise just add an inline comment above the new block.\n\n**File:** `src/hooks/guard.ts` only. `npm run build` must pass. Commit. Report DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780750160703,
+        "read_at": 1780750162822,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4745,
+        "event_id": "evt_1780750147743_qcny1",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780750147743
+      },
+      {
+        "id": 4746,
+        "event_id": "evt_1780750160751_tdzb7",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780750160751
+      },
+      {
+        "id": 4748,
+        "event_id": "evt_1780750163192_sgews",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780750163192
+      }
+    ]
   }
 }

@@ -1,0 +1,1107 @@
+{
+  "id": 91,
+  "task": {
+    "id": 91,
+    "agent_id": "cec50b17:35",
+    "title": "Resolve SYNAPSE.md {ROLE}/{ROLE_INSTRUCTIONS} placeholders via runtime injection",
+    "status": "completed",
+    "started_at": 1780904389022,
+    "finished_at": 1780904606200,
+    "trigger_msg_id": null,
+    "result_msg_id": 1310,
+    "source_msg_id": 1306,
+    "commit_sha": "d57e9b8"
+  },
+  "linked_msg_ids": [
+    1306,
+    1310
+  ],
+  "messages": [
+    {
+      "id": 1307,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:35",
+      "content": "Task brief at .synapse/tasks/91.md\n\n# Task: Resolve {ROLE} / {ROLE_INSTRUCTIONS} placeholders in SYNAPSE.md\n\nWork inside `.synapse/worktrees/developer-role-injection`. Commit there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780904389024,
+      "read_at": 1780904391314,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1308,
+      "from_id": "cec50b17:35",
+      "to_id": "human",
+      "content": "FINDING: `buildSystemPrompt()` in `src/index.ts` already resolves `{ROLE}` and `{ROLE_INSTRUCTIONS}` at spawn time (harness injection is already done). The only gap is `GET /api/agents/:id/prompt` in `src/dashboard.ts` — it reads the raw `.synapse/SYNAPSE.md` (with placeholders) rather than calling `buildSystemPrompt()`. Fixing that endpoint now.",
+      "priority": 5,
+      "created_at": 1780904445125,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1309,
+      "from_id": "cec50b17:35",
+      "to_id": "human",
+      "content": "✅ committed d57e9b8: feat(spawn): resolve {ROLE}/{ROLE_INSTRUCTIONS} at agent spawn time; show resolved prompt in UI",
+      "priority": 5,
+      "created_at": 1780904606200,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 7069,
+      "event_id": "evt_1780904391359_wj7wc",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780904391359
+    },
+    {
+      "id": 7070,
+      "event_id": "evt_1780904393589_8usu9",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780904393589
+    },
+    {
+      "id": 7072,
+      "event_id": "evt_1780904396002_1cp47",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 97,
+      "timestamp": 1780904396002
+    },
+    {
+      "id": 7073,
+      "event_id": "evt_1780904398040_cn98i",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780904398040
+    },
+    {
+      "id": 7074,
+      "event_id": "evt_1780904398515_vj865",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780904398515
+    },
+    {
+      "id": 7075,
+      "event_id": "evt_1780904398856_7celq",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 64,
+      "timestamp": 1780904398856
+    },
+    {
+      "id": 7076,
+      "event_id": "evt_1780904401992_2b213",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 186,
+      "timestamp": 1780904401992
+    },
+    {
+      "id": 7077,
+      "event_id": "evt_1780904403073_j6v3z",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 531,
+      "timestamp": 1780904403073
+    },
+    {
+      "id": 7078,
+      "event_id": "evt_1780904408074_7kqji",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 107,
+      "timestamp": 1780904408074
+    },
+    {
+      "id": 7079,
+      "event_id": "evt_1780904410366_9fp6l",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780904410366
+    },
+    {
+      "id": 7080,
+      "event_id": "evt_1780904414747_c5n0q",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 68,
+      "timestamp": 1780904414747
+    },
+    {
+      "id": 7081,
+      "event_id": "evt_1780904416920_18a3f",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 71,
+      "timestamp": 1780904416920
+    },
+    {
+      "id": 7082,
+      "event_id": "evt_1780904421787_ynejn",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 69,
+      "timestamp": 1780904421787
+    },
+    {
+      "id": 7083,
+      "event_id": "evt_1780904424113_713dh",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780904424113
+    },
+    {
+      "id": 7084,
+      "event_id": "evt_1780904426718_avw0o",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 69,
+      "timestamp": 1780904426718
+    },
+    {
+      "id": 7085,
+      "event_id": "evt_1780904429328_sofmz",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 79,
+      "timestamp": 1780904429328
+    },
+    {
+      "id": 7086,
+      "event_id": "evt_1780904432260_39fpi",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780904432260
+    },
+    {
+      "id": 7087,
+      "event_id": "evt_1780904445173_7yeaw",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780904445173
+    },
+    {
+      "id": 7088,
+      "event_id": "evt_1780904450794_m0gvy",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 66,
+      "timestamp": 1780904450794
+    },
+    {
+      "id": 7089,
+      "event_id": "evt_1780904453583_u58wm",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780904453583
+    },
+    {
+      "id": 7090,
+      "event_id": "evt_1780904457590_6pegd",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 92,
+      "timestamp": 1780904457590
+    },
+    {
+      "id": 7091,
+      "event_id": "evt_1780904461295_8exsw",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 72,
+      "timestamp": 1780904461295
+    },
+    {
+      "id": 7092,
+      "event_id": "evt_1780904467817_5l0nf",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Write",
+      "status": "ok",
+      "duration_ms": 61,
+      "timestamp": 1780904467817
+    },
+    {
+      "id": 7093,
+      "event_id": "evt_1780904476998_1ztfj",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 58,
+      "timestamp": 1780904476998
+    },
+    {
+      "id": 7094,
+      "event_id": "evt_1780904481917_rgjcd",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 327,
+      "timestamp": 1780904481917
+    },
+    {
+      "id": 7095,
+      "event_id": "evt_1780904486511_jqg68",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 197,
+      "timestamp": 1780904486511
+    },
+    {
+      "id": 7096,
+      "event_id": "evt_1780904490794_z0n7n",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780904490794
+    },
+    {
+      "id": 7097,
+      "event_id": "evt_1780904497996_o6hvu",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780904497996
+    },
+    {
+      "id": 7098,
+      "event_id": "evt_1780904501418_khass",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780904501418
+    },
+    {
+      "id": 7099,
+      "event_id": "evt_1780904507813_5xy9b",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 58,
+      "timestamp": 1780904507813
+    },
+    {
+      "id": 7100,
+      "event_id": "evt_1780904511016_03s42",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 64,
+      "timestamp": 1780904511016
+    },
+    {
+      "id": 7101,
+      "event_id": "evt_1780904514833_wzsw3",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 120,
+      "timestamp": 1780904514833
+    },
+    {
+      "id": 7102,
+      "event_id": "evt_1780904518223_2ew1d",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 76,
+      "timestamp": 1780904518223
+    },
+    {
+      "id": 7103,
+      "event_id": "evt_1780904522290_9ko1u",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780904522290
+    },
+    {
+      "id": 7104,
+      "event_id": "evt_1780904542714_30xkv",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780904542714
+    },
+    {
+      "id": 7105,
+      "event_id": "evt_1780904546492_nbodx",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780904546492
+    },
+    {
+      "id": 7106,
+      "event_id": "evt_1780904549859_k74du",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780904549859
+    },
+    {
+      "id": 7107,
+      "event_id": "evt_1780904559552_p1i3z",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780904559552
+    },
+    {
+      "id": 7108,
+      "event_id": "evt_1780904563328_ipqux",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780904563328
+    },
+    {
+      "id": 7109,
+      "event_id": "evt_1780904568950_0m9st",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780904568950
+    },
+    {
+      "id": 7110,
+      "event_id": "evt_1780904582074_e0g8y",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780904582074
+    },
+    {
+      "id": 7111,
+      "event_id": "evt_1780904589072_ku5xr",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3353,
+      "timestamp": 1780904589072
+    },
+    {
+      "id": 7112,
+      "event_id": "evt_1780904593637_3pwop",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 85,
+      "timestamp": 1780904593637
+    },
+    {
+      "id": 7113,
+      "event_id": "evt_1780904597906_04sgp",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 88,
+      "timestamp": 1780904597906
+    },
+    {
+      "id": 7114,
+      "event_id": "evt_1780904606199_kcq46",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 113,
+      "timestamp": 1780904606199
+    }
+  ],
+  "metrics": {
+    "tool_calls": 45,
+    "duration_ms": 217178,
+    "traceability_score": 1,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 91,
+  "title": "Resolve SYNAPSE.md {ROLE}/{ROLE_INSTRUCTIONS} placeholders via runtime injection",
+  "trigger_msg_id": null,
+  "source_msg_id": 1306,
+  "result_msg_id": 1310,
+  "commit_sha": "d57e9b8",
+  "started_at": 1780904389022,
+  "finished_at": 1780904606200,
+  "total_duration_ms": 217178,
+  "agents": {
+    "developer:35": {
+      "agent_id": "cec50b17:35",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 49,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 19,
+          "avg_ms": 70,
+          "p90_ms": 186,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 15,
+          "avg_ms": 350,
+          "p90_ms": 531,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Write": {
+          "calls": 1,
+          "avg_ms": 61,
+          "p90_ms": 61,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 7,
+          "avg_ms": 54,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 2,
+      "active_duration_ms": 7165
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1307,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:35",
+        "content": "Task brief at .synapse/tasks/91.md\n\n# Task: Resolve {ROLE} / {ROLE_INSTRUCTIONS} placeholders in SYNAPSE.md\n\nWork inside `.synapse/worktrees/developer-role-injection`. Commit there. Do not push.\n…",
+        "priority": 5,
+        "created_at": 1780904389024,
+        "read_at": 1780904391314,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1308,
+        "from_id": "cec50b17:35",
+        "to_id": "human",
+        "content": "FINDING: `buildSystemPrompt()` in `src/index.ts` already resolves `{ROLE}` and `{ROLE_INSTRUCTIONS}` at spawn time (harness injection is already done). The only gap is `GET /api/agents/:id/prompt` in `src/dashboard.ts` — it reads the raw `.synapse/SYNAPSE.md` (with placeholders) rather than calling `buildSystemPrompt()`. Fixing that endpoint now.",
+        "priority": 5,
+        "created_at": 1780904445125,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1309,
+        "from_id": "cec50b17:35",
+        "to_id": "human",
+        "content": "✅ committed d57e9b8: feat(spawn): resolve {ROLE}/{ROLE_INSTRUCTIONS} at agent spawn time; show resolved prompt in UI",
+        "priority": 5,
+        "created_at": 1780904606200,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 7069,
+        "event_id": "evt_1780904391359_wj7wc",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780904391359
+      },
+      {
+        "id": 7070,
+        "event_id": "evt_1780904393589_8usu9",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780904393589
+      },
+      {
+        "id": 7072,
+        "event_id": "evt_1780904396002_1cp47",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 97,
+        "timestamp": 1780904396002
+      },
+      {
+        "id": 7073,
+        "event_id": "evt_1780904398040_cn98i",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780904398040
+      },
+      {
+        "id": 7074,
+        "event_id": "evt_1780904398515_vj865",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780904398515
+      },
+      {
+        "id": 7075,
+        "event_id": "evt_1780904398856_7celq",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 64,
+        "timestamp": 1780904398856
+      },
+      {
+        "id": 7076,
+        "event_id": "evt_1780904401992_2b213",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 186,
+        "timestamp": 1780904401992
+      },
+      {
+        "id": 7077,
+        "event_id": "evt_1780904403073_j6v3z",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 531,
+        "timestamp": 1780904403073
+      },
+      {
+        "id": 7078,
+        "event_id": "evt_1780904408074_7kqji",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 107,
+        "timestamp": 1780904408074
+      },
+      {
+        "id": 7079,
+        "event_id": "evt_1780904410366_9fp6l",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780904410366
+      },
+      {
+        "id": 7080,
+        "event_id": "evt_1780904414747_c5n0q",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 68,
+        "timestamp": 1780904414747
+      },
+      {
+        "id": 7081,
+        "event_id": "evt_1780904416920_18a3f",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 71,
+        "timestamp": 1780904416920
+      },
+      {
+        "id": 7082,
+        "event_id": "evt_1780904421787_ynejn",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780904421787
+      },
+      {
+        "id": 7083,
+        "event_id": "evt_1780904424113_713dh",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780904424113
+      },
+      {
+        "id": 7084,
+        "event_id": "evt_1780904426718_avw0o",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780904426718
+      },
+      {
+        "id": 7085,
+        "event_id": "evt_1780904429328_sofmz",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 79,
+        "timestamp": 1780904429328
+      },
+      {
+        "id": 7086,
+        "event_id": "evt_1780904432260_39fpi",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780904432260
+      },
+      {
+        "id": 7087,
+        "event_id": "evt_1780904445173_7yeaw",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780904445173
+      },
+      {
+        "id": 7088,
+        "event_id": "evt_1780904450794_m0gvy",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 66,
+        "timestamp": 1780904450794
+      },
+      {
+        "id": 7089,
+        "event_id": "evt_1780904453583_u58wm",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780904453583
+      },
+      {
+        "id": 7090,
+        "event_id": "evt_1780904457590_6pegd",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 92,
+        "timestamp": 1780904457590
+      },
+      {
+        "id": 7091,
+        "event_id": "evt_1780904461295_8exsw",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 72,
+        "timestamp": 1780904461295
+      },
+      {
+        "id": 7092,
+        "event_id": "evt_1780904467817_5l0nf",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 61,
+        "timestamp": 1780904467817
+      },
+      {
+        "id": 7093,
+        "event_id": "evt_1780904476998_1ztfj",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1780904476998
+      },
+      {
+        "id": 7094,
+        "event_id": "evt_1780904481917_rgjcd",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 327,
+        "timestamp": 1780904481917
+      },
+      {
+        "id": 7095,
+        "event_id": "evt_1780904486511_jqg68",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 197,
+        "timestamp": 1780904486511
+      },
+      {
+        "id": 7096,
+        "event_id": "evt_1780904490794_z0n7n",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780904490794
+      },
+      {
+        "id": 7097,
+        "event_id": "evt_1780904497996_o6hvu",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780904497996
+      },
+      {
+        "id": 7098,
+        "event_id": "evt_1780904501418_khass",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780904501418
+      },
+      {
+        "id": 7099,
+        "event_id": "evt_1780904507813_5xy9b",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1780904507813
+      },
+      {
+        "id": 7100,
+        "event_id": "evt_1780904511016_03s42",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 64,
+        "timestamp": 1780904511016
+      },
+      {
+        "id": 7101,
+        "event_id": "evt_1780904514833_wzsw3",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 120,
+        "timestamp": 1780904514833
+      },
+      {
+        "id": 7102,
+        "event_id": "evt_1780904518223_2ew1d",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 76,
+        "timestamp": 1780904518223
+      },
+      {
+        "id": 7103,
+        "event_id": "evt_1780904522290_9ko1u",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780904522290
+      },
+      {
+        "id": 7104,
+        "event_id": "evt_1780904542714_30xkv",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780904542714
+      },
+      {
+        "id": 7105,
+        "event_id": "evt_1780904546492_nbodx",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780904546492
+      },
+      {
+        "id": 7106,
+        "event_id": "evt_1780904549859_k74du",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780904549859
+      },
+      {
+        "id": 7107,
+        "event_id": "evt_1780904559552_p1i3z",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780904559552
+      },
+      {
+        "id": 7108,
+        "event_id": "evt_1780904563328_ipqux",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780904563328
+      },
+      {
+        "id": 7109,
+        "event_id": "evt_1780904568950_0m9st",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780904568950
+      },
+      {
+        "id": 7110,
+        "event_id": "evt_1780904582074_e0g8y",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780904582074
+      },
+      {
+        "id": 7111,
+        "event_id": "evt_1780904589072_ku5xr",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 3353,
+        "timestamp": 1780904589072
+      },
+      {
+        "id": 7112,
+        "event_id": "evt_1780904593637_3pwop",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 85,
+        "timestamp": 1780904593637
+      },
+      {
+        "id": 7113,
+        "event_id": "evt_1780904597906_04sgp",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 88,
+        "timestamp": 1780904597906
+      },
+      {
+        "id": 7114,
+        "event_id": "evt_1780904606199_kcq46",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "97314918-dcc8-410d-9dfc-ac1c987ccca9",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 113,
+        "timestamp": 1780904606199
+      }
+    ]
+  }
+}

@@ -1,0 +1,772 @@
+{
+  "id": 86,
+  "task": {
+    "id": 86,
+    "agent_id": "cec50b17:0",
+    "title": "Add type field to bus messages (message, done, decision, etc.)",
+    "status": "completed",
+    "started_at": 1780902265545,
+    "finished_at": 1780902457278,
+    "trigger_msg_id": 1287,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "2001833"
+  },
+  "linked_msg_ids": [
+    1287
+  ],
+  "messages": [
+    {
+      "id": 1288,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:33",
+      "content": "Task brief at .synapse/tasks/88.md\n\n# Task: Add type field to bus messages\n\nWork inside `.synapse/worktrees/developer-msg-types`. Commit there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780902288814,
+      "read_at": 1780902290954,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1289,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:34",
+      "content": "Task brief at .synapse/tasks/89.md\n\n# Task: Header UX — project name + connection status\n\nWork inside `.synapse/worktrees/developer-header-ux`. Commit there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780902298771,
+      "read_at": 1780902300607,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1291,
+      "from_id": "cec50b17:34",
+      "to_id": "cec50b17:0",
+      "content": "DONE — task 89: Header UX — project name + connection status\n\nFiles changed:\n- public/style.css — project-name: 16px/700 weight, removed badge border/background (now reads as a plain heading). Dot: 10px. Pulse animation scoped to `.dot.connected` only. dot-label: 12px + `var(--text)` color.\n- public/app.js — `onopen` adds `.connected` class to dot; `onerror` removes it, so pulse only fires when live.\n\nBuild/tests: no build step for static assets; changes are additive and self-contained.\nCommit: 8e4bc16 on branch synapse/developer-header-ux.",
+      "priority": 5,
+      "created_at": 1780902375676,
+      "read_at": 1780902377330,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1293,
+      "from_id": "cec50b17:0",
+      "to_id": "human",
+      "content": "DONE — Header UX merged (task 87/89). Changes: project name now 16px/700-weight bold heading; connection dot is 10px with pulse animation scoped to `.connected` state only (fires when WebSocket is live, stops on error). Still waiting on message-types worker (task 86/88).",
+      "priority": 5,
+      "created_at": 1780902400994,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1295,
+      "from_id": "cec50b17:33",
+      "to_id": "cec50b17:0",
+      "content": "DONE — Task 88: Add type field to bus messages\n\nFiles changed:\n- src/db.ts: added `type TEXT` migration, `Message.type` field, `MessageType` type alias, `detectMessageType()` helper, updated `insertMessage` prepared statement and `sendMessage()` signature (new optional `type` param), updated `postMilestoneOnce()` to pass detected type\n- src/mcp-server.ts: added `type` param to send_message tool schema and handler; passes through to sendMessage\n- public/app.js: renders a colored badge in message header for non-plain types (done/blocked/decision/finding/commit)\n- public/style.css: added `.msg-type-badge` + per-type color classes\n\nBuild: tsc passes clean.\nCommit: 05d5741 in .synapse/worktrees/developer-msg-types (branch synapse/developer-msg-types)",
+      "priority": 5,
+      "created_at": 1780902432146,
+      "read_at": 1780902434107,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1297,
+      "from_id": "cec50b17:0",
+      "to_id": "human",
+      "content": "✅ committed 2001833: feat(messages): add type field to bus messages",
+      "priority": 5,
+      "created_at": 1780902457278,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 6945,
+      "event_id": "evt_1780902265589_p44w0",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780902265589
+    },
+    {
+      "id": 6946,
+      "event_id": "evt_1780902265956_u3yxj",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780902265956
+    },
+    {
+      "id": 6947,
+      "event_id": "evt_1780902269655_6x2dq",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 1134,
+      "timestamp": 1780902269655
+    },
+    {
+      "id": 6948,
+      "event_id": "evt_1780902274729_a97m1",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__spawn_agent",
+      "status": "ok",
+      "duration_ms": 1120,
+      "timestamp": 1780902274729
+    },
+    {
+      "id": 6949,
+      "event_id": "evt_1780902275889_7aciz",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__spawn_agent",
+      "status": "ok",
+      "duration_ms": 1114,
+      "timestamp": 1780902275889
+    },
+    {
+      "id": 6954,
+      "event_id": "evt_1780902288861_b2b04",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780902288861
+    },
+    {
+      "id": 6959,
+      "event_id": "evt_1780902298813_moxoi",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780902298813
+    },
+    {
+      "id": 6962,
+      "event_id": "evt_1780902301119_9coow",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780902301119
+    },
+    {
+      "id": 7001,
+      "event_id": "evt_1780902377377_3xxhc",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780902377377
+    },
+    {
+      "id": 7004,
+      "event_id": "evt_1780902380652_9sm3b",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780902380652
+    },
+    {
+      "id": 7006,
+      "event_id": "evt_1780902385342_0v2w3",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 75,
+      "timestamp": 1780902385342
+    },
+    {
+      "id": 7008,
+      "event_id": "evt_1780902389727_p1ee9",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 83,
+      "timestamp": 1780902389727
+    },
+    {
+      "id": 7009,
+      "event_id": "evt_1780902392039_nd12r",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 151,
+      "timestamp": 1780902392039
+    },
+    {
+      "id": 7010,
+      "event_id": "evt_1780902394193_cvs7l",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__finish_task",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780902394193
+    },
+    {
+      "id": 7012,
+      "event_id": "evt_1780902396161_6jeox",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__finish_task",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780902396161
+    },
+    {
+      "id": 7014,
+      "event_id": "evt_1780902401040_ronfr",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780902401040
+    },
+    {
+      "id": 7015,
+      "event_id": "evt_1780902403165_jwp2h",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780902403165
+    },
+    {
+      "id": 7021,
+      "event_id": "evt_1780902434160_h6e1m",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 57,
+      "timestamp": 1780902434160
+    },
+    {
+      "id": 7023,
+      "event_id": "evt_1780902436393_rdbhy",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780902436393
+    },
+    {
+      "id": 7024,
+      "event_id": "evt_1780902438568_1rxf3",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 75,
+      "timestamp": 1780902438568
+    },
+    {
+      "id": 7025,
+      "event_id": "evt_1780902444875_ua8e1",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 131,
+      "timestamp": 1780902444875
+    },
+    {
+      "id": 7026,
+      "event_id": "evt_1780902452439_edj5a",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 107,
+      "timestamp": 1780902452439
+    },
+    {
+      "id": 7027,
+      "event_id": "evt_1780902457276_xrmye",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 261,
+      "timestamp": 1780902457276
+    }
+  ],
+  "metrics": {
+    "tool_calls": 23,
+    "duration_ms": 191733,
+    "traceability_score": 2,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 86,
+  "title": "Add type field to bus messages (message, done, decision, etc.)",
+  "trigger_msg_id": 1287,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "2001833",
+  "started_at": 1780902265545,
+  "finished_at": 1780902457278,
+  "total_duration_ms": 191733,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 2,
+          "avg_ms": 50,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 8,
+          "avg_ms": 252,
+          "p90_ms": 1134,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__spawn_agent": {
+          "calls": 2,
+          "avg_ms": 1117,
+          "p90_ms": 1120,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__delegate_task": {
+          "calls": 2,
+          "avg_ms": 50,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 4,
+          "avg_ms": 52,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__read_messages": {
+          "calls": 2,
+          "avg_ms": 54,
+          "p90_ms": 57,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__finish_task": {
+          "calls": 2,
+          "avg_ms": 48,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 2,
+      "messages_out": 4,
+      "active_duration_ms": 4911
+    },
+    "developer:33": {
+      "agent_id": "cec50b17:33",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    },
+    "developer:34": {
+      "agent_id": "cec50b17:34",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1288,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:33",
+        "content": "Task brief at .synapse/tasks/88.md\n\n# Task: Add type field to bus messages\n\nWork inside `.synapse/worktrees/developer-msg-types`. Commit there. Do not push.\n…",
+        "priority": 5,
+        "created_at": 1780902288814,
+        "read_at": 1780902290954,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1289,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:34",
+        "content": "Task brief at .synapse/tasks/89.md\n\n# Task: Header UX — project name + connection status\n\nWork inside `.synapse/worktrees/developer-header-ux`. Commit there. Do not push.\n…",
+        "priority": 5,
+        "created_at": 1780902298771,
+        "read_at": 1780902300607,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1291,
+        "from_id": "cec50b17:34",
+        "to_id": "cec50b17:0",
+        "content": "DONE — task 89: Header UX — project name + connection status\n\nFiles changed:\n- public/style.css — project-name: 16px/700 weight, removed badge border/background (now reads as a plain heading). Dot: 10px. Pulse animation scoped to `.dot.connected` only. dot-label: 12px + `var(--text)` color.\n- public/app.js — `onopen` adds `.connected` class to dot; `onerror` removes it, so pulse only fires when live.\n\nBuild/tests: no build step for static assets; changes are additive and self-contained.\nCommit: 8e4bc16 on branch synapse/developer-header-ux.",
+        "priority": 5,
+        "created_at": 1780902375676,
+        "read_at": 1780902377330,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1293,
+        "from_id": "cec50b17:0",
+        "to_id": "human",
+        "content": "DONE — Header UX merged (task 87/89). Changes: project name now 16px/700-weight bold heading; connection dot is 10px with pulse animation scoped to `.connected` state only (fires when WebSocket is live, stops on error). Still waiting on message-types worker (task 86/88).",
+        "priority": 5,
+        "created_at": 1780902400994,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1295,
+        "from_id": "cec50b17:33",
+        "to_id": "cec50b17:0",
+        "content": "DONE — Task 88: Add type field to bus messages\n\nFiles changed:\n- src/db.ts: added `type TEXT` migration, `Message.type` field, `MessageType` type alias, `detectMessageType()` helper, updated `insertMessage` prepared statement and `sendMessage()` signature (new optional `type` param), updated `postMilestoneOnce()` to pass detected type\n- src/mcp-server.ts: added `type` param to send_message tool schema and handler; passes through to sendMessage\n- public/app.js: renders a colored badge in message header for non-plain types (done/blocked/decision/finding/commit)\n- public/style.css: added `.msg-type-badge` + per-type color classes\n\nBuild: tsc passes clean.\nCommit: 05d5741 in .synapse/worktrees/developer-msg-types (branch synapse/developer-msg-types)",
+        "priority": 5,
+        "created_at": 1780902432146,
+        "read_at": 1780902434107,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1297,
+        "from_id": "cec50b17:0",
+        "to_id": "human",
+        "content": "✅ committed 2001833: feat(messages): add type field to bus messages",
+        "priority": 5,
+        "created_at": 1780902457278,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 6945,
+        "event_id": "evt_1780902265589_p44w0",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780902265589
+      },
+      {
+        "id": 6946,
+        "event_id": "evt_1780902265956_u3yxj",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780902265956
+      },
+      {
+        "id": 6947,
+        "event_id": "evt_1780902269655_6x2dq",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 1134,
+        "timestamp": 1780902269655
+      },
+      {
+        "id": 6948,
+        "event_id": "evt_1780902274729_a97m1",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__spawn_agent",
+        "status": "ok",
+        "duration_ms": 1120,
+        "timestamp": 1780902274729
+      },
+      {
+        "id": 6949,
+        "event_id": "evt_1780902275889_7aciz",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__spawn_agent",
+        "status": "ok",
+        "duration_ms": 1114,
+        "timestamp": 1780902275889
+      },
+      {
+        "id": 6954,
+        "event_id": "evt_1780902288861_b2b04",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780902288861
+      },
+      {
+        "id": 6959,
+        "event_id": "evt_1780902298813_moxoi",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780902298813
+      },
+      {
+        "id": 6962,
+        "event_id": "evt_1780902301119_9coow",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780902301119
+      },
+      {
+        "id": 7001,
+        "event_id": "evt_1780902377377_3xxhc",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780902377377
+      },
+      {
+        "id": 7004,
+        "event_id": "evt_1780902380652_9sm3b",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780902380652
+      },
+      {
+        "id": 7006,
+        "event_id": "evt_1780902385342_0v2w3",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780902385342
+      },
+      {
+        "id": 7008,
+        "event_id": "evt_1780902389727_p1ee9",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 83,
+        "timestamp": 1780902389727
+      },
+      {
+        "id": 7009,
+        "event_id": "evt_1780902392039_nd12r",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 151,
+        "timestamp": 1780902392039
+      },
+      {
+        "id": 7010,
+        "event_id": "evt_1780902394193_cvs7l",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__finish_task",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780902394193
+      },
+      {
+        "id": 7012,
+        "event_id": "evt_1780902396161_6jeox",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__finish_task",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780902396161
+      },
+      {
+        "id": 7014,
+        "event_id": "evt_1780902401040_ronfr",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780902401040
+      },
+      {
+        "id": 7015,
+        "event_id": "evt_1780902403165_jwp2h",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780902403165
+      },
+      {
+        "id": 7021,
+        "event_id": "evt_1780902434160_h6e1m",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1780902434160
+      },
+      {
+        "id": 7023,
+        "event_id": "evt_1780902436393_rdbhy",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780902436393
+      },
+      {
+        "id": 7024,
+        "event_id": "evt_1780902438568_1rxf3",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780902438568
+      },
+      {
+        "id": 7025,
+        "event_id": "evt_1780902444875_ua8e1",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 131,
+        "timestamp": 1780902444875
+      },
+      {
+        "id": 7026,
+        "event_id": "evt_1780902452439_edj5a",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 107,
+        "timestamp": 1780902452439
+      },
+      {
+        "id": 7027,
+        "event_id": "evt_1780902457276_xrmye",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 261,
+        "timestamp": 1780902457276
+      }
+    ]
+  }
+}

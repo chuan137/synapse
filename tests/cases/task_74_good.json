@@ -1,0 +1,564 @@
+{
+  "id": 74,
+  "task": {
+    "id": 74,
+    "agent_id": "cec50b17:27",
+    "title": "Auto-restart threshold: use settings.json instead of env var",
+    "status": "completed",
+    "started_at": 1780827025879,
+    "finished_at": 1780827098628,
+    "trigger_msg_id": 1191,
+    "result_msg_id": 1193,
+    "source_msg_id": 1190,
+    "commit_sha": "64b5590"
+  },
+  "linked_msg_ids": [
+    1190,
+    1191,
+    1193
+  ],
+  "messages": [
+    {
+      "id": 1191,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:27",
+      "content": "Your orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-27-auto-restart-settings`. Commit your changes. Do not push.\n\nChange `SYNAPSE_AUTO_RESTART_TASKS` from an env var to a `.synapse/settings.json` setting.\n\nThe settings file is at `.synapse/settings.json` (same file that already stores `theme`, etc.). It's read by the dashboard and the MCP server.\n\n---\n\n## Change 1 — src/db.ts: expose a readSettings helper (if not already available)\n\nCheck if there's already a `readSettings()` function exported from `src/db.ts` or `src/dashboard.ts`. If not, add a simple one to `src/db.ts`:\n\n```typescript\nexport function readSynapseSettings(): Record<string, unknown> {\n  const settingsPath = join(process.cwd(), '.synapse', 'settings.json');\n  try {\n    const { existsSync, readFileSync } = require('fs');  // use static import form\n    if (existsSync(settingsPath)) return JSON.parse(readFileSync(settingsPath, 'utf8'));\n  } catch {}\n  return {};\n}\n```\n\nActually, check `src/dashboard.ts` — it already has a `readSettings()` function (local to dashboard). If it's not exported, add an equivalent export to `src/db.ts` that reads the same `.synapse/settings.json` file.\n\n---\n\n## Change 2 — src/mcp-server.ts: read threshold from settings\n\nReplace:\n```typescript\nconst AUTO_RESTART_AFTER_TASKS = parseInt(process.env.SYNAPSE_AUTO_RESTART_TASKS ?? '5', 10);\n```\n\nWith:\n```typescript\nconst settings = readSynapseSettings();  // import from ./db.js\nconst AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number'\n  ? settings.autoRestartTasks\n  : 5;\n```\n\nThe setting key is `autoRestartTasks` (camelCase, matches the existing settings convention). Default is 5 if not set.\n\n---\n\n## Change 3 — src/dashboard.ts: expose settings endpoint for this field\n\nThe existing `POST /api/settings` endpoint already accepts arbitrary key-value merges, so no new endpoint needed. But add `autoRestartTasks` to `GET /api/settings` response — it's already included since the endpoint returns all settings. No code change needed here; just verify that `POST /api/settings` with `{ \"autoRestartTasks\": 10 }` would work (it should — the existing merge logic handles it).\n\nAlso update the restart handler in `src/dashboard.ts` to read from settings instead of env var:\n```typescript\nconst settings = readSettings(); // local function already exists\nconst AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number' ? settings.autoRestartTasks : 5;\n```\n\n---\n\n## Change 4 — Remove env var support\n\nRemove any remaining `process.env.SYNAPSE_AUTO_RESTART_TASKS` references.\n\n---\n\nBuild `npm run build` and verify clean.\n",
+      "priority": 5,
+      "created_at": 1780827025879,
+      "read_at": 1780827028176,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1192,
+      "from_id": "cec50b17:27",
+      "to_id": "human",
+      "content": "✅ committed 64b5590: refactor: read autoRestartTasks from settings.json instead of env var",
+      "priority": 5,
+      "created_at": 1780827098628,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 6286,
+      "event_id": "evt_1780827028225_2jokj",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780827028225
+    },
+    {
+      "id": 6287,
+      "event_id": "evt_1780827030353_etaj1",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780827030353
+    },
+    {
+      "id": 6289,
+      "event_id": "evt_1780827034102_vjzgo",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 79,
+      "timestamp": 1780827034102
+    },
+    {
+      "id": 6290,
+      "event_id": "evt_1780827036679_koyfk",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 104,
+      "timestamp": 1780827036679
+    },
+    {
+      "id": 6291,
+      "event_id": "evt_1780827039202_00h29",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 181,
+      "timestamp": 1780827039202
+    },
+    {
+      "id": 6292,
+      "event_id": "evt_1780827042092_4fh37",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780827042092
+    },
+    {
+      "id": 6293,
+      "event_id": "evt_1780827045023_9n7jg",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 69,
+      "timestamp": 1780827045023
+    },
+    {
+      "id": 6294,
+      "event_id": "evt_1780827048685_r57lw",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780827048685
+    },
+    {
+      "id": 6295,
+      "event_id": "evt_1780827051881_0eli2",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 107,
+      "timestamp": 1780827051881
+    },
+    {
+      "id": 6296,
+      "event_id": "evt_1780827055773_k5reu",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780827055773
+    },
+    {
+      "id": 6297,
+      "event_id": "evt_1780827063903_vaftq",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 75,
+      "timestamp": 1780827063903
+    },
+    {
+      "id": 6298,
+      "event_id": "evt_1780827066123_rkapg",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780827066123
+    },
+    {
+      "id": 6299,
+      "event_id": "evt_1780827070700_trytb",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780827070700
+    },
+    {
+      "id": 6300,
+      "event_id": "evt_1780827073256_ll19x",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 91,
+      "timestamp": 1780827073256
+    },
+    {
+      "id": 6301,
+      "event_id": "evt_1780827076842_xrk76",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780827076842
+    },
+    {
+      "id": 6302,
+      "event_id": "evt_1780827082764_c7g4t",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 57,
+      "timestamp": 1780827082764
+    },
+    {
+      "id": 6303,
+      "event_id": "evt_1780827086507_hv5uv",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780827086507
+    },
+    {
+      "id": 6304,
+      "event_id": "evt_1780827089928_9ycv4",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 938,
+      "timestamp": 1780827089928
+    },
+    {
+      "id": 6305,
+      "event_id": "evt_1780827093289_hg66h",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 76,
+      "timestamp": 1780827093289
+    },
+    {
+      "id": 6306,
+      "event_id": "evt_1780827098626_xiwgp",
+      "synapse_agent_id": "cec50b17:27",
+      "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 125,
+      "timestamp": 1780827098626
+    }
+  ],
+  "metrics": {
+    "tool_calls": 20,
+    "duration_ms": 72749,
+    "traceability_score": 0,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 74,
+  "title": "Auto-restart threshold: use settings.json instead of env var",
+  "trigger_msg_id": 1191,
+  "source_msg_id": 1190,
+  "result_msg_id": 1193,
+  "commit_sha": "64b5590",
+  "started_at": 1780827025879,
+  "finished_at": 1780827098628,
+  "total_duration_ms": 72749,
+  "agents": {
+    "developer:27": {
+      "agent_id": "cec50b17:27",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 9,
+          "avg_ms": 195,
+          "p90_ms": 938,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 4,
+          "avg_ms": 62,
+          "p90_ms": 91,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 5,
+          "avg_ms": 51,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 2361
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1191,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:27",
+        "content": "Your orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-27-auto-restart-settings`. Commit your changes. Do not push.\n\nChange `SYNAPSE_AUTO_RESTART_TASKS` from an env var to a `.synapse/settings.json` setting.\n\nThe settings file is at `.synapse/settings.json` (same file that already stores `theme`, etc.). It's read by the dashboard and the MCP server.\n\n---\n\n## Change 1 — src/db.ts: expose a readSettings helper (if not already available)\n\nCheck if there's already a `readSettings()` function exported from `src/db.ts` or `src/dashboard.ts`. If not, add a simple one to `src/db.ts`:\n\n```typescript\nexport function readSynapseSettings(): Record<string, unknown> {\n  const settingsPath = join(process.cwd(), '.synapse', 'settings.json');\n  try {\n    const { existsSync, readFileSync } = require('fs');  // use static import form\n    if (existsSync(settingsPath)) return JSON.parse(readFileSync(settingsPath, 'utf8'));\n  } catch {}\n  return {};\n}\n```\n\nActually, check `src/dashboard.ts` — it already has a `readSettings()` function (local to dashboard). If it's not exported, add an equivalent export to `src/db.ts` that reads the same `.synapse/settings.json` file.\n\n---\n\n## Change 2 — src/mcp-server.ts: read threshold from settings\n\nReplace:\n```typescript\nconst AUTO_RESTART_AFTER_TASKS = parseInt(process.env.SYNAPSE_AUTO_RESTART_TASKS ?? '5', 10);\n```\n\nWith:\n```typescript\nconst settings = readSynapseSettings();  // import from ./db.js\nconst AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number'\n  ? settings.autoRestartTasks\n  : 5;\n```\n\nThe setting key is `autoRestartTasks` (camelCase, matches the existing settings convention). Default is 5 if not set.\n\n---\n\n## Change 3 — src/dashboard.ts: expose settings endpoint for this field\n\nThe existing `POST /api/settings` endpoint already accepts arbitrary key-value merges, so no new endpoint needed. But add `autoRestartTasks` to `GET /api/settings` response — it's already included since the endpoint returns all settings. No code change needed here; just verify that `POST /api/settings` with `{ \"autoRestartTasks\": 10 }` would work (it should — the existing merge logic handles it).\n\nAlso update the restart handler in `src/dashboard.ts` to read from settings instead of env var:\n```typescript\nconst settings = readSettings(); // local function already exists\nconst AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number' ? settings.autoRestartTasks : 5;\n```\n\n---\n\n## Change 4 — Remove env var support\n\nRemove any remaining `process.env.SYNAPSE_AUTO_RESTART_TASKS` references.\n\n---\n\nBuild `npm run build` and verify clean.\n",
+        "priority": 5,
+        "created_at": 1780827025879,
+        "read_at": 1780827028176,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1192,
+        "from_id": "cec50b17:27",
+        "to_id": "human",
+        "content": "✅ committed 64b5590: refactor: read autoRestartTasks from settings.json instead of env var",
+        "priority": 5,
+        "created_at": 1780827098628,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 6286,
+        "event_id": "evt_1780827028225_2jokj",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780827028225
+      },
+      {
+        "id": 6287,
+        "event_id": "evt_1780827030353_etaj1",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780827030353
+      },
+      {
+        "id": 6289,
+        "event_id": "evt_1780827034102_vjzgo",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 79,
+        "timestamp": 1780827034102
+      },
+      {
+        "id": 6290,
+        "event_id": "evt_1780827036679_koyfk",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 104,
+        "timestamp": 1780827036679
+      },
+      {
+        "id": 6291,
+        "event_id": "evt_1780827039202_00h29",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 181,
+        "timestamp": 1780827039202
+      },
+      {
+        "id": 6292,
+        "event_id": "evt_1780827042092_4fh37",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780827042092
+      },
+      {
+        "id": 6293,
+        "event_id": "evt_1780827045023_9n7jg",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780827045023
+      },
+      {
+        "id": 6294,
+        "event_id": "evt_1780827048685_r57lw",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780827048685
+      },
+      {
+        "id": 6295,
+        "event_id": "evt_1780827051881_0eli2",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 107,
+        "timestamp": 1780827051881
+      },
+      {
+        "id": 6296,
+        "event_id": "evt_1780827055773_k5reu",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780827055773
+      },
+      {
+        "id": 6297,
+        "event_id": "evt_1780827063903_vaftq",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780827063903
+      },
+      {
+        "id": 6298,
+        "event_id": "evt_1780827066123_rkapg",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780827066123
+      },
+      {
+        "id": 6299,
+        "event_id": "evt_1780827070700_trytb",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780827070700
+      },
+      {
+        "id": 6300,
+        "event_id": "evt_1780827073256_ll19x",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 91,
+        "timestamp": 1780827073256
+      },
+      {
+        "id": 6301,
+        "event_id": "evt_1780827076842_xrk76",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780827076842
+      },
+      {
+        "id": 6302,
+        "event_id": "evt_1780827082764_c7g4t",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1780827082764
+      },
+      {
+        "id": 6303,
+        "event_id": "evt_1780827086507_hv5uv",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780827086507
+      },
+      {
+        "id": 6304,
+        "event_id": "evt_1780827089928_9ycv4",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 938,
+        "timestamp": 1780827089928
+      },
+      {
+        "id": 6305,
+        "event_id": "evt_1780827093289_hg66h",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 76,
+        "timestamp": 1780827093289
+      },
+      {
+        "id": 6306,
+        "event_id": "evt_1780827098626_xiwgp",
+        "synapse_agent_id": "cec50b17:27",
+        "session_id": "cbdc2faa-da50-4a2b-9997-fb596cc427d2",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 125,
+        "timestamp": 1780827098626
+      }
+    ]
+  }
+}

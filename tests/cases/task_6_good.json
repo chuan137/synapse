@@ -1,6 +1,5 @@
 {
   "id": 6,
-  "label": "good",
   "task": {
     "id": 6,
     "agent_id": "cec50b17:20",
@@ -29,7 +28,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -199,5 +199,254 @@
     "duration_ms": 69779,
     "traceability_score": 2,
     "has_commit": false
+  },
+  "schema_version": 2,
+  "task_id": 6,
+  "title": "Find and fix settings.json name writer",
+  "trigger_msg_id": 229,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": null,
+  "started_at": 1780674141532,
+  "finished_at": 1780674211311,
+  "total_duration_ms": 69779,
+  "agents": {
+    "developer:20": {
+      "agent_id": "cec50b17:20",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 49,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 11,
+          "avg_ms": 143,
+          "p90_ms": 126,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 2,
+          "avg_ms": 56,
+          "p90_ms": 63,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Write": {
+          "calls": 1,
+          "avg_ms": 66,
+          "p90_ms": 66,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 1,
+          "avg_ms": 57,
+          "p90_ms": 57,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 1855
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 579,
+        "from_id": "cec50b17:20",
+        "to_id": "cec50b17:0",
+        "content": "DONE — Revised fix complete. Build clean.\n\n**Root cause of \"Developer :21\" in settings.json (confirmed):**\n\nBefore ff6d5e3, `update_status` accepted a `name` parameter and called `saveSettings({ name: newName })` when it changed. A worker passed `name=\"Developer :21\"` at some point, persisting it to disk. ff6d5e3 removed that code path but left the stale value in the file. The commit at ff6d5e3 also introduced `let agentName = settings.name ?? ''` which then re-read the stale value on every boot and propagated it back to the DB on every `update_status` call — creating the regression.\n\n**What was written by the pre-ff6d5e3 code:**\n```ts\n// OLD (removed in ff6d5e3):\nif (newName && newName !== agentName) {\n  agentName = newName;\n  saveSettings({ name: newName });  // ← wrote \"Developer :21\" to settings.json\n}\n```\n\n**Files changed (in commit 6fced86, auto-committed by hook):**\n- `src/mcp-server.ts`: removed `agentName` variable + old slot-0 guard; simplified to `if (slot === 0) { setAgentName(AGENT_ID, 'orchestrator'); }`; `update_status` handler passes `null` for name; dropped dead `saveSettings()` and `name?` from `Settings` interface\n- `src/db.ts`: migration WHERE extended to `name = 'Joker' OR name LIKE 'Developer :%'`\n\n**`.synapse/settings.json` final contents (gitignored, updated on disk):**\n```json\n{\n  \"projectId\": \"cec50b17\",\n  \"name\": \"synapse\"\n}\n```\nRestored `name` to project dir basename `\"synapse\"` per option (a).\n\n**Build:** clean, no errors.\n\n**Note:** The slot-0 guard now calls `setAgentName(AGENT_ID, 'orchestrator')` unconditionally on every boot. If operator-customized orchestrator names should survive restarts, add a DB read before the call to skip if a non-default name is already set. Let me know if you want that added.\n",
+        "priority": 5,
+        "created_at": 1780674208318,
+        "read_at": 1780674220786,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 3293,
+        "event_id": "evt_1780674141578_xizol",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780674141578
+      },
+      {
+        "id": 3295,
+        "event_id": "evt_1780674146117_a59sj",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780674146117
+      },
+      {
+        "id": 3296,
+        "event_id": "evt_1780674147103_rta6h",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 73,
+        "timestamp": 1780674147103
+      },
+      {
+        "id": 3297,
+        "event_id": "evt_1780674150212_ntju0",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780674150212
+      },
+      {
+        "id": 3299,
+        "event_id": "evt_1780674155254_1c3zp",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 94,
+        "timestamp": 1780674155254
+      },
+      {
+        "id": 3300,
+        "event_id": "evt_1780674155863_68u7n",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 126,
+        "timestamp": 1780674155863
+      },
+      {
+        "id": 3301,
+        "event_id": "evt_1780674159539_qvj57",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 80,
+        "timestamp": 1780674159539
+      },
+      {
+        "id": 3303,
+        "event_id": "evt_1780674167888_02cc5",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 66,
+        "timestamp": 1780674167888
+      },
+      {
+        "id": 3304,
+        "event_id": "evt_1780674171636_fpfod",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 705,
+        "timestamp": 1780674171636
+      },
+      {
+        "id": 3305,
+        "event_id": "evt_1780674175195_qdjgu",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780674175195
+      },
+      {
+        "id": 3308,
+        "event_id": "evt_1780674178639_dllue",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780674178639
+      },
+      {
+        "id": 3309,
+        "event_id": "evt_1780674181526_03k7t",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 85,
+        "timestamp": 1780674181526
+      },
+      {
+        "id": 3310,
+        "event_id": "evt_1780674185696_och16",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 78,
+        "timestamp": 1780674185696
+      },
+      {
+        "id": 3312,
+        "event_id": "evt_1780674188656_fz7e4",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 105,
+        "timestamp": 1780674188656
+      },
+      {
+        "id": 3314,
+        "event_id": "evt_1780674193701_ptyzi",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 63,
+        "timestamp": 1780674193701
+      },
+      {
+        "id": 3315,
+        "event_id": "evt_1780674208371_swdgx",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1780674208371
+      }
+    ]
   }
 }

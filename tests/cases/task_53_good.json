@@ -1,6 +1,5 @@
 {
   "id": 53,
-  "label": "good",
   "task": {
     "id": 53,
     "agent_id": "cec50b17:25",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -170,5 +170,215 @@
     "duration_ms": 52251,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 53,
+  "title": "Store theme preference in .synapse/settings.json",
+  "trigger_msg_id": 950,
+  "source_msg_id": 949,
+  "result_msg_id": null,
+  "commit_sha": "2021323",
+  "started_at": 1780753038989,
+  "finished_at": 1780753091240,
+  "total_duration_ms": 52251,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "ExitWorktree": {
+          "calls": 0,
+          "avg_ms": 0,
+          "p90_ms": 0,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 75,
+          "p90_ms": 75,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 251,
+          "p90_ms": 862,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 4,
+          "avg_ms": 48,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 1630
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 953,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed 2021323: feat: persist S-Deck theme in settings.json",
+        "priority": 5,
+        "created_at": 1780753091240,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5048,
+        "event_id": "evt_1780753047232_zkrm1",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "ExitWorktree",
+        "status": "ok",
+        "duration_ms": null,
+        "timestamp": 1780753047232
+      },
+      {
+        "id": 5050,
+        "event_id": "evt_1780753050050_vg6vy",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780753050050
+      },
+      {
+        "id": 5054,
+        "event_id": "evt_1780753054357_3ht4m",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 124,
+        "timestamp": 1780753054357
+      },
+      {
+        "id": 5055,
+        "event_id": "evt_1780753055351_q8ifj",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 93,
+        "timestamp": 1780753055351
+      },
+      {
+        "id": 5058,
+        "event_id": "evt_1780753058075_adl04",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 42,
+        "timestamp": 1780753058075
+      },
+      {
+        "id": 5061,
+        "event_id": "evt_1780753062492_n8d6a",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 72,
+        "timestamp": 1780753062492
+      },
+      {
+        "id": 5063,
+        "event_id": "evt_1780753064819_d9ld0",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780753064819
+      },
+      {
+        "id": 5065,
+        "event_id": "evt_1780753068242_kjcdy",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780753068242
+      },
+      {
+        "id": 5067,
+        "event_id": "evt_1780753073494_92x05",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780753073494
+      },
+      {
+        "id": 5068,
+        "event_id": "evt_1780753076352_3ybpl",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780753076352
+      },
+      {
+        "id": 5071,
+        "event_id": "evt_1780753083424_s1g4p",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780753083424
+      },
+      {
+        "id": 5073,
+        "event_id": "evt_1780753086529_ur0bw",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 862,
+        "timestamp": 1780753086529
+      },
+      {
+        "id": 5076,
+        "event_id": "evt_1780753091160_1cwt9",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 106,
+        "timestamp": 1780753091160
+      }
+    ]
   }
 }

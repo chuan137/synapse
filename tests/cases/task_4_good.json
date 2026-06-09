@@ -1,6 +1,5 @@
 {
   "id": 4,
-  "label": "good",
   "task": {
     "id": 4,
     "agent_id": "cec50b17:20",
@@ -29,7 +28,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 564,
@@ -43,7 +43,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -173,5 +174,222 @@
     "duration_ms": 62441,
     "traceability_score": 2,
     "has_commit": false
+  },
+  "schema_version": 2,
+  "task_id": 4,
+  "title": "Investigate agent_status.name write paths",
+  "trigger_msg_id": 226,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": null,
+  "started_at": 1780673795213,
+  "finished_at": 1780673857654,
+  "total_duration_ms": 62441,
+  "agents": {
+    "developer:20": {
+      "agent_id": "cec50b17:20",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 5,
+          "avg_ms": 82,
+          "p90_ms": 189,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 4,
+          "avg_ms": 217,
+          "p90_ms": 542,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 2,
+          "avg_ms": 54,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 2,
+      "active_duration_ms": 1441
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 563,
+        "from_id": "cec50b17:20",
+        "to_id": "cec50b17:0",
+        "content": "FINDING — Root cause of `Developer :21` persisting in agent_status.name\n\n**`.synapse/settings.json` contents (verbatim):**\n```json\n{\n  \"projectId\": \"cec50b17\",\n  \"name\": \"Developer :21\"\n}\n```\n\n**Every code path that writes to `agent_status.name`:**\n\n1. `src/mcp-server.ts:68` — On boot, reads `settings.name` into module-level `let agentName = settings.name ?? ''` → `agentName = \"Developer :21\"`.\n\n2. `src/mcp-server.ts:71–74` — Slot-0 guard: if `slot === 0 && (!agentName || agentName === 'Joker')`, overwrites `agentName` with `\"orchestrator\"` and calls `setAgentName()`. Workers (slot > 0) skip this block entirely — `agentName` stays `\"Developer :21\"`.\n\n3. `src/mcp-server.ts:371` — Every call to the `update_status` MCP tool executes:\n   ```ts\n   updateStatus(AGENT_ID, state, current_task ?? null, agentName || null, null);\n   ```\n   This passes `agentName` (\"Developer :21\") as the name parameter on every status update.\n\n4. `src/db.ts:213–222` — `upsertStatus` prepared statement:\n   ```sql\n   ON CONFLICT(agent_id) DO UPDATE SET\n     name = COALESCE(excluded.name, name), ...\n   ```\n   `COALESCE(excluded.name, name)` — since `excluded.name` is `\"Developer :21\"` (non-null), it always wins and overwrites whatever `setAgentName()` previously wrote.\n\n5. `src/db.ts:599–600` — `setAgentName()` does a direct `UPDATE agent_status SET name = ? WHERE agent_id = ?`. This is the one correct write (called by `spawnWorker`), but it's immediately overwritten the next time the worker calls `update_status`.\n\n**The specific override path:**\n\n`spawnWorker` calls `setAgentName(worker.agent_id, role)` → correct name written.\nThen worker restarts, reads `settings.json` → `agentName = \"Developer :21\"`.\nWorker calls `update_status` → `upsertStatus` runs → `COALESCE(\"Developer :21\", role)` = `\"Developer :21\"` wins.\nResult: every `update_status` call from any worker silently reverts the DB name to `\"Developer :21\"`.\n\n**Why `settings.json` has `\"Developer :21\"`:**\n\nAt some point before ff6d5e3, a worker wrote its name to `settings.json` (the `saveSettings` function exists in mcp-server.ts but is never called now — it was likely removed in ff6d5e3 or an adjacent commit). The file was never cleaned up. Now every worker that shares this working directory inherits that stale name at boot.\n\n**Recommended fix (two parts):**\n\n1. **Delete `name` from `.synapse/settings.json`** — or strip the `name` field entirely on load for workers (slot > 0).\n\n2. **In `upsertStatus`, don't let the caller overwrite a DB-set name.** Change the `ON CONFLICT` clause from `name = COALESCE(excluded.name, name)` to `name = COALESCE(name, excluded.name)` — i.e., keep existing DB name if already set, only fill it in if NULL. Alternatively, don't pass `agentName` from `update_status` handler at all (pass `null`), since the name is set by `setAgentName()` / `spawnWorker` and `update_status` should never touch it.\n\nOption 2b (don't pass name from update_status) is the cleaner fix — name ownership should belong to spawn/setAgentName, not to the per-turn status reporter.\n",
+        "priority": 5,
+        "created_at": 1780673848274,
+        "read_at": 1780673853369,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 564,
+        "from_id": "cec50b17:20",
+        "to_id": "human",
+        "content": "FINDING — Sent investigation results to orchestrator. Summary:\n\nRoot cause: `.synapse/settings.json` contains `\"name\": \"Developer :21\"`. On every boot, workers read this into `agentName`. Every `update_status` call passes `agentName` to `upsertStatus`, which uses `COALESCE(excluded.name, name)` — so the stale string wins over whatever `setAgentName()` wrote. The slot-0 guard that corrects `\"Joker\"` → `\"orchestrator\"` doesn't cover workers and doesn't cover non-\"Joker\" stale values.\n\nFix: remove `name` from `.synapse/settings.json` + stop passing `agentName` from the `update_status` handler (or flip the COALESCE to prefer the existing DB value).",
+        "priority": 5,
+        "created_at": 1780673855263,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 3236,
+        "event_id": "evt_1780673795261_ulx6t",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780673795261
+      },
+      {
+        "id": 3238,
+        "event_id": "evt_1780673798228_h3tha",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780673798228
+      },
+      {
+        "id": 3239,
+        "event_id": "evt_1780673798870_ik6ft",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 74,
+        "timestamp": 1780673798870
+      },
+      {
+        "id": 3240,
+        "event_id": "evt_1780673806830_vt07t",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 542,
+        "timestamp": 1780673806830
+      },
+      {
+        "id": 3241,
+        "event_id": "evt_1780673807362_erseg",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 189,
+        "timestamp": 1780673807362
+      },
+      {
+        "id": 3243,
+        "event_id": "evt_1780673813184_iktwf",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780673813184
+      },
+      {
+        "id": 3244,
+        "event_id": "evt_1780673813696_27qbm",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780673813696
+      },
+      {
+        "id": 3245,
+        "event_id": "evt_1780673817738_frxtl",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 73,
+        "timestamp": 1780673817738
+      },
+      {
+        "id": 3248,
+        "event_id": "evt_1780673822940_o1w31",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 182,
+        "timestamp": 1780673822940
+      },
+      {
+        "id": 3249,
+        "event_id": "evt_1780673826127_krg0c",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 72,
+        "timestamp": 1780673826127
+      },
+      {
+        "id": 3250,
+        "event_id": "evt_1780673848323_ul1bs",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780673848323
+      },
+      {
+        "id": 3252,
+        "event_id": "evt_1780673855313_uc1ce",
+        "synapse_agent_id": "cec50b17:20",
+        "session_id": "448a9dfe-bbc3-4694-ad3d-6e5dd85d25c8",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780673855313
+      }
+    ]
   }
 }

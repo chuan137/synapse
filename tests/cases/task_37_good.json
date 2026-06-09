@@ -1,6 +1,5 @@
 {
   "id": 37,
-  "label": "good",
   "task": {
     "id": 37,
     "agent_id": "cec50b17:23",
@@ -29,7 +28,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 794,
@@ -43,7 +43,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -93,5 +94,142 @@
     "duration_ms": 13011,
     "traceability_score": 2,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 37,
+  "title": "Fix task jump to prefer trigger_msg_id (start) over result",
+  "trigger_msg_id": 793,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "f009986",
+  "started_at": 1780738989758,
+  "finished_at": 1780739002769,
+  "total_duration_ms": 13011,
+  "agents": {
+    "developer:23": {
+      "agent_id": "cec50b17:23",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 48,
+          "p90_ms": 48,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 1,
+          "avg_ms": 115,
+          "p90_ms": 115,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 267
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 793,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:23",
+        "content": "In `public/app.js`, find the line in `renderTasks()` that picks the jump message id (around line 469):\n\n```javascript\nconst jumpId = a.result_msg_id ?? a.trigger_msg_id;\n```\n\nChange it to prefer the trigger (starting) message over the result message:\n\n```javascript\nconst jumpId = a.trigger_msg_id ?? a.result_msg_id;\n```\n\nThat's the only change. Commit: `fix: task jump prefers trigger message (start) over result message`\n\nReport DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780738989758,
+        "read_at": 1780738992634,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 794,
+        "from_id": "cec50b17:23",
+        "to_id": "human",
+        "content": "✅ committed f009986: fix: task jump prefers trigger message (start) over result message",
+        "priority": 5,
+        "created_at": 1780739002769,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4370,
+        "event_id": "evt_1780738992684_tawva",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780738992684
+      },
+      {
+        "id": 4371,
+        "event_id": "evt_1780738995516_z3nk4",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780738995516
+      },
+      {
+        "id": 4372,
+        "event_id": "evt_1780738999118_jgpr7",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780738999118
+      },
+      {
+        "id": 4373,
+        "event_id": "evt_1780739002768_q3iio",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 115,
+        "timestamp": 1780739002768
+      }
+    ]
   }
 }

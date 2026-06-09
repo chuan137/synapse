@@ -1,6 +1,5 @@
 {
   "id": 22,
-  "label": "good",
   "task": {
     "id": 22,
     "agent_id": "cec50b17:3",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 681,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 682,
@@ -58,7 +59,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -258,5 +260,328 @@
     "duration_ms": 117022,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 22,
+  "title": "Phase 1: file-based task briefs in delegate_task",
+  "trigger_msg_id": 680,
+  "source_msg_id": null,
+  "result_msg_id": 680,
+  "commit_sha": "cf89c00",
+  "started_at": 1780694863741,
+  "finished_at": 1780694980763,
+  "total_duration_ms": 117022,
+  "agents": {
+    "developer:3": {
+      "agent_id": "cec50b17:3",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 62,
+          "p90_ms": 62,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 2,
+          "avg_ms": 49,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 5,
+          "avg_ms": 51,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 846,
+          "p90_ms": 3906,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "avg_ms": 52,
+          "p90_ms": 62,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__report_done": {
+          "calls": 1,
+          "avg_ms": 55,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 2,
+      "active_duration_ms": 4962
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 680,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:3",
+        "content": "Add file-based task brief support to the `delegate_task` MCP tool in `src/mcp-server.ts`.\n\n## Background\n\nCurrently `delegate_task` sends the full task content inline in the bus message. For large task specs this bloats the worker's conversation context. The fix: when the orchestrator opts in, write the task brief to `.synapse/tasks/<activityId>.md` and send a short bus message with a file path reference instead.\n\n## Changes required\n\n### 1. `src/mcp-server.ts` — `delegate_task` handler (around line 556)\n\nAdd optional `task_file?: boolean` parameter to the tool schema (in the `inputSchema.properties` block for `delegate_task`, around line 313–330):\n\n```json\n\"task_file\": {\n  \"type\": \"boolean\",\n  \"description\": \"If true, write the task content to .synapse/tasks/<activityId>.md and send a short reference message instead of the full content inline. Use for large task specs (>~300 tokens).\",\n  \"default\": false\n}\n```\n\nIn the handler (around line 556–565), after computing `activityId`, add the file-writing branch:\n\n```typescript\nif (task_file) {\n  const tasksDir = join(process.cwd(), '.synapse', 'tasks');\n  mkdirSync(tasksDir, { recursive: true });\n  const briefPath = join(tasksDir, `${activityId}.md`);\n  writeFileSync(briefPath, content, 'utf8');\n  const preview = content.split('\\n').slice(0, 3).join('\\n');\n  const shortMsg = `Task brief at .synapse/tasks/${activityId}.md\\n\\n${preview}${content.split('\\n').length > 3 ? '\\n…' : ''}`;\n  sendMessage(AGENT_ID, to_id, shortMsg, priority);\n} else {\n  sendMessage(AGENT_ID, to_id, content, priority);\n}\n```\n\nNote: `mkdirSync` and `writeFileSync` are already available from Node's `fs` module — check existing imports at the top of the file and add if needed.\n\n### 2. `.synapse/tasks/` directory — add to `.gitignore`\n\nCheck if there's a `.gitignore` at the project root. If it already has `.synapse/` listed (which it likely does from `synapse init`), task files are already covered. If not, add `.synapse/tasks/` explicitly. Just check and report what you find — don't change `.gitignore` if `.synapse/` is already excluded.\n\n### 3. Protocol doc — `.synapse/SYNAPSE-orchestrator.md`\n\nAdd a short note in the `delegate_task` section (or wherever task dispatch is documented) explaining the `task_file` option and when to use it. Something like:\n\n> For large task specs (more than ~300 tokens), pass `task_file: true` to `delegate_task`. The brief will be written to `.synapse/tasks/<activityId>.md` and the worker will receive a short message with the file path. Workers: when your task message references a `.synapse/tasks/` file, read it with the `Read` tool before starting work.\n\n## Key files\n- `src/mcp-server.ts` — main change (tool schema + handler)\n- `.gitignore` — check only, add `.synapse/tasks/` if needed\n- `.synapse/SYNAPSE-orchestrator.md` — protocol doc addition\n\nAfter implementing, run `npm run build` (or `tsc`) to verify clean compile, then call `report_done` with a summary of what changed.",
+        "priority": 5,
+        "created_at": 1780694863741,
+        "read_at": 1780694866299,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 681,
+        "from_id": "cec50b17:3",
+        "to_id": "cec50b17:0",
+        "content": "DONE: task_file param added to delegate_task.\n\nFiles changed:\n- `src/mcp-server.ts`: Added `task_file?: boolean` to `delegate_task` inputSchema. Handler: when true, calls `startActivity(null)` to get an activityId, writes brief to `.synapse/tasks/<activityId>.md`, sends a short pointer message to the worker. Normal path unchanged.\n- `.synapse/SYNAPSE-orchestrator.md`: Added note after step 1 explaining `task_file: true`, when to use it, and the worker instruction to `Read` the file.\n- `.gitignore`: `.synapse/` already covers task files — no change needed.\n\nBuild: `tsc` clean.",
+        "priority": 5,
+        "created_at": 1780694944526,
+        "read_at": 1780694947399,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 682,
+        "from_id": "cec50b17:3",
+        "to_id": "human",
+        "content": "delegate_task now supports task_file:true — large specs written to .synapse/tasks/<id>.md",
+        "priority": 5,
+        "created_at": 1780694944526,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 3795,
+        "event_id": "evt_1780694866352_dhwfc",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 62,
+        "timestamp": 1780694866352
+      },
+      {
+        "id": 3797,
+        "event_id": "evt_1780694868590_lpxof",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780694868590
+      },
+      {
+        "id": 3798,
+        "event_id": "evt_1780694870716_0o0xs",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780694870716
+      },
+      {
+        "id": 3799,
+        "event_id": "evt_1780694873212_u9vod",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780694873212
+      },
+      {
+        "id": 3800,
+        "event_id": "evt_1780694873975_mr3td",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780694873975
+      },
+      {
+        "id": 3801,
+        "event_id": "evt_1780694877711_4nc9n",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780694877711
+      },
+      {
+        "id": 3802,
+        "event_id": "evt_1780694878824_wcabo",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 111,
+        "timestamp": 1780694878824
+      },
+      {
+        "id": 3803,
+        "event_id": "evt_1780694885819_s9fh0",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 62,
+        "timestamp": 1780694885819
+      },
+      {
+        "id": 3804,
+        "event_id": "evt_1780694893712_d1mur",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780694893712
+      },
+      {
+        "id": 3805,
+        "event_id": "evt_1780694896908_ea735",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 67,
+        "timestamp": 1780694896908
+      },
+      {
+        "id": 3806,
+        "event_id": "evt_1780694899918_xsmgq",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780694899918
+      },
+      {
+        "id": 3807,
+        "event_id": "evt_1780694904462_sj463",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780694904462
+      },
+      {
+        "id": 3808,
+        "event_id": "evt_1780694917777_kt52s",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780694917777
+      },
+      {
+        "id": 3809,
+        "event_id": "evt_1780694921296_ac2fo",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 73,
+        "timestamp": 1780694921296
+      },
+      {
+        "id": 3810,
+        "event_id": "evt_1780694924575_nudw7",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780694924575
+      },
+      {
+        "id": 3811,
+        "event_id": "evt_1780694930638_khaos",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780694930638
+      },
+      {
+        "id": 3812,
+        "event_id": "evt_1780694937448_1z21i",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 3906,
+        "timestamp": 1780694937448
+      },
+      {
+        "id": 3813,
+        "event_id": "evt_1780694944577_1xbfp",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__report_done",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780694944577
+      },
+      {
+        "id": 3814,
+        "event_id": "evt_1780694947445_7lyx7",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780694947445
+      }
+    ]
   }
 }

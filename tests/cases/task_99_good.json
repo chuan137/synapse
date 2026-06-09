@@ -1,0 +1,370 @@
+{
+  "id": 99,
+  "task": {
+    "id": 99,
+    "agent_id": "cec50b17:0",
+    "title": "Fix: commit message displayed as one long line in UI",
+    "status": "completed",
+    "started_at": 1780914854155,
+    "finished_at": 1780915073605,
+    "trigger_msg_id": 1350,
+    "result_msg_id": 1353,
+    "source_msg_id": null,
+    "commit_sha": null
+  },
+  "linked_msg_ids": [
+    1350,
+    1353
+  ],
+  "messages": [
+    {
+      "id": 1351,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:33",
+      "content": "The S-Deck UI displays commit messages as one long line — newlines from the commit message are not rendered as line breaks.\n\n**Fix:** In `public/app.js`, find where commit message text is rendered (likely in the task detail panel or commit metadata section). Ensure newlines (`\\n`) in the commit message string are preserved/rendered as `<br>` or the element uses `white-space: pre-wrap` CSS so multiline commit messages display correctly.\n\nApply the same fix wherever commit metadata (subject, body) is displayed inline in the UI.\n\n**Worktree:**\nRun: `synapse worktree create developer-33-fix-commit-linebreaks`\nWork in `.synapse/worktrees/developer-33-fix-commit-linebreaks`. Commit. Do not push.\n\nReport DONE with what you changed.",
+      "priority": 5,
+      "created_at": 1780914862830,
+      "read_at": 1780914865112,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1353,
+      "from_id": "cec50b17:33",
+      "to_id": "cec50b17:0",
+      "content": "DONE — Task: Fix commit message line breaks in diff modal\n\n**Root cause:** In `renderDiff()`, all lines (including the commit header, file stats, and unchanged context lines) were wrapped in plain inline `<span>` elements and joined with `''`. Inline spans produce no line breaks, so the entire diff ran together as one long line. The `display:block` CSS on `.diff-add`/`.diff-del`/`.diff-hunk` accidentally masked the bug for colored lines, but plain context lines had no block layout.\n\n**Fix (public/app.js):**\n- Context/unchanged lines now emit as raw text nodes with a trailing `\\n` instead of an inline `<span>`. The `<pre>` parent with `white-space:pre` preserves them correctly.\n- `+++`/`---` file-header lines now use a new `diff-hdr` class (display:block) instead of falling through to the inline path.\n\n**Fix (public/style.css):**\n- Added `.diff-hdr { display:block; color:var(--muted) }` rule.\n\n**Files changed:**\n- `public/app.js`: renderDiff context-line and header-line handling\n- `public/style.css`: new .diff-hdr rule\n\n**Build:** clean. **Commit:** `0912af1` on `synapse/developer-33-fix-commit-linebreaks`.",
+      "priority": 5,
+      "created_at": 1780915058578,
+      "read_at": 1780915060853,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "done"
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 7325,
+      "event_id": "evt_1780914854284_b59yc",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 132,
+      "timestamp": 1780914854284
+    },
+    {
+      "id": 7326,
+      "event_id": "evt_1780914856282_pucur",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__list_workers",
+      "status": "ok",
+      "duration_ms": 188,
+      "timestamp": 1780914856282
+    },
+    {
+      "id": 7327,
+      "event_id": "evt_1780914862878_27zal",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780914862878
+    },
+    {
+      "id": 7329,
+      "event_id": "evt_1780914866212_gdj2k",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780914866212
+    },
+    {
+      "id": 7331,
+      "event_id": "evt_1780914868453_3l8fy",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780914868453
+    },
+    {
+      "id": 7333,
+      "event_id": "evt_1780914870430_eda9m",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780914870430
+    },
+    {
+      "id": 7375,
+      "event_id": "evt_1780915060899_in0w3",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780915060899
+    },
+    {
+      "id": 7377,
+      "event_id": "evt_1780915063197_qhlbx",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 55,
+      "timestamp": 1780915063197
+    },
+    {
+      "id": 7378,
+      "event_id": "evt_1780915066369_oir0d",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 81,
+      "timestamp": 1780915066369
+    },
+    {
+      "id": 7379,
+      "event_id": "evt_1780915071088_t3gjt",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 1826,
+      "timestamp": 1780915071088
+    }
+  ],
+  "metrics": {
+    "tool_calls": 10,
+    "duration_ms": 219450,
+    "traceability_score": 1,
+    "has_commit": false
+  },
+  "schema_version": 2,
+  "task_id": 99,
+  "title": "Fix: commit message displayed as one long line in UI",
+  "trigger_msg_id": 1350,
+  "source_msg_id": null,
+  "result_msg_id": 1353,
+  "commit_sha": null,
+  "started_at": 1780914854155,
+  "finished_at": 1780915073605,
+  "total_duration_ms": 219450,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 132,
+          "p90_ms": 132,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__list_workers": {
+          "calls": 1,
+          "avg_ms": 188,
+          "p90_ms": 188,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__delegate_task": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 3,
+          "avg_ms": 53,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__read_messages": {
+          "calls": 2,
+          "avg_ms": 47,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 2,
+          "avg_ms": 954,
+          "p90_ms": 1826,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 2531
+    },
+    "developer:33": {
+      "agent_id": "cec50b17:33",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1351,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:33",
+        "content": "The S-Deck UI displays commit messages as one long line — newlines from the commit message are not rendered as line breaks.\n\n**Fix:** In `public/app.js`, find where commit message text is rendered (likely in the task detail panel or commit metadata section). Ensure newlines (`\\n`) in the commit message string are preserved/rendered as `<br>` or the element uses `white-space: pre-wrap` CSS so multiline commit messages display correctly.\n\nApply the same fix wherever commit metadata (subject, body) is displayed inline in the UI.\n\n**Worktree:**\nRun: `synapse worktree create developer-33-fix-commit-linebreaks`\nWork in `.synapse/worktrees/developer-33-fix-commit-linebreaks`. Commit. Do not push.\n\nReport DONE with what you changed.",
+        "priority": 5,
+        "created_at": 1780914862830,
+        "read_at": 1780914865112,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1353,
+        "from_id": "cec50b17:33",
+        "to_id": "cec50b17:0",
+        "content": "DONE — Task: Fix commit message line breaks in diff modal\n\n**Root cause:** In `renderDiff()`, all lines (including the commit header, file stats, and unchanged context lines) were wrapped in plain inline `<span>` elements and joined with `''`. Inline spans produce no line breaks, so the entire diff ran together as one long line. The `display:block` CSS on `.diff-add`/`.diff-del`/`.diff-hunk` accidentally masked the bug for colored lines, but plain context lines had no block layout.\n\n**Fix (public/app.js):**\n- Context/unchanged lines now emit as raw text nodes with a trailing `\\n` instead of an inline `<span>`. The `<pre>` parent with `white-space:pre` preserves them correctly.\n- `+++`/`---` file-header lines now use a new `diff-hdr` class (display:block) instead of falling through to the inline path.\n\n**Fix (public/style.css):**\n- Added `.diff-hdr { display:block; color:var(--muted) }` rule.\n\n**Files changed:**\n- `public/app.js`: renderDiff context-line and header-line handling\n- `public/style.css`: new .diff-hdr rule\n\n**Build:** clean. **Commit:** `0912af1` on `synapse/developer-33-fix-commit-linebreaks`.",
+        "priority": 5,
+        "created_at": 1780915058578,
+        "read_at": 1780915060853,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "done"
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 7325,
+        "event_id": "evt_1780914854284_b59yc",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 132,
+        "timestamp": 1780914854284
+      },
+      {
+        "id": 7326,
+        "event_id": "evt_1780914856282_pucur",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__list_workers",
+        "status": "ok",
+        "duration_ms": 188,
+        "timestamp": 1780914856282
+      },
+      {
+        "id": 7327,
+        "event_id": "evt_1780914862878_27zal",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780914862878
+      },
+      {
+        "id": 7329,
+        "event_id": "evt_1780914866212_gdj2k",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780914866212
+      },
+      {
+        "id": 7331,
+        "event_id": "evt_1780914868453_3l8fy",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780914868453
+      },
+      {
+        "id": 7333,
+        "event_id": "evt_1780914870430_eda9m",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780914870430
+      },
+      {
+        "id": 7375,
+        "event_id": "evt_1780915060899_in0w3",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780915060899
+      },
+      {
+        "id": 7377,
+        "event_id": "evt_1780915063197_qhlbx",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780915063197
+      },
+      {
+        "id": 7378,
+        "event_id": "evt_1780915066369_oir0d",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 81,
+        "timestamp": 1780915066369
+      },
+      {
+        "id": 7379,
+        "event_id": "evt_1780915071088_t3gjt",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "d400213c-f792-4242-b85d-6ebdf5207f07",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 1826,
+        "timestamp": 1780915071088
+      }
+    ]
+  }
+}

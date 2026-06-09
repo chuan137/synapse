@@ -550,6 +550,9 @@ program
   .description('Extract and evaluate agent trajectory cases')
   .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')
   .option('--gate', 'Run validation gate on all critic patches')
+  .option('--calibrate', 'Compute per-role p90 thresholds from good cases and write src/eval/thresholds.json')
+  .option('--percentile <n>', 'Percentile for --calibrate threshold computation', '90')
+  .option('--regenerate-all', 'Re-extract every task that has an existing case file (upgrades v1 to v2)')
   .option('--limit <n>', 'Number of most recent completed tasks to evaluate', '20')
   .option('--task-id <n>', 'Evaluate a single task by ID and write results to eval_results table')
   .action(async (options) => {
@@ -561,6 +564,115 @@ program
     const casesDir = join(process.cwd(), 'tests', 'cases');
     const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
     const limit = parseInt(options.limit, 10);
+
+    if (options.calibrate) {
+      const { readdirSync: readDir, readFileSync: readF, writeFileSync: writeF, existsSync: checkExists } = await import('fs');
+      const { fileURLToPath: fu } = await import('url');
+      const { dirname: dn } = await import('path');
+      const pct = Math.min(100, Math.max(1, parseInt(options.percentile ?? '90', 10))) / 100;
+      const MIN_SAMPLES = 3;
+
+      if (!checkExists(casesDir)) {
+        process.stderr.write(`error: cases directory not found: ${casesDir}\n`);
+        process.exit(1);
+      }
+
+      const goodFiles = readDir(casesDir).filter((f: string) => f.endsWith('_good.json'));
+      if (goodFiles.length === 0) {
+        process.stderr.write(`No *_good.json cases found in ${casesDir}\n`);
+        process.exit(1);
+      }
+
+      const byRole: Record<string, {
+        toolCalls: number[]; durationMs: number[]; activeDurationMs: number[];
+        hasCommit: boolean[]; blockedEvents: number[]; errorRates: number[];
+      }> = {};
+
+      for (const f of goodFiles) {
+        const c = JSON.parse(readF(join(casesDir, f), 'utf8')) as any;
+        if (c.label !== 'good') continue;
+
+        // v2 path: per-agent stats
+        if (c.agents) {
+          for (const agent of Object.values(c.agents) as any[]) {
+            const role: string = agent.role ?? '_default';
+            if (!byRole[role]) byRole[role] = { toolCalls: [], durationMs: [], activeDurationMs: [], hasCommit: [], blockedEvents: [], errorRates: [] };
+            const totalCalls: number = Object.values(agent.tools as Record<string, any>).reduce((s: number, t: any) => s + t.calls, 0);
+            byRole[role].toolCalls.push(totalCalls);
+            byRole[role].activeDurationMs.push(agent.active_duration_ms ?? 0);
+            byRole[role].blockedEvents.push(agent.blocked_events?.length ?? 0);
+            for (const ts of Object.values(agent.tools as Record<string, any>) as any[]) {
+              if (ts.calls > 0) byRole[role].errorRates.push(ts.error_rate);
+            }
+          }
+          byRole[Object.values(c.agents as Record<string, any>)[0]?.role ?? '_default']?.hasCommit.push(!!c.commit_sha);
+        } else {
+          // v1 fallback
+          const key = '_default';
+          if (!byRole[key]) byRole[key] = { toolCalls: [], durationMs: [], activeDurationMs: [], hasCommit: [], blockedEvents: [], errorRates: [] };
+          byRole[key].toolCalls.push(c.metrics?.tool_calls ?? 0);
+          if (c.metrics?.duration_ms != null) byRole[key].durationMs.push(c.metrics.duration_ms);
+          byRole[key].hasCommit.push(!!c.metrics?.has_commit);
+          byRole[key].blockedEvents.push(0);
+        }
+      }
+
+      function pctile(arr: number[], p: number): number {
+        if (arr.length === 0) return 0;
+        const sorted = [...arr].sort((a: number, b: number) => a - b);
+        return sorted[Math.floor(sorted.length * p)];
+      }
+
+      const sampleSize: Record<string, number> = {};
+      const byRoleThresholds: Record<string, any> = {};
+      const skipped: string[] = [];
+
+      for (const [role, stats] of Object.entries(byRole)) {
+        sampleSize[role] = stats.toolCalls.length;
+        if (stats.toolCalls.length < MIN_SAMPLES) {
+          process.stdout.write(`  WARNING: role '${role}' has only ${stats.toolCalls.length} sample(s) — skipping (need ≥ ${MIN_SAMPLES})\n`);
+          skipped.push(role);
+          continue;
+        }
+        const srcArr = stats.activeDurationMs.length > 0 ? stats.activeDurationMs : stats.durationMs;
+        const commitRate = stats.hasCommit.filter(Boolean).length / Math.max(1, stats.hasCommit.length);
+        const t: Record<string, any> = {
+          tool_calls_p90: Math.ceil(pctile(stats.toolCalls, pct)),
+          duration_ms_p90: Math.ceil(pctile(srcArr, pct)),
+          error_rate_max: Math.min(1, parseFloat((pctile(stats.errorRates, pct) + 0.05).toFixed(2))),
+        };
+        if (commitRate >= 0.8) t.has_commit = true;
+        byRoleThresholds[role] = t;
+      }
+
+      const thresholdsFile = {
+        calibrated_at: new Date().toISOString(),
+        sample_size: sampleSize,
+        by_role: byRoleThresholds,
+        task_level: { traceability_score_max: 1 },
+      };
+
+      // Write to src/eval/thresholds.json (next to evaluator.ts / schema-v2.ts)
+      const evalSrcDir = join(process.cwd(), 'src', 'eval');
+      const outPath = join(evalSrcDir, 'thresholds.json');
+      writeF(outPath, JSON.stringify(thresholdsFile, null, 2));
+      process.stdout.write(`Calibrated from ${goodFiles.length} good cases → ${outPath}\n`);
+      for (const [role, t] of Object.entries(byRoleThresholds)) {
+        process.stdout.write(`  ${role} (n=${sampleSize[role]}): ${JSON.stringify(t)}\n`);
+      }
+      if (skipped.length > 0) {
+        process.stdout.write(`  Skipped (too few samples): ${skipped.join(', ')}\n`);
+      }
+      process.exit(0);
+    }
+
+    if (options.regenerateAll) {
+      const { regenerateAllCases } = await import('./eval/extract.js');
+      process.stdout.write(`Regenerating all case files in ${casesDir}...\n`);
+      const count = regenerateAllCases(dbPath, casesDir);
+      process.stdout.write(`Regenerated ${count} case files.\n`);
+      process.exit(0);
+    }
 
     if (options.taskId !== undefined) {
       // Single-task mode: fetch, score, persist, print
@@ -578,13 +690,14 @@ program
         process.stdout.write(`Task #${taskId} could not be evaluated.\n`);
         process.exit(0);
       }
+      const primaryAgentId = (result as any).task?.agent_id ?? '';
       const evalRows = [
-        { metric: 'traceability', passed: result.metrics.traceability_score <= 1, value: result.metrics.traceability_score },
-        { metric: 'tool_calls', passed: result.metrics.tool_calls <= 20, value: result.metrics.tool_calls },
-        { metric: 'duration', passed: (result.metrics.duration_ms ?? 0) <= 120_000, value: result.metrics.duration_ms },
-        { metric: 'has_commit', passed: result.metrics.has_commit, value: null },
+        { metric: 'traceability', passed: !result.failures.some((f: any) => f.metric === 'traceability_score'), value: result.metrics.traceability_score },
+        { metric: 'tool_calls',   passed: !result.failures.some((f: any) => f.metric === 'tool_calls'),         value: result.metrics.tool_calls },
+        { metric: 'duration',     passed: !result.failures.some((f: any) => f.metric.includes('duration')),     value: result.metrics.duration_ms },
+        { metric: 'has_commit',   passed: !result.failures.some((f: any) => f.metric === 'has_commit'),         value: null },
       ];
-      writeEvalResults(taskId, evalRows, true);
+      writeEvalResults(taskId, evalRows, true, (result as any).role ?? null, primaryAgentId);
       for (const r of evalRows) {
         if (!r.passed) {
           const triggered = checkAndResetMetricThreshold(r.metric);
@@ -595,7 +708,7 @@ program
       }
       process.stdout.write(`Task #${taskId}: ${result.pass ? 'PASS' : 'FAIL'}\n`);
       if (!result.pass) {
-        result.failures.forEach((f: string) => process.stdout.write(`  - ${f}\n`));
+        result.failures.forEach((f: any) => process.stdout.write(`  - [${f.role}/${f.agent_id}] ${f.metric}=${f.value} (max ${f.threshold})\n`));
       }
       process.exit(0);
     }
@@ -618,7 +731,7 @@ program
     process.stdout.write(`\n=== EVAL REPORT ===\nPASS: ${passed.length}/${results.length}\n`);
     failed.forEach((r: any) => {
       process.stdout.write(`  FAIL [${r.label.toUpperCase()}] #${r.id} ${r.title.slice(0, 45)}\n`);
-      r.failures.forEach((f: string) => process.stdout.write(`    - ${f}\n`));
+      r.failures.forEach((f: any) => process.stdout.write(`    - [${f.role}/${f.agent_id}] ${f.metric}=${f.value} (max ${f.threshold})\n`));
     });
     passed.forEach((r: any) => {
       process.stdout.write(`  PASS [${r.label.toUpperCase()}] #${r.id} ${r.title.slice(0, 45)}\n`);
@@ -630,12 +743,13 @@ program
     // Also persist results to eval_results DB table
     const { writeEvalResults } = await import('./db.js');
     for (const r of results) {
+      const primaryAgentId = (r as any).task?.agent_id ?? '';
       writeEvalResults(r.id, [
-        { metric: 'traceability', passed: r.metrics.traceability_score <= 1, value: r.metrics.traceability_score },
-        { metric: 'tool_calls',   passed: r.metrics.tool_calls <= 20,          value: r.metrics.tool_calls },
-        { metric: 'duration',     passed: (r.metrics.duration_ms ?? 0) <= 120_000, value: r.metrics.duration_ms },
-        { metric: 'has_commit',   passed: r.metrics.has_commit,                 value: null },
-      ]);
+        { metric: 'traceability', passed: !r.failures.some((f: any) => f.metric === 'traceability_score'), value: r.metrics.traceability_score },
+        { metric: 'tool_calls',   passed: !r.failures.some((f: any) => f.metric === 'tool_calls'),         value: r.metrics.tool_calls },
+        { metric: 'duration',     passed: !r.failures.some((f: any) => f.metric.includes('duration')),     value: r.metrics.duration_ms },
+        { metric: 'has_commit',   passed: !r.failures.some((f: any) => f.metric === 'has_commit'),         value: null },
+      ], false, (r as any).role ?? null, primaryAgentId);
     }
     process.stdout.write(`Persisted ${results.length} eval results to DB\n`);
 

@@ -1,0 +1,583 @@
+{
+  "id": 89,
+  "task": {
+    "id": 89,
+    "agent_id": "cec50b17:34",
+    "title": "Header UX: prominent project name, clearer connection status",
+    "status": "completed",
+    "started_at": 1780902298770,
+    "finished_at": 1780902368201,
+    "trigger_msg_id": null,
+    "result_msg_id": 1291,
+    "source_msg_id": 1287,
+    "commit_sha": "8e4bc16"
+  },
+  "linked_msg_ids": [
+    1287,
+    1291
+  ],
+  "messages": [
+    {
+      "id": 1289,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:34",
+      "content": "Task brief at .synapse/tasks/89.md\n\n# Task: Header UX — project name + connection status\n\nWork inside `.synapse/worktrees/developer-header-ux`. Commit there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780902298771,
+      "read_at": 1780902300607,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1290,
+      "from_id": "cec50b17:34",
+      "to_id": "human",
+      "content": "✅ committed 8e4bc16: feat(header): make project name prominent; improve connection status dot",
+      "priority": 5,
+      "created_at": 1780902368201,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 6960,
+      "event_id": "evt_1780902300654_idcod",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780902300654
+    },
+    {
+      "id": 6964,
+      "event_id": "evt_1780902302733_p1115",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780902302733
+    },
+    {
+      "id": 6967,
+      "event_id": "evt_1780902305252_na45l",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780902305252
+    },
+    {
+      "id": 6969,
+      "event_id": "evt_1780902308507_jwfq9",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 375,
+      "timestamp": 1780902308507
+    },
+    {
+      "id": 6970,
+      "event_id": "evt_1780902310513_0eugd",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 66,
+      "timestamp": 1780902310513
+    },
+    {
+      "id": 6972,
+      "event_id": "evt_1780902313514_pf30t",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 94,
+      "timestamp": 1780902313514
+    },
+    {
+      "id": 6974,
+      "event_id": "evt_1780902316640_415xa",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 69,
+      "timestamp": 1780902316640
+    },
+    {
+      "id": 6976,
+      "event_id": "evt_1780902319043_o94rw",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 77,
+      "timestamp": 1780902319043
+    },
+    {
+      "id": 6978,
+      "event_id": "evt_1780902322172_bdcd3",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 87,
+      "timestamp": 1780902322172
+    },
+    {
+      "id": 6980,
+      "event_id": "evt_1780902325390_43q4w",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 72,
+      "timestamp": 1780902325390
+    },
+    {
+      "id": 6982,
+      "event_id": "evt_1780902327610_0cg99",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780902327610
+    },
+    {
+      "id": 6984,
+      "event_id": "evt_1780902330700_kjkak",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 120,
+      "timestamp": 1780902330700
+    },
+    {
+      "id": 6985,
+      "event_id": "evt_1780902332955_7hatc",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 47,
+      "timestamp": 1780902332955
+    },
+    {
+      "id": 6986,
+      "event_id": "evt_1780902335197_mzkk7",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 45,
+      "timestamp": 1780902335197
+    },
+    {
+      "id": 6988,
+      "event_id": "evt_1780902337941_elr8t",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 203,
+      "timestamp": 1780902337941
+    },
+    {
+      "id": 6990,
+      "event_id": "evt_1780902346090_eeis5",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780902346090
+    },
+    {
+      "id": 6992,
+      "event_id": "evt_1780902351367_f43hq",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780902351367
+    },
+    {
+      "id": 6994,
+      "event_id": "evt_1780902355464_mj6ra",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780902355464
+    },
+    {
+      "id": 6995,
+      "event_id": "evt_1780902359377_00ivy",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780902359377
+    },
+    {
+      "id": 6997,
+      "event_id": "evt_1780902363305_fz92s",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 119,
+      "timestamp": 1780902363305
+    },
+    {
+      "id": 6999,
+      "event_id": "evt_1780902368199_o5fyj",
+      "synapse_agent_id": "cec50b17:34",
+      "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 110,
+      "timestamp": 1780902368199
+    }
+  ],
+  "metrics": {
+    "tool_calls": 21,
+    "duration_ms": 69431,
+    "traceability_score": 1,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 89,
+  "title": "Header UX: prominent project name, clearer connection status",
+  "trigger_msg_id": null,
+  "source_msg_id": 1287,
+  "result_msg_id": 1291,
+  "commit_sha": "8e4bc16",
+  "started_at": 1780902298770,
+  "finished_at": 1780902368201,
+  "total_duration_ms": 69431,
+  "agents": {
+    "developer:34": {
+      "agent_id": "cec50b17:34",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 56,
+          "p90_ms": 56,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 6,
+          "avg_ms": 74,
+          "p90_ms": 203,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 10,
+          "avg_ms": 119,
+          "p90_ms": 375,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "avg_ms": 53,
+          "p90_ms": 56,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 1897
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1289,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:34",
+        "content": "Task brief at .synapse/tasks/89.md\n\n# Task: Header UX — project name + connection status\n\nWork inside `.synapse/worktrees/developer-header-ux`. Commit there. Do not push.\n…",
+        "priority": 5,
+        "created_at": 1780902298771,
+        "read_at": 1780902300607,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1290,
+        "from_id": "cec50b17:34",
+        "to_id": "human",
+        "content": "✅ committed 8e4bc16: feat(header): make project name prominent; improve connection status dot",
+        "priority": 5,
+        "created_at": 1780902368201,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 6960,
+        "event_id": "evt_1780902300654_idcod",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780902300654
+      },
+      {
+        "id": 6964,
+        "event_id": "evt_1780902302733_p1115",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780902302733
+      },
+      {
+        "id": 6967,
+        "event_id": "evt_1780902305252_na45l",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780902305252
+      },
+      {
+        "id": 6969,
+        "event_id": "evt_1780902308507_jwfq9",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 375,
+        "timestamp": 1780902308507
+      },
+      {
+        "id": 6970,
+        "event_id": "evt_1780902310513_0eugd",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 66,
+        "timestamp": 1780902310513
+      },
+      {
+        "id": 6972,
+        "event_id": "evt_1780902313514_pf30t",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 94,
+        "timestamp": 1780902313514
+      },
+      {
+        "id": 6974,
+        "event_id": "evt_1780902316640_415xa",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780902316640
+      },
+      {
+        "id": 6976,
+        "event_id": "evt_1780902319043_o94rw",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 77,
+        "timestamp": 1780902319043
+      },
+      {
+        "id": 6978,
+        "event_id": "evt_1780902322172_bdcd3",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 87,
+        "timestamp": 1780902322172
+      },
+      {
+        "id": 6980,
+        "event_id": "evt_1780902325390_43q4w",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 72,
+        "timestamp": 1780902325390
+      },
+      {
+        "id": 6982,
+        "event_id": "evt_1780902327610_0cg99",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780902327610
+      },
+      {
+        "id": 6984,
+        "event_id": "evt_1780902330700_kjkak",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 120,
+        "timestamp": 1780902330700
+      },
+      {
+        "id": 6985,
+        "event_id": "evt_1780902332955_7hatc",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780902332955
+      },
+      {
+        "id": 6986,
+        "event_id": "evt_1780902335197_mzkk7",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780902335197
+      },
+      {
+        "id": 6988,
+        "event_id": "evt_1780902337941_elr8t",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 203,
+        "timestamp": 1780902337941
+      },
+      {
+        "id": 6990,
+        "event_id": "evt_1780902346090_eeis5",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780902346090
+      },
+      {
+        "id": 6992,
+        "event_id": "evt_1780902351367_f43hq",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780902351367
+      },
+      {
+        "id": 6994,
+        "event_id": "evt_1780902355464_mj6ra",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780902355464
+      },
+      {
+        "id": 6995,
+        "event_id": "evt_1780902359377_00ivy",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780902359377
+      },
+      {
+        "id": 6997,
+        "event_id": "evt_1780902363305_fz92s",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 119,
+        "timestamp": 1780902363305
+      },
+      {
+        "id": 6999,
+        "event_id": "evt_1780902368199_o5fyj",
+        "synapse_agent_id": "cec50b17:34",
+        "session_id": "b472f098-d823-4248-8e1b-39baf884ca7c",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 110,
+        "timestamp": 1780902368199
+      }
+    ]
+  }
+}

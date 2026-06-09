@@ -1,6 +1,5 @@
 {
   "id": 102,
-  "label": "good",
   "task": {
     "id": 102,
     "agent_id": "cec50b17:33",
@@ -356,5 +355,409 @@
     "duration_ms": 121352,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 102,
+  "title": "Implement server-enforced worker handshake (Option B)",
+  "trigger_msg_id": null,
+  "source_msg_id": 1414,
+  "result_msg_id": 1417,
+  "commit_sha": "e0e1728",
+  "started_at": 1780927556312,
+  "finished_at": 1780927677664,
+  "total_duration_ms": 121352,
+  "agents": {
+    "developer:33": {
+      "agent_id": "cec50b17:33",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 48,
+          "p90_ms": 48,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 11,
+          "avg_ms": 54,
+          "p90_ms": 66,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 11,
+          "avg_ms": 474,
+          "p90_ms": 785,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 6,
+          "avg_ms": 101,
+          "p90_ms": 195,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 6506
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1415,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:33",
+        "content": "Task brief at .synapse/tasks/102.md\n\n## Task: Server-enforced worker handshake (Option B)\n\nWork inside `.synapse/worktrees/developer-handshake-b`. Commit there. Do not push.\n…",
+        "priority": 5,
+        "created_at": 1780927556313,
+        "read_at": 1780927558267,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      },
+      {
+        "id": 1416,
+        "from_id": "cec50b17:33",
+        "to_id": "human",
+        "content": "✅ committed e0e1728: feat(handshake): server sends handshake message to worker on spawn",
+        "priority": 5,
+        "created_at": 1780927677664,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 7584,
+        "event_id": "evt_1780927558316_f96at",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780927558316
+      },
+      {
+        "id": 7586,
+        "event_id": "evt_1780927560369_mkur3",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780927560369
+      },
+      {
+        "id": 7587,
+        "event_id": "evt_1780927562803_et65c",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780927562803
+      },
+      {
+        "id": 7588,
+        "event_id": "evt_1780927564721_j9f13",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780927564721
+      },
+      {
+        "id": 7589,
+        "event_id": "evt_1780927568829_a0u6h",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 785,
+        "timestamp": 1780927568829
+      },
+      {
+        "id": 7590,
+        "event_id": "evt_1780927570935_vxg4q",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780927570935
+      },
+      {
+        "id": 7591,
+        "event_id": "evt_1780927573673_pzfyb",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 82,
+        "timestamp": 1780927573673
+      },
+      {
+        "id": 7592,
+        "event_id": "evt_1780927574449_zurvs",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 66,
+        "timestamp": 1780927574449
+      },
+      {
+        "id": 7593,
+        "event_id": "evt_1780927577236_hddfi",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780927577236
+      },
+      {
+        "id": 7594,
+        "event_id": "evt_1780927580085_hwd8j",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 65,
+        "timestamp": 1780927580085
+      },
+      {
+        "id": 7595,
+        "event_id": "evt_1780927581770_0l14d",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780927581770
+      },
+      {
+        "id": 7596,
+        "event_id": "evt_1780927585348_xgpvx",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780927585348
+      },
+      {
+        "id": 7597,
+        "event_id": "evt_1780927586060_7zlag",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780927586060
+      },
+      {
+        "id": 7598,
+        "event_id": "evt_1780927589517_e6v8d",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780927589517
+      },
+      {
+        "id": 7599,
+        "event_id": "evt_1780927589940_jcsqa",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780927589940
+      },
+      {
+        "id": 7600,
+        "event_id": "evt_1780927593897_7t8f1",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780927593897
+      },
+      {
+        "id": 7601,
+        "event_id": "evt_1780927597071_ku4va",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780927597071
+      },
+      {
+        "id": 7602,
+        "event_id": "evt_1780927601777_xx72b",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 61,
+        "timestamp": 1780927601777
+      },
+      {
+        "id": 7603,
+        "event_id": "evt_1780927607045_di087",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 182,
+        "timestamp": 1780927607045
+      },
+      {
+        "id": 7604,
+        "event_id": "evt_1780927614386_ngh9g",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 195,
+        "timestamp": 1780927614386
+      },
+      {
+        "id": 7605,
+        "event_id": "evt_1780927619651_t48ip",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780927619651
+      },
+      {
+        "id": 7606,
+        "event_id": "evt_1780927625759_b13vp",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780927625759
+      },
+      {
+        "id": 7607,
+        "event_id": "evt_1780927633694_muo9a",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1780927633694
+      },
+      {
+        "id": 7608,
+        "event_id": "evt_1780927639661_jeq95",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 65,
+        "timestamp": 1780927639661
+      },
+      {
+        "id": 7609,
+        "event_id": "evt_1780927642623_laqpn",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 70,
+        "timestamp": 1780927642623
+      },
+      {
+        "id": 7610,
+        "event_id": "evt_1780927657366_yyoje",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 63,
+        "timestamp": 1780927657366
+      },
+      {
+        "id": 7611,
+        "event_id": "evt_1780927661542_1fj88",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 496,
+        "timestamp": 1780927661542
+      },
+      {
+        "id": 7612,
+        "event_id": "evt_1780927667259_iuyv9",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 3314,
+        "timestamp": 1780927667259
+      },
+      {
+        "id": 7613,
+        "event_id": "evt_1780927670594_lndij",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 117,
+        "timestamp": 1780927670594
+      },
+      {
+        "id": 7614,
+        "event_id": "evt_1780927677663_5i0zl",
+        "synapse_agent_id": "cec50b17:33",
+        "session_id": "67f0f56e-0ca9-44ee-bcba-97b14c3365ac",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 94,
+        "timestamp": 1780927677663
+      }
+    ]
   }
 }

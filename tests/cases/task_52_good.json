@@ -1,6 +1,5 @@
 {
   "id": 52,
-  "label": "good",
   "task": {
     "id": 52,
     "agent_id": "cec50b17:25",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 942,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -194,5 +195,249 @@
     "duration_ms": 56239,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 52,
+  "title": "Fix task jump to select correct agent for source message",
+  "trigger_msg_id": 941,
+  "source_msg_id": 937,
+  "result_msg_id": null,
+  "commit_sha": "2a38ff5",
+  "started_at": 1780752357364,
+  "finished_at": 1780752413603,
+  "total_duration_ms": 56239,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "ExitWorktree": {
+          "calls": 0,
+          "avg_ms": 0,
+          "p90_ms": 0,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 75,
+          "p90_ms": 75,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 4,
+          "avg_ms": 291,
+          "p90_ms": 847,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 4,
+          "avg_ms": 49,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "avg_ms": 83,
+          "p90_ms": 188,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 1767
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 941,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "Fix task row click-to-jump so it selects the correct agent when navigating to the source message.\n\n**Work inside:** `.synapse/worktrees/developer-25-fix-task-jump-agent`\nCommit your changes to that branch. Do not push.\n\n---\n\n**Problem:**\nWhen clicking a task row, the UI selects the task's owning agent (e.g. worker `:25`) and then jumps to the source message. But the source message (e.g. a human→orchestrator message) lives in a different agent's thread. `document.getElementById('msg-927')` returns null because the message isn't rendered in the worker's message list.\n\n**Fix:**\nThe task row already has `data-source-msg` and `data-trigger-msg` attributes. To know which agent's thread contains the source message, we need to look up the message's `to_id`.\n\n**Option A (preferred — no new API):** Add the source message's `to_id` to the task row as a `data-source-msg-agent` attribute when rendering task rows.\n\nIn `src/dashboard.ts` (or wherever tasks are fetched for the SSE payload), the tasks query already joins with messages. We need to include the `to_id` of the source message in the task payload.\n\nCheck `src/db.ts` for the tasks query (around the `getRecentTasks` or similar function). Add `source_msg_to_id` to the task result by joining with messages:\n\n```sql\nSELECT t.*, m.to_id AS source_msg_to_id \nFROM tasks t\nLEFT JOIN messages m ON t.source_msg_id = m.id\n```\n\nThen in `public/app.js`, when rendering the task row:\n```js\nconst sourceMsgAgent = a.source_msg_to_id ?? '';\n// add to the div:\ndata-source-msg-agent=\"${esc(sourceMsgAgent)}\"\n```\n\nAnd in the click handler (around line 520), use this agent instead of the task owner when navigating:\n```js\nconst targetAgentId = row.dataset.sourceMsgAgent || row.dataset.agentId;\nif (targetAgentId && targetAgentId !== selectedAgentId) {\n  selectedAgentId = targetAgentId;\n  renderAgents();\n  renderMessages();\n  // ...\n}\n```\n\n**Files:** `src/db.ts` (tasks query), `public/app.js` (render + click handler).\n`npm run build` must pass. Commit. Report DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780752357364,
+        "read_at": 1780752360020,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 942,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed 2a38ff5: fix: task row jump selects correct agent via source_msg_to_id",
+        "priority": 5,
+        "created_at": 1780752413603,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5002,
+        "event_id": "evt_1780752366333_dnks1",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "ExitWorktree",
+        "status": "ok",
+        "duration_ms": null,
+        "timestamp": 1780752366333
+      },
+      {
+        "id": 5003,
+        "event_id": "evt_1780752369351_ehjba",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780752369351
+      },
+      {
+        "id": 5004,
+        "event_id": "evt_1780752373266_y7stv",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 89,
+        "timestamp": 1780752373266
+      },
+      {
+        "id": 5005,
+        "event_id": "evt_1780752375111_dvttw",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 109,
+        "timestamp": 1780752375111
+      },
+      {
+        "id": 5006,
+        "event_id": "evt_1780752377690_v7el6",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780752377690
+      },
+      {
+        "id": 5007,
+        "event_id": "evt_1780752378407_r9o9s",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780752378407
+      },
+      {
+        "id": 5008,
+        "event_id": "evt_1780752381052_i51a3",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780752381052
+      },
+      {
+        "id": 5009,
+        "event_id": "evt_1780752385028_dx4jd",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780752385028
+      },
+      {
+        "id": 5010,
+        "event_id": "evt_1780752389747_le4aq",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780752389747
+      },
+      {
+        "id": 5011,
+        "event_id": "evt_1780752395295_r8yfn",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 188,
+        "timestamp": 1780752395295
+      },
+      {
+        "id": 5012,
+        "event_id": "evt_1780752400448_yciw6",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780752400448
+      },
+      {
+        "id": 5013,
+        "event_id": "evt_1780752405504_f3oha",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 44,
+        "timestamp": 1780752405504
+      },
+      {
+        "id": 5014,
+        "event_id": "evt_1780752409552_5edu3",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 847,
+        "timestamp": 1780752409552
+      },
+      {
+        "id": 5015,
+        "event_id": "evt_1780752413601_ofhwu",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 120,
+        "timestamp": 1780752413601
+      }
+    ]
   }
 }

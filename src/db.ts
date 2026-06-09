@@ -142,6 +142,8 @@ export function openDb(dbPath: string): Database.Database {
     // Safety: if the prior bug left rows in a stale activities table, rescue them.
     `INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha) SELECT id, agent_id, title, status, started_at, finished_at, trigger_msg_id, result_msg_id, commit_sha FROM activities`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_results_unique ON eval_results(task_id, metric)`,
+    `ALTER TABLE eval_results ADD COLUMN role TEXT`,
+    `ALTER TABLE eval_results ADD COLUMN agent_id TEXT`,
   ]) {
     try { database.exec(sql); } catch { /* already applied or not applicable */ }
   }
@@ -1006,11 +1008,13 @@ export function writeEvalResults(
   taskId: number,
   results: EvalResultRow[],
   incrementCounters = false,
+  role?: string | null,
+  agentId?: string | null,
 ): void {
   const now = Date.now();
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO eval_results (task_id, metric, passed, value, created_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO eval_results (task_id, metric, passed, value, created_at, role, agent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
   const upsertCount = db.prepare(`
     INSERT INTO metric_failure_counts (metric, count, last_reset_at)
@@ -1019,11 +1023,16 @@ export function writeEvalResults(
   `);
   const tx = db.transaction(() => {
     for (const r of results) {
-      insert.run(taskId, r.metric, r.passed ? 1 : 0, r.value ?? null, now);
+      insert.run(taskId, r.metric, r.passed ? 1 : 0, r.value ?? null, now, role ?? null, agentId ?? null);
       if (!r.passed && incrementCounters) upsertCount.run(r.metric, now);
     }
   });
   tx();
+}
+
+export function getRoleByAgentId(agentId: string): string | null {
+  const row = db.prepare(`SELECT role FROM agent_status WHERE agent_id = ?`).get(agentId) as any;
+  return row?.role ?? null;
 }
 
 export function getEvalResults(taskId: number): EvalResultRow[] {
@@ -1038,12 +1047,12 @@ export function getEvalResults(taskId: number): EvalResultRow[] {
 
 export function getAllEvalResults(): {
   task_id: number; title: string; agent_id: string;
-  metrics: { metric: string; passed: boolean; value: number | null }[];
+  metrics: { metric: string; passed: boolean; value: number | null; role: string | null; agent_id: string | null }[];
   pass: boolean; created_at: number;
 }[] {
   const rows = db.prepare(`
     SELECT t.id as task_id, t.title, t.agent_id,
-           er.metric, er.passed, er.value, er.created_at
+           er.metric, er.passed, er.value, er.created_at, er.role as er_role, er.agent_id as er_agent_id
     FROM eval_results er
     JOIN tasks t ON t.id = er.task_id
     WHERE t.id IN (
@@ -1056,7 +1065,7 @@ export function getAllEvalResults(): {
 
   const byTask = new Map<number, {
     task_id: number; title: string; agent_id: string;
-    metrics: { metric: string; passed: boolean; value: number | null }[];
+    metrics: { metric: string; passed: boolean; value: number | null; role: string | null; agent_id: string | null }[];
     created_at: number;
   }>();
 
@@ -1074,6 +1083,8 @@ export function getAllEvalResults(): {
       metric: r.metric,
       passed: r.passed === 1,
       value: r.value,
+      role: r.er_role ?? null,
+      agent_id: r.er_agent_id ?? null,
     });
   }
 

@@ -1,0 +1,463 @@
+{
+  "id": 90,
+  "task": {
+    "id": 90,
+    "agent_id": "cec50b17:0",
+    "title": "Resolve SYNAPSE.md {ROLE}/{ROLE_INSTRUCTIONS} placeholders via runtime injection",
+    "status": "completed",
+    "started_at": 1780904357650,
+    "finished_at": 1780904655145,
+    "trigger_msg_id": 1306,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": null
+  },
+  "linked_msg_ids": [
+    1306
+  ],
+  "messages": [
+    {
+      "id": 1307,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:35",
+      "content": "Task brief at .synapse/tasks/91.md\n\n# Task: Resolve {ROLE} / {ROLE_INSTRUCTIONS} placeholders in SYNAPSE.md\n\nWork inside `.synapse/worktrees/developer-role-injection`. Commit there. Do not push.\n…",
+      "priority": 5,
+      "created_at": 1780904389024,
+      "read_at": 1780904391314,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1310,
+      "from_id": "cec50b17:35",
+      "to_id": "cec50b17:0",
+      "content": "DONE — Task 91: Resolve {ROLE}/{ROLE_INSTRUCTIONS} placeholders in SYNAPSE.md\n\n## Finding\n`buildSystemPrompt()` in `src/index.ts` already performed harness injection at spawn time. The only gap was `GET /api/agents/:id/prompt` in `src/dashboard.ts`, which read raw `.synapse/SYNAPSE.md` (with unresolved placeholders) instead of calling the resolver.\n\n## Changes (commit d57e9b8 on branch synapse/developer-role-injection)\n\n- **src/system-prompt.ts** (new): Extracted `buildSystemPrompt(role)` into a shared module. Reads `templates/SYNAPSE.md`, substitutes `{ROLE}` and `{ROLE_INSTRUCTIONS}` based on role, returns the fully resolved string.\n- **src/index.ts**: Now imports `buildSystemPrompt` from `./system-prompt.js`. Replaced local `parseRoleMeta` with `parseRoleFile` from `./roles.js` (equivalent, already existed).\n- **src/dashboard.ts**: `GET /api/agents/:id/prompt` now calls `buildSystemPrompt(role)` and returns `resolved_prompt` (fully substituted) instead of raw `base_protocol` + `slot_doc` + `role_body` fragments. Falls back to inferring role from slot if agent.role is null.\n- **public/index.html**: Prompt modal simplified from 4 sections (base protocol, role-specific protocol, role instructions, boot task) to 2 (system prompt, boot task).\n- **public/app.js**: Updated `openPromptModal` to render `data.resolved_prompt` in the single \"System prompt\" section.\n\n## Build/test\nTypeScript build passes (`npm run build` with zero errors).",
+      "priority": 5,
+      "created_at": 1780904618663,
+      "read_at": 1780904621869,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 7060,
+      "event_id": "evt_1780904357697_tveq9",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780904357697
+    },
+    {
+      "id": 7061,
+      "event_id": "evt_1780904359557_fleac",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__list_workers",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780904359557
+    },
+    {
+      "id": 7062,
+      "event_id": "evt_1780904363810_bi2vf",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 182,
+      "timestamp": 1780904363810
+    },
+    {
+      "id": 7063,
+      "event_id": "evt_1780904369972_5io8s",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__spawn_agent",
+      "status": "ok",
+      "duration_ms": 1738,
+      "timestamp": 1780904369972
+    },
+    {
+      "id": 7067,
+      "event_id": "evt_1780904389071_snwju",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780904389071
+    },
+    {
+      "id": 7068,
+      "event_id": "evt_1780904391287_fv7ym",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780904391287
+    },
+    {
+      "id": 7071,
+      "event_id": "evt_1780904394009_557qy",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780904394009
+    },
+    {
+      "id": 7116,
+      "event_id": "evt_1780904621923_eya92",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780904621923
+    },
+    {
+      "id": 7118,
+      "event_id": "evt_1780904626599_0oowf",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780904626599
+    },
+    {
+      "id": 7119,
+      "event_id": "evt_1780904633493_33m5d",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 88,
+      "timestamp": 1780904633493
+    },
+    {
+      "id": 7120,
+      "event_id": "evt_1780904636104_gok9k",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 78,
+      "timestamp": 1780904636104
+    },
+    {
+      "id": 7121,
+      "event_id": "evt_1780904645087_k75sy",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 208,
+      "timestamp": 1780904645087
+    },
+    {
+      "id": 7122,
+      "event_id": "evt_1780904651417_stb5c",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 155,
+      "timestamp": 1780904651417
+    },
+    {
+      "id": 7123,
+      "event_id": "evt_1780904655092_qvhar",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+      "tool": "mcp__synapse-bus__finish_task",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780904655092
+    }
+  ],
+  "metrics": {
+    "tool_calls": 14,
+    "duration_ms": 297495,
+    "traceability_score": 2,
+    "has_commit": false
+  },
+  "schema_version": 2,
+  "task_id": 90,
+  "title": "Resolve SYNAPSE.md {ROLE}/{ROLE_INSTRUCTIONS} placeholders via runtime injection",
+  "trigger_msg_id": 1306,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": null,
+  "started_at": 1780904357650,
+  "finished_at": 1780904655145,
+  "total_duration_ms": 297495,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__list_workers": {
+          "calls": 1,
+          "avg_ms": 48,
+          "p90_ms": 48,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 142,
+          "p90_ms": 208,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__spawn_agent": {
+          "calls": 1,
+          "avg_ms": 1738,
+          "p90_ms": 1738,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__delegate_task": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 3,
+          "avg_ms": 54,
+          "p90_ms": 56,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 59,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__finish_task": {
+          "calls": 1,
+          "avg_ms": 59,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 2882
+    },
+    "developer:35": {
+      "agent_id": "cec50b17:35",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1307,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:35",
+        "content": "Task brief at .synapse/tasks/91.md\n\n# Task: Resolve {ROLE} / {ROLE_INSTRUCTIONS} placeholders in SYNAPSE.md\n\nWork inside `.synapse/worktrees/developer-role-injection`. Commit there. Do not push.\n…",
+        "priority": 5,
+        "created_at": 1780904389024,
+        "read_at": 1780904391314,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1310,
+        "from_id": "cec50b17:35",
+        "to_id": "cec50b17:0",
+        "content": "DONE — Task 91: Resolve {ROLE}/{ROLE_INSTRUCTIONS} placeholders in SYNAPSE.md\n\n## Finding\n`buildSystemPrompt()` in `src/index.ts` already performed harness injection at spawn time. The only gap was `GET /api/agents/:id/prompt` in `src/dashboard.ts`, which read raw `.synapse/SYNAPSE.md` (with unresolved placeholders) instead of calling the resolver.\n\n## Changes (commit d57e9b8 on branch synapse/developer-role-injection)\n\n- **src/system-prompt.ts** (new): Extracted `buildSystemPrompt(role)` into a shared module. Reads `templates/SYNAPSE.md`, substitutes `{ROLE}` and `{ROLE_INSTRUCTIONS}` based on role, returns the fully resolved string.\n- **src/index.ts**: Now imports `buildSystemPrompt` from `./system-prompt.js`. Replaced local `parseRoleMeta` with `parseRoleFile` from `./roles.js` (equivalent, already existed).\n- **src/dashboard.ts**: `GET /api/agents/:id/prompt` now calls `buildSystemPrompt(role)` and returns `resolved_prompt` (fully substituted) instead of raw `base_protocol` + `slot_doc` + `role_body` fragments. Falls back to inferring role from slot if agent.role is null.\n- **public/index.html**: Prompt modal simplified from 4 sections (base protocol, role-specific protocol, role instructions, boot task) to 2 (system prompt, boot task).\n- **public/app.js**: Updated `openPromptModal` to render `data.resolved_prompt` in the single \"System prompt\" section.\n\n## Build/test\nTypeScript build passes (`npm run build` with zero errors).",
+        "priority": 5,
+        "created_at": 1780904618663,
+        "read_at": 1780904621869,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 7060,
+        "event_id": "evt_1780904357697_tveq9",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780904357697
+      },
+      {
+        "id": 7061,
+        "event_id": "evt_1780904359557_fleac",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__list_workers",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780904359557
+      },
+      {
+        "id": 7062,
+        "event_id": "evt_1780904363810_bi2vf",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 182,
+        "timestamp": 1780904363810
+      },
+      {
+        "id": 7063,
+        "event_id": "evt_1780904369972_5io8s",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__spawn_agent",
+        "status": "ok",
+        "duration_ms": 1738,
+        "timestamp": 1780904369972
+      },
+      {
+        "id": 7067,
+        "event_id": "evt_1780904389071_snwju",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780904389071
+      },
+      {
+        "id": 7068,
+        "event_id": "evt_1780904391287_fv7ym",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780904391287
+      },
+      {
+        "id": 7071,
+        "event_id": "evt_1780904394009_557qy",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780904394009
+      },
+      {
+        "id": 7116,
+        "event_id": "evt_1780904621923_eya92",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780904621923
+      },
+      {
+        "id": 7118,
+        "event_id": "evt_1780904626599_0oowf",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780904626599
+      },
+      {
+        "id": 7119,
+        "event_id": "evt_1780904633493_33m5d",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 88,
+        "timestamp": 1780904633493
+      },
+      {
+        "id": 7120,
+        "event_id": "evt_1780904636104_gok9k",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 78,
+        "timestamp": 1780904636104
+      },
+      {
+        "id": 7121,
+        "event_id": "evt_1780904645087_k75sy",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 208,
+        "timestamp": 1780904645087
+      },
+      {
+        "id": 7122,
+        "event_id": "evt_1780904651417_stb5c",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 155,
+        "timestamp": 1780904651417
+      },
+      {
+        "id": 7123,
+        "event_id": "evt_1780904655092_qvhar",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "da6a125a-e807-4d8a-9f0f-4ceb374a1765",
+        "tool": "mcp__synapse-bus__finish_task",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780904655092
+      }
+    ]
+  }
+}

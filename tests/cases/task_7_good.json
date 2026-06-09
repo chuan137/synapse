@@ -1,6 +1,5 @@
 {
   "id": 7,
-  "label": "good",
   "task": {
     "id": 7,
     "agent_id": "cec50b17:3",
@@ -29,7 +28,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -259,5 +259,314 @@
     "duration_ms": 99674,
     "traceability_score": 2,
     "has_commit": false
+  },
+  "schema_version": 2,
+  "task_id": 7,
+  "title": "Fix tmux window rename on worker restart + capitalize role name",
+  "trigger_msg_id": 1,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": null,
+  "started_at": 1780674762516,
+  "finished_at": 1780674862190,
+  "total_duration_ms": 99674,
+  "agents": {
+    "developer:3": {
+      "agent_id": "cec50b17:3",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 16,
+          "avg_ms": 427,
+          "p90_ms": 2067,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 3,
+          "avg_ms": 56,
+          "p90_ms": 56,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 7153
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 590,
+        "from_id": "cec50b17:3",
+        "to_id": "cec50b17:0",
+        "content": "DONE — tmux rename fix + capitalization\n\n**Root cause:** tmux's global `automatic-rename` is ON. After `spawnWorker` called `rename-window`, the running process (shell/claude) caused tmux to automatically overwrite the name back to `developer`. The rename command itself works fine with a pane ID target — the overwrite happened asynchronously after.\n\n**Fix (src/spawn.ts):**\n- Added `execFileSync('tmux', ['set-window-option', '-t', tmuxPane, 'automatic-rename', 'off'])` immediately after the rename call to lock the name in place.\n- Added `const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)` to capitalize the role → `Developer--3` format.\n- Replaced silent `catch { /* best-effort */ }` with `process.stderr.write(...)` to surface future failures.\n\n**Files changed:** `src/spawn.ts` (1 file, ~10 lines changed)\n\n**Build:** `bun run build` → clean (tsc, no errors)\n\n**Verified:** Manually ran the new rename+set-window-option sequence against pane `%95` — window shows `Developer--3` and holds after 1 second (does not revert).",
+        "priority": 5,
+        "created_at": 1780674859910,
+        "read_at": 1780674863319,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 3360,
+        "event_id": "evt_1780674762566_c9i3n",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780674762566
+      },
+      {
+        "id": 3361,
+        "event_id": "evt_1780674766832_33eoz",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 484,
+        "timestamp": 1780674766832
+      },
+      {
+        "id": 3362,
+        "event_id": "evt_1780674767594_30aem",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 94,
+        "timestamp": 1780674767594
+      },
+      {
+        "id": 3363,
+        "event_id": "evt_1780674770604_0kmmq",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780674770604
+      },
+      {
+        "id": 3364,
+        "event_id": "evt_1780674776779_6odmq",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 76,
+        "timestamp": 1780674776779
+      },
+      {
+        "id": 3365,
+        "event_id": "evt_1780674777303_gfwbt",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 73,
+        "timestamp": 1780674777303
+      },
+      {
+        "id": 3366,
+        "event_id": "evt_1780674779845_onhwx",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780674779845
+      },
+      {
+        "id": 3367,
+        "event_id": "evt_1780674784069_6cwwd",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 175,
+        "timestamp": 1780674784069
+      },
+      {
+        "id": 3368,
+        "event_id": "evt_1780674784798_ucfp5",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 81,
+        "timestamp": 1780674784798
+      },
+      {
+        "id": 3369,
+        "event_id": "evt_1780674789677_7e5pv",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 72,
+        "timestamp": 1780674789677
+      },
+      {
+        "id": 3370,
+        "event_id": "evt_1780674795234_tlrnq",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 74,
+        "timestamp": 1780674795234
+      },
+      {
+        "id": 3371,
+        "event_id": "evt_1780674798608_5g7rc",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 70,
+        "timestamp": 1780674798608
+      },
+      {
+        "id": 3372,
+        "event_id": "evt_1780674809981_9shua",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 84,
+        "timestamp": 1780674809981
+      },
+      {
+        "id": 3373,
+        "event_id": "evt_1780674814916_cprvj",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 2137,
+        "timestamp": 1780674814916
+      },
+      {
+        "id": 3374,
+        "event_id": "evt_1780674818862_3jmwk",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 66,
+        "timestamp": 1780674818862
+      },
+      {
+        "id": 3375,
+        "event_id": "evt_1780674823655_5ynzs",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 68,
+        "timestamp": 1780674823655
+      },
+      {
+        "id": 3376,
+        "event_id": "evt_1780674834763_9frre",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780674834763
+      },
+      {
+        "id": 3377,
+        "event_id": "evt_1780674839516_vidnh",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 2067,
+        "timestamp": 1780674839516
+      },
+      {
+        "id": 3378,
+        "event_id": "evt_1780674843256_hk37p",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 70,
+        "timestamp": 1780674843256
+      },
+      {
+        "id": 3379,
+        "event_id": "evt_1780674847897_lfcr6",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 1136,
+        "timestamp": 1780674847897
+      },
+      {
+        "id": 3380,
+        "event_id": "evt_1780674851004_l2stx",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780674851004
+      },
+      {
+        "id": 3381,
+        "event_id": "evt_1780674859957_rjrbp",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780674859957
+      }
+    ]
   }
 }

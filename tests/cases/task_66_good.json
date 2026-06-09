@@ -1,6 +1,5 @@
 {
   "id": 66,
-  "label": "good",
   "task": {
     "id": 66,
     "agent_id": "cec50b17:26",
@@ -31,7 +30,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 1070,
@@ -45,7 +45,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -155,5 +156,209 @@
     "duration_ms": 40036,
     "traceability_score": 0,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 66,
+  "title": "Fix approval button: send reply message to agent on approve/select-option",
+  "trigger_msg_id": 1068,
+  "source_msg_id": 1066,
+  "result_msg_id": 1071,
+  "commit_sha": "92d1a7d",
+  "started_at": 1780784539878,
+  "finished_at": 1780784579914,
+  "total_duration_ms": 40036,
+  "agents": {
+    "developer:26": {
+      "agent_id": "cec50b17:26",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 469,
+          "p90_ms": 976,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 270,
+          "p90_ms": 270,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "avg_ms": 53,
+          "p90_ms": 56,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 2824
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1068,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:26",
+        "content": "# Fix: Approval button should send a bus reply message\n\nYour orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-26-approval-button-fix`. Commit your changes. Do not push.\n\n## The bug\n\nWhen the human clicks \"✓ approve\" on a `needs_approval` message in S-Deck, the frontend calls `POST /api/messages/:id/approve` which calls `approveMessage(id)` in `src/db.ts` — this only sets `approved_at` timestamp. It does **not** send a new bus message back to the agent. The agent is waiting on `read_messages` for a reply confirming approval, but never gets one.\n\n## Fix\n\nIn `src/dashboard.ts`, update the `POST /api/messages/:id/approve` handler to also send a reply message from `\"human\"` to the original message's `from_id`:\n\n```typescript\napp.post('/api/messages/:id/approve', (req: Request, res: Response) => {\n  const id = parseInt(String(req.params.id), 10);\n  if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }\n  \n  // Get the original message to know who to reply to\n  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as any;\n  approveMessage(id);\n  \n  // Send a reply from \"human\" to the requesting agent so read_messages delivers it\n  if (msg) {\n    sendMessage('human', msg.from_id, 'Approved.', 5, false, undefined, msg.task_id ?? null);\n  }\n  \n  res.json({ ok: true });\n});\n```\n\nYou'll need to import `sendMessage` (already exported from `src/db.ts`) if it's not already imported in `src/dashboard.ts`. Check the existing imports at the top — it may already be there.\n\nAlso check `POST /api/messages/:id/select-option` — same pattern: when a human selects an option, a reply should be sent with the selected option text so the agent knows which option was chosen:\n\n```typescript\napp.post('/api/messages/:id/select-option', (req: Request, res: Response) => {\n  const id = parseInt(String(req.params.id), 10);\n  if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }\n  const { option_index } = req.body as { option_index: number };\n  \n  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as any;\n  selectOption(id, option_index);\n  \n  // Notify the agent of the selected option\n  if (msg) {\n    const options = msg.request_options ? JSON.parse(msg.request_options) : [];\n    const chosen = options[option_index] ?? `option ${option_index}`;\n    sendMessage('human', msg.from_id, chosen, 5, false, undefined, msg.task_id ?? null);\n  }\n  \n  res.json({ ok: true });\n});\n```\n\nCheck `src/db.ts` for the `db` instance — it's a module-level variable. In `src/dashboard.ts` you may need to import it directly or use `getDb()` if such a function exists. Check existing DB usage in dashboard.ts to see the pattern.\n\nBuild with `npm run build` and verify clean.\n",
+        "priority": 5,
+        "created_at": 1780784539878,
+        "read_at": 1780784541836,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1070,
+        "from_id": "cec50b17:26",
+        "to_id": "human",
+        "content": "✅ committed 92d1a7d: fix: approval and select-option endpoints now send bus reply to agent",
+        "priority": 5,
+        "created_at": 1780784579914,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5788,
+        "event_id": "evt_1780784541884_pd306",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780784541884
+      },
+      {
+        "id": 5789,
+        "event_id": "evt_1780784543881_3i4xq",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780784543881
+      },
+      {
+        "id": 5790,
+        "event_id": "evt_1780784547374_d73qy",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 937,
+        "timestamp": 1780784547374
+      },
+      {
+        "id": 5791,
+        "event_id": "evt_1780784549591_dlmn8",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 270,
+        "timestamp": 1780784549591
+      },
+      {
+        "id": 5792,
+        "event_id": "evt_1780784558577_zoim6",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780784558577
+      },
+      {
+        "id": 5793,
+        "event_id": "evt_1780784563073_tes2f",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 219,
+        "timestamp": 1780784563073
+      },
+      {
+        "id": 5796,
+        "event_id": "evt_1780784566406_jdl2l",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 101,
+        "timestamp": 1780784566406
+      },
+      {
+        "id": 5800,
+        "event_id": "evt_1780784572403_ouiha",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780784572403
+      },
+      {
+        "id": 5803,
+        "event_id": "evt_1780784575759_98pav",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 976,
+        "timestamp": 1780784575759
+      },
+      {
+        "id": 5807,
+        "event_id": "evt_1780784579913_l3xh9",
+        "synapse_agent_id": "cec50b17:26",
+        "session_id": "c92411aa-b8ae-48ba-a940-494e0c241561",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 112,
+        "timestamp": 1780784579913
+      }
+    ]
   }
 }

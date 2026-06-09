@@ -1,6 +1,5 @@
 {
   "id": 33,
-  "label": "good",
   "task": {
     "id": 33,
     "agent_id": "cec50b17:24",
@@ -27,7 +26,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 764,
@@ -41,7 +41,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -241,5 +242,306 @@
     "duration_ms": 86461,
     "traceability_score": 3,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 33,
+  "title": "Plan 2: Task diff modal",
+  "trigger_msg_id": null,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "0ff23a5",
+  "started_at": 1780737587802,
+  "finished_at": 1780737674263,
+  "total_duration_ms": 86461,
+  "agents": {
+    "developer:24": {
+      "agent_id": "cec50b17:24",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 97,
+          "p90_ms": 97,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 103,
+          "p90_ms": 103,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 6,
+          "avg_ms": 105,
+          "p90_ms": 206,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 72,
+          "p90_ms": 72,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 8,
+          "avg_ms": 102,
+          "p90_ms": 240,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 2,
+          "avg_ms": 547,
+          "p90_ms": 822,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 2808
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 763,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:24",
+        "content": "Task brief at .synapse/tasks/33.md\n\n# Plan 2: Task Diff Modal\n\nWork inside `.synapse/worktrees/developer-task-diff-modal`. Commit all changes to that branch. Do not push.\n…",
+        "priority": 5,
+        "created_at": 1780737587803,
+        "read_at": 1780737590095,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 764,
+        "from_id": "cec50b17:24",
+        "to_id": "human",
+        "content": "✅ committed 0ff23a5: feat: task diff modal — /api/commit/:sha/diff endpoint, frontend diff viewer with syntax coloring",
+        "priority": 5,
+        "created_at": 1780737674263,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4199,
+        "event_id": "evt_1780737590189_2plyt",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 97,
+        "timestamp": 1780737590189
+      },
+      {
+        "id": 4202,
+        "event_id": "evt_1780737592124_ltb8l",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 103,
+        "timestamp": 1780737592124
+      },
+      {
+        "id": 4204,
+        "event_id": "evt_1780737593918_i3x00",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 88,
+        "timestamp": 1780737593918
+      },
+      {
+        "id": 4205,
+        "event_id": "evt_1780737596046_lccpx",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 72,
+        "timestamp": 1780737596046
+      },
+      {
+        "id": 4207,
+        "event_id": "evt_1780737598209_0vwo6",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 60,
+        "timestamp": 1780737598209
+      },
+      {
+        "id": 4209,
+        "event_id": "evt_1780737601386_v4tmp",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 206,
+        "timestamp": 1780737601386
+      },
+      {
+        "id": 4210,
+        "event_id": "evt_1780737601757_z8gvu",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 149,
+        "timestamp": 1780737601757
+      },
+      {
+        "id": 4212,
+        "event_id": "evt_1780737608087_8qc0c",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 107,
+        "timestamp": 1780737608087
+      },
+      {
+        "id": 4214,
+        "event_id": "evt_1780737612420_o66rx",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780737612420
+      },
+      {
+        "id": 4217,
+        "event_id": "evt_1780737619912_61q5a",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780737619912
+      },
+      {
+        "id": 4221,
+        "event_id": "evt_1780737632695_n7iur",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 82,
+        "timestamp": 1780737632695
+      },
+      {
+        "id": 4222,
+        "event_id": "evt_1780737634982_p5kjf",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780737634982
+      },
+      {
+        "id": 4224,
+        "event_id": "evt_1780737640617_uhht0",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 94,
+        "timestamp": 1780737640617
+      },
+      {
+        "id": 4227,
+        "event_id": "evt_1780737648417_n8aci",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 240,
+        "timestamp": 1780737648417
+      },
+      {
+        "id": 4230,
+        "event_id": "evt_1780737654636_6ef4n",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 80,
+        "timestamp": 1780737654636
+      },
+      {
+        "id": 4231,
+        "event_id": "evt_1780737658895_dbtzr",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 92,
+        "timestamp": 1780737658895
+      },
+      {
+        "id": 4234,
+        "event_id": "evt_1780737666100_jv594",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 97,
+        "timestamp": 1780737666100
+      },
+      {
+        "id": 4235,
+        "event_id": "evt_1780737668760_vyfsp",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 822,
+        "timestamp": 1780737668760
+      },
+      {
+        "id": 4238,
+        "event_id": "evt_1780737674261_1aqju",
+        "synapse_agent_id": "cec50b17:24",
+        "session_id": "e0ed5669-ea12-4bfa-a75a-de17def91149",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 272,
+        "timestamp": 1780737674261
+      }
+    ]
   }
 }

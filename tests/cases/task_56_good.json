@@ -1,6 +1,5 @@
 {
   "id": 56,
-  "label": "good",
   "task": {
     "id": 56,
     "agent_id": "cec50b17:25",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 968,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -184,5 +185,246 @@
     "duration_ms": 73455,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 56,
+  "title": "Synapse-Evolve Phase 1: trajectory extractor and eval CLI command",
+  "trigger_msg_id": 967,
+  "source_msg_id": 964,
+  "result_msg_id": null,
+  "commit_sha": "f7871d7",
+  "started_at": 1780755257365,
+  "finished_at": 1780755330820,
+  "total_duration_ms": 73455,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "ExitWorktree": {
+          "calls": 0,
+          "avg_ms": 0,
+          "p90_ms": 0,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 179,
+          "p90_ms": 179,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 6,
+          "avg_ms": 228,
+          "p90_ms": 836,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Write": {
+          "calls": 2,
+          "avg_ms": 52,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "avg_ms": 52,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 1802
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 967,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "Create the trajectory case file extractor for Synapse-Evolve Phase 1.\n\n**Work inside:** `.synapse/worktrees/developer-25-eval-phase1-data-extraction`\nCommit. Do not push. Report DONE to cec50b17:0.\n\n---\n\n## Goal\n\nCreate `src/eval/extract.ts` — a script that extracts trajectory case files from the Synapse SQLite DB and writes them to `tests/cases/`.\n\nEach case file captures everything needed to evaluate a task trajectory:\n- The task record\n- All messages linked to the task (source, trigger, result)\n- All tool_metrics during the task window\n- A computed quality score\n\n---\n\n## Bad trajectories (task IDs): 1, 16, 27, 32, 17\n## Good trajectories (task IDs): 39, 43, 51, 52, 53\n\n---\n\n## Implementation\n\n**`src/eval/extract.ts`:**\n\n```ts\nimport { openDb } from '../db.js';\nimport { existsSync, mkdirSync, writeFileSync } from 'fs';\nimport { join } from 'path';\n\nconst BAD_IDS  = [1, 16, 27, 32, 17];\nconst GOOD_IDS = [39, 43, 51, 52, 53];\n\nexport interface TrajectoryCase {\n  id: number;\n  label: 'good' | 'bad';\n  task: Record<string, unknown>;\n  messages: Record<string, unknown>[];\n  tool_metrics: Record<string, unknown>[];\n  metrics: {\n    tool_calls: number;\n    duration_ms: number | null;\n    traceability_score: number; // 0–3: missing source/trigger/result each = +1\n    has_commit: boolean;\n  };\n}\n\nexport function extractCases(dbPath: string, outDir: string): TrajectoryCase[] {\n  const db = openDb(dbPath);\n  const allIds = [...BAD_IDS, ...GOOD_IDS];\n\n  const cases: TrajectoryCase[] = allIds.map(id => {\n    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;\n    if (!task) throw new Error(`Task ${id} not found`);\n\n    // Collect linked messages\n    const msgIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean);\n    const messages = msgIds.length > 0\n      ? db.prepare(`SELECT * FROM messages WHERE id IN (${msgIds.join(',')})`).all()\n      : [];\n\n    // Tool metrics during task window\n    const tool_metrics = db.prepare(`\n      SELECT * FROM tool_metrics\n      WHERE synapse_agent_id = ?\n        AND timestamp >= ?\n        AND timestamp <= COALESCE(?, 9999999999999)\n      ORDER BY timestamp\n    `).all(task.agent_id, task.started_at, task.finished_at) as any[];\n\n    const missingLinks =\n      (task.source_msg_id  ? 0 : 1) +\n      (task.trigger_msg_id ? 0 : 1) +\n      (task.result_msg_id  ? 0 : 1);\n\n    return {\n      id,\n      label: BAD_IDS.includes(id) ? 'bad' : 'good',\n      task,\n      messages,\n      tool_metrics,\n      metrics: {\n        tool_calls: tool_metrics.length,\n        duration_ms: task.started_at && task.finished_at ? task.finished_at - task.started_at : null,\n        traceability_score: missingLinks,\n        has_commit: !!task.commit_sha,\n      },\n    };\n  });\n\n  db.close();\n  mkdirSync(outDir, { recursive: true });\n  cases.forEach(c => {\n    writeFileSync(join(outDir, `task_${c.id}_${c.label}.json`), JSON.stringify(c, null, 2));\n  });\n  return cases;\n}\n```\n\n**`src/eval/index.ts`** — entry point for `synapse eval` command:\n\n```ts\nimport { extractCases } from './extract.js';\nimport { join } from 'path';\n\nconst dbPath = join(process.cwd(), '.synapse', 'synapse.db');\nconst outDir = join(process.cwd(), 'tests', 'cases');\n\nconsole.log('Extracting trajectory cases...');\nconst cases = extractCases(dbPath, outDir);\ncases.forEach(c => {\n  console.log(`[${c.label.toUpperCase()}] Task #${c.id}: ${(c.task as any).title?.slice(0, 50)}`);\n  console.log(`  tool_calls=${c.metrics.tool_calls} duration=${Math.round((c.metrics.duration_ms ?? 0)/1000)}s traceability_missing=${c.metrics.traceability_score} commit=${c.metrics.has_commit}`);\n});\nconsole.log(`\\nWritten ${cases.length} cases to ${outDir}`);\n```\n\n**`src/index.ts`** — add `eval` subcommand:\nFind the last `program.command(...)` block and add:\n```ts\nprogram\n  .command('eval')\n  .description('Extract and evaluate agent trajectory cases')\n  .action(async () => {\n    const { extractCases } = await import('./eval/extract.js');\n    const { join } = await import('path');\n    const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');\n    const outDir = join(process.cwd(), 'tests', 'cases');\n    const cases = extractCases(dbPath, outDir);\n    cases.forEach(c => {\n      const t = c.task as any;\n      process.stdout.write(`[${c.label.toUpperCase()}] #${c.id} ${t.title?.slice(0, 50)}\\n`);\n      process.stdout.write(`  calls=${c.metrics.tool_calls} dur=${Math.round((c.metrics.duration_ms ?? 0)/1000)}s missing=${c.metrics.traceability_score} commit=${c.metrics.has_commit}\\n`);\n    });\n    process.stdout.write(`\\nWrote ${cases.length} cases to ${outDir}\\n`);\n  });\n```\n\n**Run the extractor** after building to actually generate the case files:\n```bash\nnpm run build && node dist/index.js eval\n```\n\nVerify the 10 JSON files exist in `tests/cases/`.\n\n**Build must pass.** Commit everything including the generated `tests/cases/*.json` files. Report DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780755257365,
+        "read_at": 1780755261238,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 968,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed f7871d7: feat: eval subcommand — Phase 1 trajectory case extractor",
+        "priority": 5,
+        "created_at": 1780755330820,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5159,
+        "event_id": "evt_1780755267144_blz5v",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "ExitWorktree",
+        "status": "ok",
+        "duration_ms": null,
+        "timestamp": 1780755267144
+      },
+      {
+        "id": 5160,
+        "event_id": "evt_1780755270691_b07hb",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 179,
+        "timestamp": 1780755270691
+      },
+      {
+        "id": 5163,
+        "event_id": "evt_1780755275332_kdz3f",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 82,
+        "timestamp": 1780755275332
+      },
+      {
+        "id": 5165,
+        "event_id": "evt_1780755278107_fgsuw",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780755278107
+      },
+      {
+        "id": 5166,
+        "event_id": "evt_1780755281318_etxgs",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 68,
+        "timestamp": 1780755281318
+      },
+      {
+        "id": 5167,
+        "event_id": "evt_1780755292419_4s4qq",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780755292419
+      },
+      {
+        "id": 5168,
+        "event_id": "evt_1780755298697_im1fo",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780755298697
+      },
+      {
+        "id": 5169,
+        "event_id": "evt_1780755305924_aar31",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780755305924
+      },
+      {
+        "id": 5170,
+        "event_id": "evt_1780755313787_0rcug",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780755313787
+      },
+      {
+        "id": 5171,
+        "event_id": "evt_1780755317061_7kxa0",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 836,
+        "timestamp": 1780755317061
+      },
+      {
+        "id": 5172,
+        "event_id": "evt_1780755321700_9u5rm",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 112,
+        "timestamp": 1780755321700
+      },
+      {
+        "id": 5173,
+        "event_id": "evt_1780755325110_kor0g",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 157,
+        "timestamp": 1780755325110
+      },
+      {
+        "id": 5174,
+        "event_id": "evt_1780755330818_4xi07",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 111,
+        "timestamp": 1780755330818
+      }
+    ]
   }
 }

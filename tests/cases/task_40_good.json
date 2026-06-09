@@ -1,6 +1,5 @@
 {
   "id": 40,
-  "label": "good",
   "task": {
     "id": 40,
     "agent_id": "cec50b17:23",
@@ -29,7 +28,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 833,
@@ -43,7 +43,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 834,
@@ -57,7 +58,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 836,
@@ -71,7 +73,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 837,
@@ -85,7 +88,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -205,5 +209,271 @@
     "duration_ms": 54060,
     "traceability_score": 2,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 40,
+  "title": "Add approve quick-reply button to agent→human messages",
+  "trigger_msg_id": 832,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "3fb4846",
+  "started_at": 1780743345296,
+  "finished_at": 1780743399356,
+  "total_duration_ms": 54060,
+  "agents": {
+    "developer:23": {
+      "agent_id": "cec50b17:23",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 2,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 2,
+          "avg_ms": 84,
+          "p90_ms": 99,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 2,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "avg_ms": 50,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__report_done": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 2,
+      "messages_out": 3,
+      "active_duration_ms": 620
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 2,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 832,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:23",
+        "content": "Add an \"Approve\" quick-reply button to agent→human message rows in `public/app.js` and style it in `public/style.css`.\n\n## What to build\n\nFor messages where `from_id !== 'human'` (i.e. sent by an agent to the human), add a small approve button that fires a `\"Approved.\"` reply back to the agent.\n\n### `public/app.js` — message row HTML\n\nIn `renderMessages()`, update the message row template for agent messages. After the `.message-content` div, add an actions row:\n\n```javascript\nconst approveBtn = !fromHuman\n  ? `<div class=\"message-actions\">\n       <button class=\"msg-approve-btn\" data-to=\"${esc(m.from_id)}\" data-priority=\"${m.priority}\">✓ approve</button>\n     </div>`\n  : '';\n```\n\nAnd add it inside `.message-body`:\n```html\n<div class=\"message-content\">...</div>\n${approveBtn}\n```\n\n### `public/app.js` — wire the click\n\nAfter morphdom renders, wire the approve buttons:\n```javascript\nmessagesList.querySelectorAll('.msg-approve-btn').forEach(btn => {\n  btn.addEventListener('click', async () => {\n    const toId = btn.dataset.to;\n    const priority = parseInt(btn.dataset.priority ?? '5', 10);\n    btn.disabled = true;\n    btn.textContent = '✓ sent';\n    await fetch('/api/messages', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ to_id: toId, content: 'Approved.', priority }),\n    });\n  });\n});\n```\n\n### `public/style.css`\n\n```css\n.message-actions { margin-top: 6px; }\n.msg-approve-btn {\n  font-size: 10px;\n  padding: 2px 8px;\n  border-radius: 3px;\n  border: 1px solid var(--border);\n  background: none;\n  color: var(--muted);\n  cursor: pointer;\n  transition: border-color 0.15s, color 0.15s;\n  font-family: inherit;\n  align-self: auto;\n}\n.msg-approve-btn:hover:not(:disabled) { border-color: var(--idle); color: var(--idle); opacity: 1; }\n.msg-approve-btn:disabled { opacity: 0.5; cursor: default; }\n```\n\n## Notes\n- No backend changes needed — `POST /api/messages` already exists\n- Button appears on all agent→human messages — it's a quick-reply shortcut\n- After sending: button shows \"✓ sent\" and is disabled to prevent double-send\n- morphdom will re-render the row on next SSE tick, resetting the button — acceptable\n\nCommit: `feat: approve quick-reply button on agent→human message rows`\n\nReport DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780743345296,
+        "read_at": 1780743348137,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 833,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:23",
+        "content": "Fix the migration ordering bug causing empty tasks list after the activities→tasks rename.\n\n## Root Cause\n\nIn `src/db.ts`, the initial schema runs `CREATE TABLE IF NOT EXISTS tasks (...)` before the migration `ALTER TABLE activities RENAME TO tasks`. On an existing DB:\n1. `CREATE TABLE IF NOT EXISTS tasks` creates an empty `tasks` table (since `activities` still exists)  \n2. `ALTER TABLE activities RENAME TO tasks` fails with \"table tasks already exists\" → swallowed by try/catch\n3. Result: old data stays in `activities`, new data goes to empty `tasks`\n\n## Fix\n\nChange the initial schema block to use `CREATE TABLE IF NOT EXISTS activities` (the original name) so fresh installs still work, and add the rename migration to handle existing DBs:\n\n**In `src/db.ts`:**\n\n1. Change the initial `CREATE TABLE IF NOT EXISTS tasks` back to `CREATE TABLE IF NOT EXISTS activities` — this ensures the schema always creates the `activities` table on fresh installs, and the rename migration promotes it to `tasks`.\n\n2. Keep the migration `ALTER TABLE activities RENAME TO tasks` — it runs on existing DBs where `activities` exists (wrapped in try/catch, idempotent). On fresh installs, it also runs but `activities` was just created in step 1, so it succeeds and renames it immediately.\n\n3. All subsequent SQL in the codebase still uses `tasks` (already done in the prior commit) — that's correct.\n\nThis way:\n- **Fresh DB**: creates `activities` → migration renames to `tasks` → correct\n- **Existing DB (pre-rename)**: `activities` already exists, `CREATE TABLE IF NOT EXISTS activities` is a no-op → migration renames to `tasks` → correct  \n- **Existing DB (already renamed)**: `activities` doesn't exist, `CREATE TABLE IF NOT EXISTS activities` creates a new empty one → migration renames it to `tasks` fails (\"table tasks already exists\") → swallowed. But now we have an empty `activities` table too. \n\nActually, the cleanest fix is different — use a conditional approach:\n\n**Better fix:** In the migration array, add this as the FIRST migration (before all others):\n```sql\nALTER TABLE activities RENAME TO tasks\n```\nKeep the initial schema as `CREATE TABLE IF NOT EXISTS tasks` (current state). The issue is just ordering — the rename migration must run BEFORE any new data is inserted into the fresh `tasks` table.\n\nWait — that doesn't work either since migrations run after schema.\n\n**Correct fix:** Change the initial schema to `CREATE TABLE IF NOT EXISTS activities`, keep the rename migration. The try/catch on the rename migration means it's safe on DBs where `tasks` already exists.\n\nAlso add a second safety migration after the rename: if somehow `activities` still has rows (due to the prior bug), migrate them:\n```sql\nINSERT OR IGNORE INTO tasks SELECT * FROM activities WHERE id NOT IN (SELECT id FROM tasks)\n```\nWrap in try/catch.\n\nRun `npm run build`. Commit: `fix: migration order — create activities table first, then rename to tasks`\n\nReport DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780743384413,
+        "read_at": 1780743400792,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 834,
+        "from_id": "cec50b17:23",
+        "to_id": "human",
+        "content": "✅ committed 3fb4846: feat: approve quick-reply button on agent→human message rows",
+        "priority": 5,
+        "created_at": 1780743385018,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 836,
+        "from_id": "cec50b17:23",
+        "to_id": "cec50b17:0",
+        "content": "DONE (commit 3fb4846):\n\n- `public/app.js`: agent→human message rows now include an `approveBtn` div with `.msg-approve-btn`; after morphdom, buttons are wired to POST `{ to_id, content: 'Approved.', priority }` to `/api/messages`, then disabled with \"✓ sent\"\n- `public/style.css`: `.message-actions` margin + `.msg-approve-btn` ghost button styles with green hover\n\nNo backend changes needed.",
+        "priority": 5,
+        "created_at": 1780743391655,
+        "read_at": 1780743396111,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 837,
+        "from_id": "cec50b17:23",
+        "to_id": "human",
+        "content": "DONE: approve quick-reply on agent messages (3fb4846)",
+        "priority": 5,
+        "created_at": 1780743391655,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4500,
+        "event_id": "evt_1780743348184_xekb6",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780743348184
+      },
+      {
+        "id": 4502,
+        "event_id": "evt_1780743351112_pi6ms",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780743351112
+      },
+      {
+        "id": 4504,
+        "event_id": "evt_1780743354798_txp2z",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780743354798
+      },
+      {
+        "id": 4506,
+        "event_id": "evt_1780743357825_a3wli",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780743357825
+      },
+      {
+        "id": 4507,
+        "event_id": "evt_1780743360654_rar8k",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780743360654
+      },
+      {
+        "id": 4509,
+        "event_id": "evt_1780743368446_hs68k",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780743368446
+      },
+      {
+        "id": 4510,
+        "event_id": "evt_1780743374569_4lro8",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780743374569
+      },
+      {
+        "id": 4511,
+        "event_id": "evt_1780743380101_ud27u",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780743380101
+      },
+      {
+        "id": 4513,
+        "event_id": "evt_1780743385017_lz8ea",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 99,
+        "timestamp": 1780743385017
+      },
+      {
+        "id": 4516,
+        "event_id": "evt_1780743391702_krd0s",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__report_done",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780743391702
+      },
+      {
+        "id": 4517,
+        "event_id": "evt_1780743394874_2ddbm",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780743394874
+      }
+    ]
   }
 }

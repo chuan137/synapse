@@ -1,0 +1,404 @@
+{
+  "id": 94,
+  "task": {
+    "id": 94,
+    "agent_id": "cec50b17:35",
+    "title": "Fix: Canonical Per-Task Sequence causes double task creation",
+    "status": "completed",
+    "started_at": 1780911679265,
+    "finished_at": 1780911753519,
+    "trigger_msg_id": 1327,
+    "result_msg_id": 1329,
+    "source_msg_id": 1326,
+    "commit_sha": "63aff4c"
+  },
+  "linked_msg_ids": [
+    1326,
+    1327,
+    1329
+  ],
+  "messages": [
+    {
+      "id": 1327,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:35",
+      "content": "Fix a protocol bug in `templates/SYNAPSE-orchestrator.md` (and copy to `.synapse/SYNAPSE-orchestrator.md`).\n\n**Problem:** The \"Canonical Per-Task Sequence\" has step 1 as `start_task` and step 4 as `delegate_task` — but `delegate_task` already internally calls `start_task`. This creates two S-Deck task records for every delegated task.\n\n**Fix:** Rewrite the sequence so that:\n- For **delegated tasks**: `delegate_task` is the first and only task-opening call (remove the separate `start_task` step). The sequence becomes: Research/Plan (optional) → list_workers → delegate_task → wait → verify → merge → finish_task.\n- For **self-driven work** (doc edits, protocol updates done directly by the orchestrator): `start_task` is still called first, because there is no `delegate_task`.\n\nMake this distinction clear in the protocol. Also update the note in the `delegate_task` tool description row in the MCP Tools table if it mentions opening a task record, so it's unambiguous.\n\n**Work in a worktree:**\nRun: `synapse worktree create developer-35-fix-double-task`\nThen `cd .synapse/worktrees/developer-35-fix-double-task` and do all edits there.\n\nFiles to edit:\n1. `templates/SYNAPSE-orchestrator.md` — fix the sequence\n2. `.synapse/SYNAPSE-orchestrator.md` — copy of the above (per CLAUDE.md: \"Update SYNAPSE protocol: update templates/SYNAPSE*.md, then copy to .synapse/SYNAPSE*.md\")\n\nCommit both files. Report DONE.",
+      "priority": 5,
+      "created_at": 1780911679265,
+      "read_at": 1780911681931,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1328,
+      "from_id": "cec50b17:35",
+      "to_id": "human",
+      "content": "✅ committed 63aff4c: fix(protocol): remove double start_task in orchestrator per-task sequence",
+      "priority": 5,
+      "created_at": 1780911753519,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 7201,
+      "event_id": "evt_1780911681979_35is7",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780911681979
+    },
+    {
+      "id": 7202,
+      "event_id": "evt_1780911684261_t8ufz",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 178,
+      "timestamp": 1780911684261
+    },
+    {
+      "id": 7203,
+      "event_id": "evt_1780911687780_6bian",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 945,
+      "timestamp": 1780911687780
+    },
+    {
+      "id": 7204,
+      "event_id": "evt_1780911690310_vt3wc",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 55,
+      "timestamp": 1780911690310
+    },
+    {
+      "id": 7205,
+      "event_id": "evt_1780911709715_f2duh",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780911709715
+    },
+    {
+      "id": 7206,
+      "event_id": "evt_1780911712929_p1jpe",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 62,
+      "timestamp": 1780911712929
+    },
+    {
+      "id": 7207,
+      "event_id": "evt_1780911718380_s3fpu",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 70,
+      "timestamp": 1780911718380
+    },
+    {
+      "id": 7208,
+      "event_id": "evt_1780911722389_jopxb",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 81,
+      "timestamp": 1780911722389
+    },
+    {
+      "id": 7209,
+      "event_id": "evt_1780911733565_ihpke",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 68,
+      "timestamp": 1780911733565
+    },
+    {
+      "id": 7210,
+      "event_id": "evt_1780911737748_0l3te",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 84,
+      "timestamp": 1780911737748
+    },
+    {
+      "id": 7211,
+      "event_id": "evt_1780911746450_lh0dq",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 71,
+      "timestamp": 1780911746450
+    },
+    {
+      "id": 7212,
+      "event_id": "evt_1780911753518_j5fon",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 110,
+      "timestamp": 1780911753518
+    }
+  ],
+  "metrics": {
+    "tool_calls": 12,
+    "duration_ms": 74254,
+    "traceability_score": 0,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 94,
+  "title": "Fix: Canonical Per-Task Sequence causes double task creation",
+  "trigger_msg_id": 1327,
+  "source_msg_id": 1326,
+  "result_msg_id": 1329,
+  "commit_sha": "63aff4c",
+  "started_at": 1780911679265,
+  "finished_at": 1780911753519,
+  "total_duration_ms": 74254,
+  "agents": {
+    "developer:35": {
+      "agent_id": "cec50b17:35",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 178,
+          "p90_ms": 178,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 7,
+          "avg_ms": 204,
+          "p90_ms": 945,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 2,
+          "avg_ms": 59,
+          "p90_ms": 62,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 59,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 1837
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1327,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:35",
+        "content": "Fix a protocol bug in `templates/SYNAPSE-orchestrator.md` (and copy to `.synapse/SYNAPSE-orchestrator.md`).\n\n**Problem:** The \"Canonical Per-Task Sequence\" has step 1 as `start_task` and step 4 as `delegate_task` — but `delegate_task` already internally calls `start_task`. This creates two S-Deck task records for every delegated task.\n\n**Fix:** Rewrite the sequence so that:\n- For **delegated tasks**: `delegate_task` is the first and only task-opening call (remove the separate `start_task` step). The sequence becomes: Research/Plan (optional) → list_workers → delegate_task → wait → verify → merge → finish_task.\n- For **self-driven work** (doc edits, protocol updates done directly by the orchestrator): `start_task` is still called first, because there is no `delegate_task`.\n\nMake this distinction clear in the protocol. Also update the note in the `delegate_task` tool description row in the MCP Tools table if it mentions opening a task record, so it's unambiguous.\n\n**Work in a worktree:**\nRun: `synapse worktree create developer-35-fix-double-task`\nThen `cd .synapse/worktrees/developer-35-fix-double-task` and do all edits there.\n\nFiles to edit:\n1. `templates/SYNAPSE-orchestrator.md` — fix the sequence\n2. `.synapse/SYNAPSE-orchestrator.md` — copy of the above (per CLAUDE.md: \"Update SYNAPSE protocol: update templates/SYNAPSE*.md, then copy to .synapse/SYNAPSE*.md\")\n\nCommit both files. Report DONE.",
+        "priority": 5,
+        "created_at": 1780911679265,
+        "read_at": 1780911681931,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1328,
+        "from_id": "cec50b17:35",
+        "to_id": "human",
+        "content": "✅ committed 63aff4c: fix(protocol): remove double start_task in orchestrator per-task sequence",
+        "priority": 5,
+        "created_at": 1780911753519,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 7201,
+        "event_id": "evt_1780911681979_35is7",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780911681979
+      },
+      {
+        "id": 7202,
+        "event_id": "evt_1780911684261_t8ufz",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 178,
+        "timestamp": 1780911684261
+      },
+      {
+        "id": 7203,
+        "event_id": "evt_1780911687780_6bian",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 945,
+        "timestamp": 1780911687780
+      },
+      {
+        "id": 7204,
+        "event_id": "evt_1780911690310_vt3wc",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780911690310
+      },
+      {
+        "id": 7205,
+        "event_id": "evt_1780911709715_f2duh",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780911709715
+      },
+      {
+        "id": 7206,
+        "event_id": "evt_1780911712929_p1jpe",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 62,
+        "timestamp": 1780911712929
+      },
+      {
+        "id": 7207,
+        "event_id": "evt_1780911718380_s3fpu",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 70,
+        "timestamp": 1780911718380
+      },
+      {
+        "id": 7208,
+        "event_id": "evt_1780911722389_jopxb",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 81,
+        "timestamp": 1780911722389
+      },
+      {
+        "id": 7209,
+        "event_id": "evt_1780911733565_ihpke",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 68,
+        "timestamp": 1780911733565
+      },
+      {
+        "id": 7210,
+        "event_id": "evt_1780911737748_0l3te",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 84,
+        "timestamp": 1780911737748
+      },
+      {
+        "id": 7211,
+        "event_id": "evt_1780911746450_lh0dq",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 71,
+        "timestamp": 1780911746450
+      },
+      {
+        "id": 7212,
+        "event_id": "evt_1780911753518_j5fon",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 110,
+        "timestamp": 1780911753518
+      }
+    ]
+  }
+}

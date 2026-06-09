@@ -1,0 +1,189 @@
+{
+  "id": 81,
+  "task": {
+    "id": 81,
+    "agent_id": "cec50b17:0",
+    "title": "Revise step 4 delegate_task text to match actual MCP behaviour",
+    "status": "completed",
+    "started_at": 1780863789148,
+    "finished_at": 1780863807654,
+    "trigger_msg_id": 1261,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "0f078ba"
+  },
+  "linked_msg_ids": [
+    1261
+  ],
+  "messages": [
+    {
+      "id": 1262,
+      "from_id": "cec50b17:0",
+      "to_id": "human",
+      "content": "✅ committed 0f078ba: docs: rewrite delegate_task step to match actual MCP behaviour",
+      "priority": 5,
+      "created_at": 1780863807654,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 6720,
+      "event_id": "evt_1780863789196_aqt2h",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780863789196
+    },
+    {
+      "id": 6721,
+      "event_id": "evt_1780863799354_wyoib",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780863799354
+    },
+    {
+      "id": 6722,
+      "event_id": "evt_1780863803483_zilxp",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780863803483
+    },
+    {
+      "id": 6723,
+      "event_id": "evt_1780863807652_3f42q",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 110,
+      "timestamp": 1780863807652
+    }
+  ],
+  "metrics": {
+    "tool_calls": 4,
+    "duration_ms": 18506,
+    "traceability_score": 2,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 81,
+  "title": "Revise step 4 delegate_task text to match actual MCP behaviour",
+  "trigger_msg_id": 1261,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "0f078ba",
+  "started_at": 1780863789148,
+  "finished_at": 1780863807654,
+  "total_duration_ms": 18506,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 1,
+          "avg_ms": 110,
+          "p90_ms": 110,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 262
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1262,
+        "from_id": "cec50b17:0",
+        "to_id": "human",
+        "content": "✅ committed 0f078ba: docs: rewrite delegate_task step to match actual MCP behaviour",
+        "priority": 5,
+        "created_at": 1780863807654,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 6720,
+        "event_id": "evt_1780863789196_aqt2h",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780863789196
+      },
+      {
+        "id": 6721,
+        "event_id": "evt_1780863799354_wyoib",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780863799354
+      },
+      {
+        "id": 6722,
+        "event_id": "evt_1780863803483_zilxp",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780863803483
+      },
+      {
+        "id": 6723,
+        "event_id": "evt_1780863807652_3f42q",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 110,
+        "timestamp": 1780863807652
+      }
+    ]
+  }
+}

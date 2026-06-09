@@ -1,6 +1,5 @@
 {
   "id": 48,
-  "label": "good",
   "task": {
     "id": 48,
     "agent_id": "cec50b17:0",
@@ -27,7 +26,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -77,5 +77,127 @@
     "duration_ms": 36197,
     "traceability_score": 3,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 48,
+  "title": "Make needs_approval mandatory on send_message to human",
+  "trigger_msg_id": null,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "5281a2c",
+  "started_at": 1780750441875,
+  "finished_at": 1780750478072,
+  "total_duration_ms": 36197,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 190,
+          "p90_ms": 190,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 1,
+          "avg_ms": 55,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 59,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 355
+    },
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 906,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "New task: Replace the heuristic `needs_approval` lint in the guard with a mandatory presence check.\n\n**Current behavior** (`src/hooks/guard.ts`): denies `send_message` to `human` only when content matches approval-seeking patterns but `needs_approval` is absent.\n\n**New behavior**: deny ANY `send_message` to `human` where `needs_approval` is not explicitly present in the input (i.e. `!('needs_approval' in input)`). Same pattern as the `source_msg_id` check on `delegate_task`.\n\n**Changes to `src/hooks/guard.ts`:**\n\n1. Replace the entire `send_message` block (currently ~15 lines with `looksLikeApprovalRequest`) with:\n\n```ts\nif (tool === 'mcp__synapse-bus__send_message') {\n  const toId = String(input.to_id ?? '');\n  if (toId === 'human' && !('needs_approval' in input)) {\n    return deny(\n      'needs_approval is required when messaging human. ' +\n      'Set needs_approval: true if this message requires operator action, or needs_approval: false for informational messages.'\n    );\n  }\n  return allow();\n}\n```\n\n2. Remove the `looksLikeApprovalRequest` function entirely — it is no longer needed.\n\n**Changes to `src/mcp-server.ts`**: Update the `needs_approval` parameter description for `send_message` (around line 126) to say it is required (not optional) when `to_id` is `human`.\n\n**Build:** `npm run build` must pass. Commit. Report DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780750451695,
+        "read_at": 1780750453317,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4788,
+        "event_id": "evt_1780750442061_8651g",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 190,
+        "timestamp": 1780750442061
+      },
+      {
+        "id": 4789,
+        "event_id": "evt_1780750451746_2ej4c",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780750451746
+      },
+      {
+        "id": 4791,
+        "event_id": "evt_1780750454415_qi4qy",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780750454415
+      },
+      {
+        "id": 4793,
+        "event_id": "evt_1780750456651_t2sea",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "08ce2f56-770f-4f21-86a1-c62103e85c5f",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780750456651
+      }
+    ]
   }
 }

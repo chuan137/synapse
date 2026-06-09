@@ -1,0 +1,324 @@
+{
+  "id": 68,
+  "task": {
+    "id": 68,
+    "agent_id": "cec50b17:25",
+    "title": "Shorten read_messages tool description",
+    "status": "completed",
+    "started_at": 1780801665958,
+    "finished_at": 1780801690712,
+    "trigger_msg_id": 1110,
+    "result_msg_id": 1112,
+    "source_msg_id": 1109,
+    "commit_sha": "b216855"
+  },
+  "linked_msg_ids": [
+    1109,
+    1110,
+    1112
+  ],
+  "messages": [
+    {
+      "id": 1110,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:25",
+      "content": "Your orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-25-shorten-read-messages-desc`. Commit your changes. Do not push.\n\nIn `src/mcp-server.ts`, find the `read_messages` tool description (around line 91). It currently reads:\n\n```typescript\n`Check for instructions from the human operator. Your agent ID is \"${AGENT_ID}\". ` +\n'Call this at the START of every turn before doing anything else. ' +\n'Returns unread messages addressed to you, ordered by priority (0 = urgent). ' +\n'When there are messages, the first content block is a JSON array where each element has: ' +\n'{ id: number, from: string, priority: 0|5, at: string (ISO timestamp), content: string }. ' +\n'Use the `id` field as `source_msg_id` when calling `delegate_task`.',\n```\n\nReplace it with this shorter version:\n\n```typescript\n`Check for instructions from the human operator. Your agent ID is \"${AGENT_ID}\". ` +\n'Returns unread messages as a JSON array: { id, from, priority, at, content }. ' +\n'Use the id field as source_msg_id when calling delegate_task.',\n```\n\nThe \"Call this at the START of every turn\" line is removed because Rule 1 in SYNAPSE.md already covers it. The return format is kept (needed for parsing). Build with `npm run build` and verify clean.",
+      "priority": 5,
+      "created_at": 1780801665958,
+      "read_at": 1780801668130,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1111,
+      "from_id": "cec50b17:25",
+      "to_id": "human",
+      "content": "✅ committed b216855: refactor: shorten read_messages tool description",
+      "priority": 5,
+      "created_at": 1780801690712,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 5963,
+      "event_id": "evt_1780801668182_gqxry",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 55,
+      "timestamp": 1780801668182
+    },
+    {
+      "id": 5965,
+      "event_id": "evt_1780801670182_2vsnw",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 65,
+      "timestamp": 1780801670182
+    },
+    {
+      "id": 5966,
+      "event_id": "evt_1780801672747_ow81h",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 132,
+      "timestamp": 1780801672747
+    },
+    {
+      "id": 5967,
+      "event_id": "evt_1780801675216_cq9qy",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 82,
+      "timestamp": 1780801675216
+    },
+    {
+      "id": 5968,
+      "event_id": "evt_1780801677486_5n3uk",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 191,
+      "timestamp": 1780801677486
+    },
+    {
+      "id": 5969,
+      "event_id": "evt_1780801681087_jt1ir",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780801681087
+    },
+    {
+      "id": 5970,
+      "event_id": "evt_1780801686836_2c7mx",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3664,
+      "timestamp": 1780801686836
+    },
+    {
+      "id": 5971,
+      "event_id": "evt_1780801690711_en45c",
+      "synapse_agent_id": "cec50b17:25",
+      "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 125,
+      "timestamp": 1780801690711
+    }
+  ],
+  "metrics": {
+    "tool_calls": 8,
+    "duration_ms": 24754,
+    "traceability_score": 0,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 68,
+  "title": "Shorten read_messages tool description",
+  "trigger_msg_id": 1110,
+  "source_msg_id": 1109,
+  "result_msg_id": 1112,
+  "commit_sha": "b216855",
+  "started_at": 1780801665958,
+  "finished_at": 1780801690712,
+  "total_duration_ms": 24754,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 55,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 65,
+          "p90_ms": 65,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 4,
+          "avg_ms": 1001,
+          "p90_ms": 3664,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 191,
+          "p90_ms": 191,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 60,
+          "p90_ms": 60,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 4374
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1110,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "Your orchestrator is cec50b17:0. Work inside `.synapse/worktrees/developer-25-shorten-read-messages-desc`. Commit your changes. Do not push.\n\nIn `src/mcp-server.ts`, find the `read_messages` tool description (around line 91). It currently reads:\n\n```typescript\n`Check for instructions from the human operator. Your agent ID is \"${AGENT_ID}\". ` +\n'Call this at the START of every turn before doing anything else. ' +\n'Returns unread messages addressed to you, ordered by priority (0 = urgent). ' +\n'When there are messages, the first content block is a JSON array where each element has: ' +\n'{ id: number, from: string, priority: 0|5, at: string (ISO timestamp), content: string }. ' +\n'Use the `id` field as `source_msg_id` when calling `delegate_task`.',\n```\n\nReplace it with this shorter version:\n\n```typescript\n`Check for instructions from the human operator. Your agent ID is \"${AGENT_ID}\". ` +\n'Returns unread messages as a JSON array: { id, from, priority, at, content }. ' +\n'Use the id field as source_msg_id when calling delegate_task.',\n```\n\nThe \"Call this at the START of every turn\" line is removed because Rule 1 in SYNAPSE.md already covers it. The return format is kept (needed for parsing). Build with `npm run build` and verify clean.",
+        "priority": 5,
+        "created_at": 1780801665958,
+        "read_at": 1780801668130,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1111,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed b216855: refactor: shorten read_messages tool description",
+        "priority": 5,
+        "created_at": 1780801690712,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5963,
+        "event_id": "evt_1780801668182_gqxry",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780801668182
+      },
+      {
+        "id": 5965,
+        "event_id": "evt_1780801670182_2vsnw",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 65,
+        "timestamp": 1780801670182
+      },
+      {
+        "id": 5966,
+        "event_id": "evt_1780801672747_ow81h",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 132,
+        "timestamp": 1780801672747
+      },
+      {
+        "id": 5967,
+        "event_id": "evt_1780801675216_cq9qy",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 82,
+        "timestamp": 1780801675216
+      },
+      {
+        "id": 5968,
+        "event_id": "evt_1780801677486_5n3uk",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 191,
+        "timestamp": 1780801677486
+      },
+      {
+        "id": 5969,
+        "event_id": "evt_1780801681087_jt1ir",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 60,
+        "timestamp": 1780801681087
+      },
+      {
+        "id": 5970,
+        "event_id": "evt_1780801686836_2c7mx",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 3664,
+        "timestamp": 1780801686836
+      },
+      {
+        "id": 5971,
+        "event_id": "evt_1780801690711_en45c",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "e28064b7-cd97-40bd-b9e6-5447bfb7b0ca",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 125,
+        "timestamp": 1780801690711
+      }
+    ]
+  }
+}

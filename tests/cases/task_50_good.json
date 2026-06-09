@@ -1,6 +1,5 @@
 {
   "id": 50,
-  "label": "good",
   "task": {
     "id": 50,
     "agent_id": "cec50b17:25",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 930,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -294,5 +295,356 @@
     "duration_ms": 75413,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 50,
+  "title": "Rename start_activity to start_task in MCP tool and docs",
+  "trigger_msg_id": 928,
+  "source_msg_id": 927,
+  "result_msg_id": null,
+  "commit_sha": "960f5c0",
+  "started_at": 1780752100590,
+  "finished_at": 1780752176003,
+  "total_duration_ms": 75413,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 59,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 99,
+          "p90_ms": 99,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 7,
+          "avg_ms": 72,
+          "p90_ms": 198,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 8,
+          "avg_ms": 52,
+          "p90_ms": 58,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 6,
+          "avg_ms": 527,
+          "p90_ms": 2747,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 4293
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 928,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "Rename the MCP tool `start_activity` to `start_task` in the source code and all template/protocol docs.\n\n**Work inside:** `.synapse/worktrees/developer-25-rename-start-activity`\nCommit your changes to that branch. Do not push.\n\n---\n\n**Files to change:**\n\n**`src/mcp-server.ts`** — rename the tool and all references to it:\n- Line 271: `name: 'start_activity'` → `name: 'start_task'`\n- Line 299: update description text — `'Mark a task as done. Pass the activity_id from start_task, ...'`\n- Line 307: `'The id returned by start_activity.'` → `'The id returned by start_task.'`\n- Line 330: `'Use this instead of separate send_message + start_activity ...'` → `'... + start_task ...'`\n- Line 582: `if (name === 'start_activity')` → `if (name === 'start_task')`\n\n**Template/protocol docs** (also inside the worktree at `templates/` and `.synapse/`):\nReplace ALL occurrences of `start_activity` with `start_task` in:\n- `templates/SYNAPSE.md`\n- `templates/SYNAPSE-orchestrator.md`\n- `templates/SYNAPSE-worker.md`\n- `.synapse/SYNAPSE.md`\n- `.synapse/SYNAPSE-orchestrator.md`\n- `.synapse/SYNAPSE-worker.md`\n\nNote: `finish_activity` stays as-is — only `start_activity` is being renamed.\n\n**Build:** `npm run build` must pass. Commit all changes in one commit. Report DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780752100590,
+        "read_at": 1780752102683,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 930,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed 960f5c0: rename: start_activity → start_task in source and templates",
+        "priority": 5,
+        "created_at": 1780752176003,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4931,
+        "event_id": "evt_1780752102738_i5bni",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780752102738
+      },
+      {
+        "id": 4933,
+        "event_id": "evt_1780752105068_tubvc",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780752105068
+      },
+      {
+        "id": 4934,
+        "event_id": "evt_1780752108293_tu9dk",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 99,
+        "timestamp": 1780752108293
+      },
+      {
+        "id": 4935,
+        "event_id": "evt_1780752111729_z5ler",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 79,
+        "timestamp": 1780752111729
+      },
+      {
+        "id": 4936,
+        "event_id": "evt_1780752113953_272d9",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780752113953
+      },
+      {
+        "id": 4937,
+        "event_id": "evt_1780752114702_7rsgf",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780752114702
+      },
+      {
+        "id": 4938,
+        "event_id": "evt_1780752115398_za2r8",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780752115398
+      },
+      {
+        "id": 4939,
+        "event_id": "evt_1780752118503_8fi7n",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780752118503
+      },
+      {
+        "id": 4940,
+        "event_id": "evt_1780752121431_g1kny",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780752121431
+      },
+      {
+        "id": 4941,
+        "event_id": "evt_1780752124369_ts7e1",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1780752124369
+      },
+      {
+        "id": 4942,
+        "event_id": "evt_1780752128236_t8vrv",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 47,
+        "timestamp": 1780752128236
+      },
+      {
+        "id": 4943,
+        "event_id": "evt_1780752131160_rsxh3",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780752131160
+      },
+      {
+        "id": 4944,
+        "event_id": "evt_1780752141446_yqh06",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 82,
+        "timestamp": 1780752141446
+      },
+      {
+        "id": 4945,
+        "event_id": "evt_1780752146133_tpvp5",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 81,
+        "timestamp": 1780752146133
+      },
+      {
+        "id": 4946,
+        "event_id": "evt_1780752149229_dzwea",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 198,
+        "timestamp": 1780752149229
+      },
+      {
+        "id": 4947,
+        "event_id": "evt_1780752149697_f4wu4",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780752149697
+      },
+      {
+        "id": 4948,
+        "event_id": "evt_1780752150309_mksol",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780752150309
+      },
+      {
+        "id": 4949,
+        "event_id": "evt_1780752153827_fe7w7",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780752153827
+      },
+      {
+        "id": 4950,
+        "event_id": "evt_1780752156444_tj1r9",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780752156444
+      },
+      {
+        "id": 4952,
+        "event_id": "evt_1780752158852_5mw41",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780752158852
+      },
+      {
+        "id": 4954,
+        "event_id": "evt_1780752162440_34623",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 67,
+        "timestamp": 1780752162440
+      },
+      {
+        "id": 4955,
+        "event_id": "evt_1780752166935_5hu00",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 80,
+        "timestamp": 1780752166935
+      },
+      {
+        "id": 4958,
+        "event_id": "evt_1780752172295_2btbp",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 2747,
+        "timestamp": 1780752172295
+      },
+      {
+        "id": 4960,
+        "event_id": "evt_1780752176001_9sxah",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 105,
+        "timestamp": 1780752176001
+      }
+    ]
   }
 }

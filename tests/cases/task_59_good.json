@@ -1,6 +1,5 @@
 {
   "id": 59,
-  "label": "good",
   "task": {
     "id": 59,
     "agent_id": "cec50b17:25",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 980,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -154,5 +155,216 @@
     "duration_ms": 91257,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 59,
+  "title": "Synapse-Evolve Phase 4: validation gate — regression + coverage check before deploying rule patches",
+  "trigger_msg_id": 979,
+  "source_msg_id": 964,
+  "result_msg_id": null,
+  "commit_sha": "d70d93d",
+  "started_at": 1780755741016,
+  "finished_at": 1780755832273,
+  "total_duration_ms": 91257,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "ExitWorktree": {
+          "calls": 0,
+          "avg_ms": 0,
+          "p90_ms": 0,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 75,
+          "p90_ms": 75,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 5460,
+          "p90_ms": 16537,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Write": {
+          "calls": 1,
+          "avg_ms": 61,
+          "p90_ms": 61,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 79,
+          "p90_ms": 79,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 82,
+          "p90_ms": 82,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 27598
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 979,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "Synapse-Evolve Phase 4: validation gate — re-run evaluator against good trajectories after applying a candidate rule patch, gate the deployment decision.\n\n**Work inside:** `.synapse/worktrees/developer-25-eval-phase4-validation-gate`\nCommit. Do not push. Report DONE to cec50b17:0.\n\n---\n\n## Goal\n\nThe validation gate takes a critic patch (from `tests/patches/`) and verifies:\n1. The patch doesn't regress on good trajectories (they still pass evaluation)\n2. (For the bad trajectories: ideally they would pass with the new rules — but since we can't actually re-run the agent, we check whether the patch addresses the failure modes)\n\nSince we can't replay the actual agent behavior, the gate focuses on:\n- **Regression check**: good trajectories still pass (metrics are data — they don't change)\n- **Coverage check**: Claude API validates whether the patch text addresses the failure reasons\n\n---\n\n## Implementation\n\n**`src/eval/gate.ts`:**\n\n```ts\nimport Anthropic from '@anthropic-ai/sdk';\nimport { readFileSync, writeFileSync, mkdirSync } from 'fs';\nimport { join } from 'path';\nimport { evaluateCases } from './evaluator.js';\n\nexport interface GateResult {\n  patch_file: string;\n  regression_pass: boolean;      // good trajectories still all pass\n  coverage_verdict: string;      // LLM verdict: does patch address root cause?\n  deploy_recommended: boolean;\n}\n\nexport async function runGate(\n  patchFile: string,\n  casesDir: string,\n  currentRulesFile: string,\n  outDir: string\n): Promise<GateResult> {\n  const patch = readFileSync(patchFile, 'utf8');\n  const currentRules = readFileSync(currentRulesFile, 'utf8');\n\n  // 1. Regression check: re-evaluate all good cases (metrics unchanged — just verify)\n  const allResults = evaluateCases(casesDir);\n  const goodResults = allResults.filter(r => r.label === 'good');\n  const regressionPass = goodResults.every(r => r.pass);\n\n  // 2. Coverage check: ask Claude if the patch addresses the failure\n  const client = new Anthropic();\n  const response = await client.messages.create({\n    model: 'claude-haiku-4-5-20251001',\n    max_tokens: 256,\n    messages: [{\n      role: 'user',\n      content: `Does the following proposed rule patch adequately address the failure described in it?\n      \nCurrent rules excerpt (SYNAPSE-orchestrator.md):\n${currentRules.slice(0, 2000)}\n\nProposed patch:\n${patch.slice(0, 2000)}\n\nAnswer with:\nVERDICT: ADEQUATE or INADEQUATE\nREASON: (one sentence)`\n    }],\n  });\n\n  const verdict = (response.content[0] as any).text as string;\n  const adequate = verdict.includes('ADEQUATE') && !verdict.includes('INADEQUATE');\n\n  const result: GateResult = {\n    patch_file: patchFile,\n    regression_pass: regressionPass,\n    coverage_verdict: verdict.trim(),\n    deploy_recommended: regressionPass && adequate,\n  };\n\n  mkdirSync(outDir, { recursive: true });\n  const outFile = join(outDir, `gate_${Date.now()}.json`);\n  writeFileSync(outFile, JSON.stringify(result, null, 2));\n  return result;\n}\n```\n\n**Update `src/index.ts`** — add `--gate` flag to eval command:\n\n```ts\n.option('--gate', 'Run validation gate on all critic patches')\n```\n\nIn action:\n```ts\nif (options.gate) {\n  const { runGate } = await import('./eval/gate.js');\n  const patchDir = join(process.cwd(), 'tests', 'patches');\n  const gateDir = join(process.cwd(), 'tests', 'gate_results');\n  const rulesFile = join(process.cwd(), 'templates', 'SYNAPSE-orchestrator.md');\n  const patches = readdirSync(patchDir).filter(f => f.endsWith('.md'));\n  process.stdout.write(`\\nRunning validation gate on ${patches.length} patches...\\n`);\n  for (const p of patches) {\n    const result = await runGate(join(patchDir, p), casesDir, rulesFile, gateDir);\n    process.stdout.write(`  ${p}: regression=${result.regression_pass} coverage=${result.deploy_recommended ? 'ADEQUATE' : 'INADEQUATE'} → ${result.deploy_recommended ? 'DEPLOY ✓' : 'HOLD ✗'}\\n`);\n  }\n}\n```\n\nAdd `readdirSync` import where needed.\n\n**Run it:** `npm run build && node dist/index.js eval --gate`\n\nGenerate at least `tests/gate_results/` with gate verdict files.\n\nCommit everything including generated `tests/gate_results/*.json`. Report DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780755741016,
+        "read_at": 1780755745682,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 980,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed d70d93d: feat: eval Phase 4 — validation gate with regression + LLM coverage check",
+        "priority": 5,
+        "created_at": 1780755832273,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5230,
+        "event_id": "evt_1780755751943_jh4td",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "ExitWorktree",
+        "status": "ok",
+        "duration_ms": null,
+        "timestamp": 1780755751943
+      },
+      {
+        "id": 5232,
+        "event_id": "evt_1780755755043_ltb2t",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780755755043
+      },
+      {
+        "id": 5234,
+        "event_id": "evt_1780755758941_efzl4",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 192,
+        "timestamp": 1780755758941
+      },
+      {
+        "id": 5235,
+        "event_id": "evt_1780755767303_2mw50",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 61,
+        "timestamp": 1780755767303
+      },
+      {
+        "id": 5236,
+        "event_id": "evt_1780755770464_iuzql",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 79,
+        "timestamp": 1780755770464
+      },
+      {
+        "id": 5237,
+        "event_id": "evt_1780755785669_easrm",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 82,
+        "timestamp": 1780755785669
+      },
+      {
+        "id": 5238,
+        "event_id": "evt_1780755808423_cxsiv",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 16537,
+        "timestamp": 1780755808423
+      },
+      {
+        "id": 5241,
+        "event_id": "evt_1780755822459_wpnt9",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 10376,
+        "timestamp": 1780755822459
+      },
+      {
+        "id": 5242,
+        "event_id": "evt_1780755826110_2c0fi",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 71,
+        "timestamp": 1780755826110
+      },
+      {
+        "id": 5244,
+        "event_id": "evt_1780755832271_pq6dy",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 125,
+        "timestamp": 1780755832271
+      }
+    ]
   }
 }

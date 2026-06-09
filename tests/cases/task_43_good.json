@@ -1,6 +1,5 @@
 {
   "id": 43,
-  "label": "good",
   "task": {
     "id": 43,
     "agent_id": "cec50b17:23",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 852,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -114,5 +115,169 @@
     "duration_ms": 13108,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 43,
+  "title": "Swap agent card name/slot order — name first",
+  "trigger_msg_id": 851,
+  "source_msg_id": 848,
+  "result_msg_id": null,
+  "commit_sha": "239afbf",
+  "started_at": 1780744426947,
+  "finished_at": 1780744440055,
+  "total_duration_ms": 13108,
+  "agents": {
+    "developer:23": {
+      "agent_id": "cec50b17:23",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 182,
+          "p90_ms": 182,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 60,
+          "p90_ms": 60,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 2,
+          "avg_ms": 134,
+          "p90_ms": 199,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 613
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 851,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:23",
+        "content": "In the agent card header in `public/app.js`, swap the order of slot and name so name comes first, slot second.\n\nFind the agent card identity HTML in `renderAgents()`:\n```javascript\n<div class=\"agent-card-identity\">\n  <span class=\"agent-slot\">${esc(slot)}</span>\n  <span class=\"agent-name\">${humanName || 'agent'}</span>\n</div>\n```\n\nChange it to:\n```javascript\n<div class=\"agent-card-identity\">\n  <span class=\"agent-name\">${humanName || 'agent'}</span>\n  <span class=\"agent-slot\">${esc(slot)}</span>\n</div>\n```\n\nThat's the only change. Commit: `style: agent card — name before slot in header`\n\nReport DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780744426947,
+        "read_at": 1780744428791,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 852,
+        "from_id": "cec50b17:23",
+        "to_id": "human",
+        "content": "✅ committed 239afbf: style: agent card — name before slot in header",
+        "priority": 5,
+        "created_at": 1780744440055,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4583,
+        "event_id": "evt_1780744428969_uahgk",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 182,
+        "timestamp": 1780744428969
+      },
+      {
+        "id": 4584,
+        "event_id": "evt_1780744430795_6gw83",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 60,
+        "timestamp": 1780744430795
+      },
+      {
+        "id": 4586,
+        "event_id": "evt_1780744433147_b0ahw",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 69,
+        "timestamp": 1780744433147
+      },
+      {
+        "id": 4587,
+        "event_id": "evt_1780744435087_21fxq",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780744435087
+      },
+      {
+        "id": 4588,
+        "event_id": "evt_1780744437721_rdgqg",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780744437721
+      },
+      {
+        "id": 4589,
+        "event_id": "evt_1780744440053_pn207",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "9d30a722-bd7b-4f31-a199-2c94585386b4",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 199,
+        "timestamp": 1780744440053
+      }
+    ]
   }
 }

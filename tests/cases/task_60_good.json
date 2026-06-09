@@ -1,6 +1,5 @@
 {
   "id": 60,
-  "label": "good",
   "task": {
     "id": 60,
     "agent_id": "cec50b17:25",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 984,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -284,5 +285,339 @@
     "duration_ms": 134389,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 60,
+  "title": "Synapse-Evolve Phase 5: S-Deck Eval tab — failed trajectories UI with improvement loop trigger",
+  "trigger_msg_id": 983,
+  "source_msg_id": 964,
+  "result_msg_id": null,
+  "commit_sha": "5492485",
+  "started_at": 1780755906243,
+  "finished_at": 1780756040632,
+  "total_duration_ms": 134389,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "ExitWorktree": {
+          "calls": 0,
+          "avg_ms": 0,
+          "p90_ms": 0,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 76,
+          "p90_ms": 76,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 8,
+          "avg_ms": 2177,
+          "p90_ms": 16755,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 6,
+          "avg_ms": 60,
+          "p90_ms": 110,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 7,
+          "avg_ms": 54,
+          "p90_ms": 57,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 18229
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 983,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:25",
+        "content": "Synapse-Evolve Phase 5: S-Deck UI — add an \"Eval\" tab to the right panel showing failed trajectories and a \"Run improvement loop\" trigger button.\n\n**Work inside:** `.synapse/worktrees/developer-25-eval-phase5-sdeck-ui`\nCommit. Do not push. Report DONE to cec50b17:0.\n\n---\n\n## Goal\n\nAdd an **Eval** tab to the right panel (alongside Tasks/Events) that:\n1. Shows failed trajectories from `tests/eval_report.json`\n2. Shows gate verdicts from `tests/gate_results/*.json`\n3. Has a \"▶ Run improvement loop\" button that triggers `synapse eval --critic --gate` server-side\n\n---\n\n## Backend (`src/dashboard.ts`)\n\nAdd two new API endpoints:\n\n**`GET /api/eval/report`** — reads `tests/eval_report.json` if it exists:\n```ts\napp.get('/api/eval/report', (_req, res) => {\n  const reportPath = join(process.cwd(), 'tests', 'eval_report.json');\n  if (!existsSync(reportPath)) return res.json([]);\n  res.json(JSON.parse(readFileSync(reportPath, 'utf8')));\n});\n```\n\n**`GET /api/eval/gate`** — reads all `tests/gate_results/*.json`:\n```ts\napp.get('/api/eval/gate', (_req, res) => {\n  const gateDir = join(process.cwd(), 'tests', 'gate_results');\n  if (!existsSync(gateDir)) return res.json([]);\n  const results = readdirSync(gateDir)\n    .filter(f => f.endsWith('.json'))\n    .map(f => JSON.parse(readFileSync(join(gateDir, f), 'utf8')));\n  res.json(results);\n});\n```\n\n**`POST /api/eval/run`** — runs `synapse eval --critic --gate` as a background process:\n```ts\napp.post('/api/eval/run', (_req, res) => {\n  const { spawn } = require('child_process');\n  const child = spawn('node', [join(__dirname, '..', 'index.js'), 'eval', '--critic', '--gate'], {\n    detached: true, stdio: 'ignore',\n    env: { ...process.env }\n  });\n  child.unref();\n  res.json({ ok: true, message: 'Improvement loop started' });\n});\n```\n\nAdd necessary imports (`readdirSync`, `readFileSync`, `existsSync` already imported; add `spawn` from child_process).\n\n---\n\n## Frontend (`public/app.js`)\n\n### 1. Add Eval tab button to the right panel header\n\nFind the right panel tab buttons (near `tab-events`, `tab-tasks`) and add:\n```html\n<button id=\"tab-eval\" class=\"tab-btn\">Eval</button>\n```\n\n### 2. Add Eval panel container\n\nNear the `#task-list` and `#events-list` divs, add:\n```html\n<div id=\"eval-panel\" style=\"display:none; padding: 8px; overflow-y: auto; flex: 1;\">\n  <div id=\"eval-content\"></div>\n</div>\n```\n\n### 3. Wire the tab\n\nIn `switchRightTab()`, add `'eval'` case:\n```js\nfunction switchRightTab(tab) {\n  // existing cases...\n  document.getElementById('tab-eval').classList.toggle('active', tab === 'eval');\n  document.getElementById('eval-panel').style.display = tab === 'eval' ? '' : 'none';\n  if (tab === 'eval') renderEval();\n}\ndocument.getElementById('tab-eval').addEventListener('click', () => switchRightTab('eval'));\n```\n\n### 4. Implement `renderEval()`\n\n```js\nasync function renderEval() {\n  const el = document.getElementById('eval-content');\n  el.innerHTML = '<div style=\"color:var(--muted);font-size:11px\">Loading...</div>';\n  \n  const [report, gate] = await Promise.all([\n    fetch('/api/eval/report').then(r => r.json()),\n    fetch('/api/eval/gate').then(r => r.json()),\n  ]);\n\n  const failed = report.filter(r => !r.pass);\n  const passed = report.filter(r => r.pass);\n  \n  // Build gate lookup by patch filename -> deploy_recommended\n  const gateByTask = {};\n  gate.forEach(g => {\n    const m = g.patch_file.match(/task_(\\d+)/);\n    if (m) gateByTask[m[1]] = g.deploy_recommended;\n  });\n\n  const failedHtml = failed.map(r => {\n    const gateVerdict = gateByTask[r.id];\n    const gateBadge = gateVerdict === undefined ? '' :\n      gateVerdict ? '<span style=\"color:var(--idle);font-size:9px\">DEPLOY ✓</span>' :\n                   '<span style=\"color:var(--p0);font-size:9px\">HOLD ✗</span>';\n    return `<div class=\"eval-row eval-fail\">\n      <div class=\"eval-row-header\">\n        <span class=\"eval-id\">#${r.id}</span>\n        <span class=\"eval-label bad\">FAIL</span>\n        ${gateBadge}\n      </div>\n      <div class=\"eval-title\">${esc(r.title.slice(0, 55))}</div>\n      <div class=\"eval-failures\">${r.failures.map(f => `<span class=\"eval-chip\">${esc(f)}</span>`).join('')}</div>\n    </div>`;\n  }).join('');\n\n  const passedHtml = passed.map(r => `\n    <div class=\"eval-row eval-pass\">\n      <span class=\"eval-id\">#${r.id}</span>\n      <span class=\"eval-label good\">PASS</span>\n      <span class=\"eval-title-inline\">${esc(r.title.slice(0, 45))}</span>\n    </div>`).join('');\n\n  el.innerHTML = `\n    <div style=\"margin-bottom:10px\">\n      <button id=\"eval-run-btn\" class=\"btn-run-eval\">▶ Run improvement loop</button>\n      <span id=\"eval-run-status\" style=\"font-size:10px;color:var(--muted);margin-left:8px\"></span>\n    </div>\n    <div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">Failed (${failed.length})</div>\n    ${failedHtml}\n    <div style=\"font-size:11px;color:var(--muted);margin:10px 0 6px\">Passed (${passed.length})</div>\n    ${passedHtml}\n  `;\n\n  document.getElementById('eval-run-btn').addEventListener('click', async () => {\n    const btn = document.getElementById('eval-run-btn');\n    const status = document.getElementById('eval-run-status');\n    btn.disabled = true;\n    status.textContent = 'Starting…';\n    await fetch('/api/eval/run', { method: 'POST' });\n    status.textContent = 'Loop started — re-run eval to see updated results';\n  });\n}\n```\n\n---\n\n## CSS (`public/style.css`)\n\nAdd eval panel styles:\n```css\n.eval-row { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 4px; }\n.eval-row.eval-fail { border-color: var(--p0); }\n.eval-row.eval-pass { display: flex; align-items: center; gap: 6px; }\n.eval-row-header { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }\n.eval-id { font-size: 10px; color: var(--muted); }\n.eval-label { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }\n.eval-label.bad { background: var(--p0); color: #fff; }\n.eval-label.good { background: var(--idle); color: #fff; }\n.eval-title { font-size: 11px; color: var(--text); margin-bottom: 4px; }\n.eval-title-inline { font-size: 11px; color: var(--muted); }\n.eval-failures { display: flex; flex-wrap: wrap; gap: 3px; }\n.eval-chip { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }\n.btn-run-eval { font-size: 11px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--accent); background: none; color: var(--accent); cursor: pointer; font-family: inherit; }\n.btn-run-eval:hover:not(:disabled) { background: var(--accent); color: var(--bg); }\n.btn-run-eval:disabled { opacity: 0.5; cursor: default; }\n```\n\n---\n\n**Build:** `npm run build` must pass. Single commit. Report DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780755906243,
+        "read_at": 1780755912046,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 984,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed 5492485: feat: eval Phase 5 — S-Deck Eval tab with failed trajectory view and run button",
+        "priority": 5,
+        "created_at": 1780756040631,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5257,
+        "event_id": "evt_1780755918507_3www6",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "ExitWorktree",
+        "status": "ok",
+        "duration_ms": null,
+        "timestamp": 1780755918507
+      },
+      {
+        "id": 5258,
+        "event_id": "evt_1780755922043_9ixa3",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 76,
+        "timestamp": 1780755922043
+      },
+      {
+        "id": 5259,
+        "event_id": "evt_1780755927371_wtln2",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 135,
+        "timestamp": 1780755927371
+      },
+      {
+        "id": 5260,
+        "event_id": "evt_1780755928286_gtyf1",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 88,
+        "timestamp": 1780755928286
+      },
+      {
+        "id": 5261,
+        "event_id": "evt_1780755932092_an477",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780755932092
+      },
+      {
+        "id": 5262,
+        "event_id": "evt_1780755932829_cm6kt",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780755932829
+      },
+      {
+        "id": 5263,
+        "event_id": "evt_1780755936546_8z7eg",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 91,
+        "timestamp": 1780755936546
+      },
+      {
+        "id": 5264,
+        "event_id": "evt_1780755937704_eebun",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 80,
+        "timestamp": 1780755937704
+      },
+      {
+        "id": 5265,
+        "event_id": "evt_1780755941268_1j3tr",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780755941268
+      },
+      {
+        "id": 5266,
+        "event_id": "evt_1780755941982_vhz1m",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780755941982
+      },
+      {
+        "id": 5267,
+        "event_id": "evt_1780755946088_eavb0",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780755946088
+      },
+      {
+        "id": 5268,
+        "event_id": "evt_1780755954773_ya88x",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780755954773
+      },
+      {
+        "id": 5269,
+        "event_id": "evt_1780755958945_x7fsn",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780755958945
+      },
+      {
+        "id": 5270,
+        "event_id": "evt_1780755963619_xa8to",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780755963619
+      },
+      {
+        "id": 5271,
+        "event_id": "evt_1780755972743_qh66d",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1780755972743
+      },
+      {
+        "id": 5272,
+        "event_id": "evt_1780755977338_5xjtr",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 110,
+        "timestamp": 1780755977338
+      },
+      {
+        "id": 5273,
+        "event_id": "evt_1780755991226_adwz0",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780755991226
+      },
+      {
+        "id": 5274,
+        "event_id": "evt_1780755994634_pbney",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 80,
+        "timestamp": 1780755994634
+      },
+      {
+        "id": 5275,
+        "event_id": "evt_1780755998260_oy93s",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 70,
+        "timestamp": 1780755998260
+      },
+      {
+        "id": 5276,
+        "event_id": "evt_1780756001127_1ftof",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780756001127
+      },
+      {
+        "id": 5277,
+        "event_id": "evt_1780756009588_8p4xc",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780756009588
+      },
+      {
+        "id": 5278,
+        "event_id": "evt_1780756033489_n8lae",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 16755,
+        "timestamp": 1780756033489
+      },
+      {
+        "id": 5279,
+        "event_id": "evt_1780756040630_l3vfc",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 117,
+        "timestamp": 1780756040630
+      }
+    ]
   }
 }

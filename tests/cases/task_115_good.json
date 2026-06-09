@@ -1,0 +1,206 @@
+{
+  "id": 115,
+  "task": {
+    "id": 115,
+    "agent_id": "cec50b17:0",
+    "title": "UI polish: P0 hover text color + sticky green on selected approval/option",
+    "status": "completed",
+    "started_at": 1781010793383,
+    "finished_at": 1781010902694,
+    "trigger_msg_id": 1553,
+    "result_msg_id": 1556,
+    "source_msg_id": null,
+    "commit_sha": "084f672"
+  },
+  "linked_msg_ids": [
+    1553,
+    1556
+  ],
+  "messages": [
+    {
+      "id": 1554,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:37",
+      "content": "Two small CSS polish fixes in S-Deck. Both in public/style.css (or wherever the relevant rules live).\n\nWorktree: .synapse/worktrees/developer-37-ui-polish-p0-approval\nBranch: synapse/developer-37-ui-polish-p0-approval\ncd into it first; commit there; do not push.\n\n---\n\nFix 1 — P0 message hover color\nProblem: When hovering over a P0 (priority 0, urgent) message row, the text color changes to black. Operator wants it to stay dark red on hover (P0's normal color).\nAction: Find the P0 message hover rule(s) (likely a `.message-row.p0:hover` or similar) and remove/override the `color` change so it inherits the dark red from the non-hover P0 rule. Confirm both light and dark themes.\n\nRecent context: commits `876c89a` (light-theme polish: P0 emphasis), `b2ce903` (P0 styling: tone down text color and hover background) are the most relevant prior work. Look there.\n\n---\n\nFix 2 — Approval/option label sticky green after selection\nProblem: When the operator clicks an Approve button or selects one of the request_options buttons, the green selected/active styling disappears once the click resolves. Operator wants the chosen option/approve button to stay green so they can see what was picked.\nAction: Locate the click handler for approval buttons (likely in public/app.js — search \"approve\", \"request_options\", or \"needs_approval\"). After click resolution, add a class (e.g. `selected` / `picked`) to the clicked button, and add a CSS rule keeping it green. The non-picked options can fade or hide.\nRecent context: commits `3fb4846` (approve quick-reply button), `831caa1` (needs_approval scope) are relevant.\n\n---\n\nSteps:\n1. cd into the worktree\n2. Make both fixes (one or two commits — your call, but keep each commit focused)\n3. Reload S-Deck and visually confirm if you can; if not, describe the expected before/after CSS rule for each fix in your DONE\n4. report_done with file:line for each change\n\nIf either issue isn't where I expect, say so in DONE and explain what you found.",
+      "priority": 5,
+      "created_at": 1781010812349,
+      "read_at": 1781010815074,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 8306,
+      "event_id": "evt_1781010793436_qp2be",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 57,
+      "timestamp": 1781010793436
+    },
+    {
+      "id": 8307,
+      "event_id": "evt_1781010796411_syaiw",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 231,
+      "timestamp": 1781010796411
+    },
+    {
+      "id": 8308,
+      "event_id": "evt_1781010812402_fjg8s",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 57,
+      "timestamp": 1781010812402
+    },
+    {
+      "id": 8309,
+      "event_id": "evt_1781010814514_yo27z",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1781010814514
+    }
+  ],
+  "metrics": {
+    "tool_calls": 4,
+    "duration_ms": 109311,
+    "traceability_score": 1,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 115,
+  "title": "UI polish: P0 hover text color + sticky green on selected approval/option",
+  "trigger_msg_id": 1553,
+  "source_msg_id": null,
+  "result_msg_id": 1556,
+  "commit_sha": "084f672",
+  "started_at": 1781010793383,
+  "finished_at": 1781010902694,
+  "total_duration_ms": 109311,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 57,
+          "p90_ms": 57,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 1,
+          "avg_ms": 231,
+          "p90_ms": 231,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__delegate_task": {
+          "calls": 1,
+          "avg_ms": 57,
+          "p90_ms": 57,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 398
+    },
+    "developer:37": {
+      "agent_id": "cec50b17:37",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1554,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:37",
+        "content": "Two small CSS polish fixes in S-Deck. Both in public/style.css (or wherever the relevant rules live).\n\nWorktree: .synapse/worktrees/developer-37-ui-polish-p0-approval\nBranch: synapse/developer-37-ui-polish-p0-approval\ncd into it first; commit there; do not push.\n\n---\n\nFix 1 — P0 message hover color\nProblem: When hovering over a P0 (priority 0, urgent) message row, the text color changes to black. Operator wants it to stay dark red on hover (P0's normal color).\nAction: Find the P0 message hover rule(s) (likely a `.message-row.p0:hover` or similar) and remove/override the `color` change so it inherits the dark red from the non-hover P0 rule. Confirm both light and dark themes.\n\nRecent context: commits `876c89a` (light-theme polish: P0 emphasis), `b2ce903` (P0 styling: tone down text color and hover background) are the most relevant prior work. Look there.\n\n---\n\nFix 2 — Approval/option label sticky green after selection\nProblem: When the operator clicks an Approve button or selects one of the request_options buttons, the green selected/active styling disappears once the click resolves. Operator wants the chosen option/approve button to stay green so they can see what was picked.\nAction: Locate the click handler for approval buttons (likely in public/app.js — search \"approve\", \"request_options\", or \"needs_approval\"). After click resolution, add a class (e.g. `selected` / `picked`) to the clicked button, and add a CSS rule keeping it green. The non-picked options can fade or hide.\nRecent context: commits `3fb4846` (approve quick-reply button), `831caa1` (needs_approval scope) are relevant.\n\n---\n\nSteps:\n1. cd into the worktree\n2. Make both fixes (one or two commits — your call, but keep each commit focused)\n3. Reload S-Deck and visually confirm if you can; if not, describe the expected before/after CSS rule for each fix in your DONE\n4. report_done with file:line for each change\n\nIf either issue isn't where I expect, say so in DONE and explain what you found.",
+        "priority": 5,
+        "created_at": 1781010812349,
+        "read_at": 1781010815074,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 8306,
+        "event_id": "evt_1781010793436_qp2be",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1781010793436
+      },
+      {
+        "id": 8307,
+        "event_id": "evt_1781010796411_syaiw",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 231,
+        "timestamp": 1781010796411
+      },
+      {
+        "id": 8308,
+        "event_id": "evt_1781010812402_fjg8s",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1781010812402
+      },
+      {
+        "id": 8309,
+        "event_id": "evt_1781010814514_yo27z",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1781010814514
+      }
+    ]
+  }
+}

@@ -1,0 +1,178 @@
+{
+  "id": 103,
+  "task": {
+    "id": 103,
+    "agent_id": "cec50b17:0",
+    "title": "Add boot prompt to orchestrator launch in synapse start",
+    "status": "completed",
+    "started_at": 1780931146046,
+    "finished_at": 1780931184215,
+    "trigger_msg_id": 1447,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "90a52cc"
+  },
+  "linked_msg_ids": [
+    1447
+  ],
+  "messages": [
+    {
+      "id": 1448,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:33",
+      "content": "## Task\n\nAdd an initial boot prompt (task message) to the orchestrator when launched by `synapse start` / `synapse run --role orchestrator`.\n\n## Context\n\nFile: `src/index.ts`\n\nCurrently the orchestrator is launched with no initial user message — it just gets the system prompt and sits idle. Workers get a `--task` flag with their task. We want the orchestrator to also receive a boot prompt as its first user message.\n\nIn the `run` command action (around line 191-260), after building `claudeArgs`, the code checks `if (task)` and pushes it. For workers, `options.task` is set; for orchestrators it isn't. We want to inject a default boot prompt for the orchestrator role.\n\n## Boot prompt text to inject\n\n```\nYou are now running as the Synapse orchestrator.\n\nROUTE ONLY — NEVER IMPLEMENT. You are a router. Do not read source files, run builds, or write code. Delegate every investigation and implementation to a worker.\n\nStart by calling read_messages to check for pending operator instructions, then update_status(state=\"idle\").\n```\n\n## What to change\n\nIn `src/index.ts`, in the `run` command action: if role is `orchestrator` and no `--task` was explicitly passed, use the above text as the default task prompt (passed as the positional arg to `claude`, same as workers).\n\nKeep the existing `if (task)` logic — just set `task` to the boot prompt when role is orchestrator and no explicit task was given.\n\n## Constraints\n\n- Work inside `.synapse/worktrees/developer-33-orch-boot-prompt` — create this worktree first with `synapse worktree create developer-33-orch-boot-prompt`\n- Commit there; do not push or merge\n- Report DONE when committed",
+      "priority": 5,
+      "created_at": 1780931157069,
+      "read_at": 1780931159013,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 7721,
+      "event_id": "evt_1780931146097_xgi9x",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "27d2e377-a44a-42a5-845f-41a9524712d5",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 55,
+      "timestamp": 1780931146097
+    },
+    {
+      "id": 7722,
+      "event_id": "evt_1780931157118_yduel",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "27d2e377-a44a-42a5-845f-41a9524712d5",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780931157118
+    },
+    {
+      "id": 7724,
+      "event_id": "evt_1780931159735_jrpjc",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "27d2e377-a44a-42a5-845f-41a9524712d5",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780931159735
+    }
+  ],
+  "metrics": {
+    "tool_calls": 3,
+    "duration_ms": 38169,
+    "traceability_score": 2,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 103,
+  "title": "Add boot prompt to orchestrator launch in synapse start",
+  "trigger_msg_id": 1447,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "90a52cc",
+  "started_at": 1780931146046,
+  "finished_at": 1780931184215,
+  "total_duration_ms": 38169,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 55,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__delegate_task": {
+          "calls": 1,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 160
+    },
+    "developer:33": {
+      "agent_id": "cec50b17:33",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1448,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:33",
+        "content": "## Task\n\nAdd an initial boot prompt (task message) to the orchestrator when launched by `synapse start` / `synapse run --role orchestrator`.\n\n## Context\n\nFile: `src/index.ts`\n\nCurrently the orchestrator is launched with no initial user message — it just gets the system prompt and sits idle. Workers get a `--task` flag with their task. We want the orchestrator to also receive a boot prompt as its first user message.\n\nIn the `run` command action (around line 191-260), after building `claudeArgs`, the code checks `if (task)` and pushes it. For workers, `options.task` is set; for orchestrators it isn't. We want to inject a default boot prompt for the orchestrator role.\n\n## Boot prompt text to inject\n\n```\nYou are now running as the Synapse orchestrator.\n\nROUTE ONLY — NEVER IMPLEMENT. You are a router. Do not read source files, run builds, or write code. Delegate every investigation and implementation to a worker.\n\nStart by calling read_messages to check for pending operator instructions, then update_status(state=\"idle\").\n```\n\n## What to change\n\nIn `src/index.ts`, in the `run` command action: if role is `orchestrator` and no `--task` was explicitly passed, use the above text as the default task prompt (passed as the positional arg to `claude`, same as workers).\n\nKeep the existing `if (task)` logic — just set `task` to the boot prompt when role is orchestrator and no explicit task was given.\n\n## Constraints\n\n- Work inside `.synapse/worktrees/developer-33-orch-boot-prompt` — create this worktree first with `synapse worktree create developer-33-orch-boot-prompt`\n- Commit there; do not push or merge\n- Report DONE when committed",
+        "priority": 5,
+        "created_at": 1780931157069,
+        "read_at": 1780931159013,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 7721,
+        "event_id": "evt_1780931146097_xgi9x",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "27d2e377-a44a-42a5-845f-41a9524712d5",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780931146097
+      },
+      {
+        "id": 7722,
+        "event_id": "evt_1780931157118_yduel",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "27d2e377-a44a-42a5-845f-41a9524712d5",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780931157118
+      },
+      {
+        "id": 7724,
+        "event_id": "evt_1780931159735_jrpjc",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "27d2e377-a44a-42a5-845f-41a9524712d5",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780931159735
+      }
+    ]
+  }
+}

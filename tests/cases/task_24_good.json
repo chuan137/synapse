@@ -1,6 +1,5 @@
 {
   "id": 24,
-  "label": "good",
   "task": {
     "id": 24,
     "agent_id": "cec50b17:3",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 685,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 686,
@@ -58,7 +59,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -218,5 +220,288 @@
     "duration_ms": 159422,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 24,
+  "title": "Phase 2: report_file option for send_message and report_done",
+  "trigger_msg_id": 684,
+  "source_msg_id": null,
+  "result_msg_id": 684,
+  "commit_sha": "9c27f26",
+  "started_at": 1780695004338,
+  "finished_at": 1780695163760,
+  "total_duration_ms": 159422,
+  "agents": {
+    "developer:3": {
+      "agent_id": "cec50b17:3",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 58,
+          "p90_ms": 58,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 2,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 55,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 5,
+          "avg_ms": 54,
+          "p90_ms": 75,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "avg_ms": 50,
+          "p90_ms": 57,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 1,
+          "avg_ms": 3556,
+          "p90_ms": 3556,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__report_done": {
+          "calls": 1,
+          "avg_ms": 58,
+          "p90_ms": 58,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 2,
+      "active_duration_ms": 4301
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 684,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:3",
+        "content": "Add file-backed report support to `send_message` and `report_done` in `src/mcp-server.ts`.\n\n## Background\n\nFor long orchestrator→human results (code review reports, research summaries, multi-step plans), the full content shouldn't flood the S-Deck message feed. Instead: write the full report to a file, send a bus message with an executive summary + file path.\n\n## Changes required\n\n### 1. `send_message` tool schema (around line 97–121 in mcp-server.ts)\n\nAdd optional `report_file?: boolean` parameter:\n\n```json\n\"report_file\": {\n  \"type\": \"boolean\",\n  \"description\": \"If true and to_id is 'human', write the full content to .synapse/reports/<timestamp>-<slug>.md and send a truncated summary with the file path instead. Use when the message is longer than ~20 lines.\",\n  \"default\": false\n}\n```\n\n### 2. `send_message` handler (around line 380–392)\n\nExtract the logic into a helper or inline it:\n\n```typescript\nconst { to_id, content, priority = 5, report_file = false } = args as { ... };\n\nif (report_file && to_id === 'human') {\n  const reportsDir = join(process.cwd(), '.synapse', 'reports');\n  mkdirSync(reportsDir, { recursive: true });\n  const slug = content.split('\\n')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);\n  const filename = `${Date.now()}-${slug}.md`;\n  writeFileSync(join(reportsDir, filename), content, 'utf8');\n  const lines = content.split('\\n');\n  const summary = lines.slice(0, 10).join('\\n');\n  const shortMsg = `${summary}${lines.length > 10 ? '\\n…' : ''}\\n\\n[Full report: .synapse/reports/${filename}]`;\n  sendMessage(AGENT_ID, to_id, shortMsg, priority);\n  return { content: [{ type: 'text', text: 'Message sent (report filed).' }] };\n}\n// else: existing path unchanged\nsendMessage(AGENT_ID, to_id, content, priority);\n```\n\n### 3. `report_done` tool schema (around line 334–342)\n\nAdd optional `report_file?: boolean` parameter:\n\n```json\n\"report_file\": {\n  \"type\": \"boolean\",\n  \"description\": \"If true, write the full DONE report to .synapse/reports/<timestamp>-<slug>.md and send a short summary with file path to the human instead of the full content.\",\n  \"default\": false\n}\n```\n\n### 4. `report_done` handler (around line 568–584)\n\n```typescript\nconst { orchestrator_id, content, milestone, report_file = false } = args as { ... };\n\n// Send full content to orchestrator always (they need it for synthesis)\nconst orchMsgId = sendMessage(AGENT_ID, orchestrator_id, content, 5);\n\n// Human message: file it or summarize inline\nlet humanMsg: string;\nif (report_file) {\n  const reportsDir = join(process.cwd(), '.synapse', 'reports');\n  mkdirSync(reportsDir, { recursive: true });\n  const slug = content.split('\\n')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);\n  const filename = `${Date.now()}-${slug}.md`;\n  writeFileSync(join(reportsDir, filename), content, 'utf8');\n  const lines = content.split('\\n');\n  const preview = lines.slice(0, 5).join('\\n');\n  humanMsg = milestone ?? `DONE — ${preview}${lines.length > 5 ? '\\n…' : ''}\\n\\n[Full report: .synapse/reports/${filename}]`;\n} else {\n  humanMsg = milestone ?? (content.length > 200 ? `DONE — ${content.slice(0, 200).split('\\n')[0]}` : `DONE — ${content.split('\\n')[0]}`);\n}\nsendMessage(AGENT_ID, 'human', humanMsg, 5);\n```\n\n## Key constraint\n\nThe full content ALWAYS goes to the orchestrator — the file option only affects the human-facing message. The orchestrator needs full detail for synthesis.\n\n## Key files\n- `src/mcp-server.ts` — all changes here\n\nAfter implementing, run `tsc` to verify clean compile, then call `report_done` with a summary.",
+        "priority": 5,
+        "created_at": 1780695004338,
+        "read_at": 1780695006475,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 685,
+        "from_id": "cec50b17:3",
+        "to_id": "cec50b17:0",
+        "content": "DONE: report_file param added to send_message and report_done.\n\nFiles changed:\n- `src/mcp-server.ts`:\n  - `send_message` schema: added `report_file?: boolean` property\n  - `send_message` handler: when `report_file && to_id === 'human'`, writes full content to `.synapse/reports/<ts>-<slug>.md`, sends 10-line summary + file path to human\n  - `report_done` schema: added `report_file?: boolean` property\n  - `report_done` handler: full content still always sent to orchestrator; when `report_file`, writes to `.synapse/reports/<ts>-<slug>.md` and sends 5-line preview + path to human\n\nBuild: `tsc` clean.",
+        "priority": 5,
+        "created_at": 1780695071095,
+        "read_at": 1780695148368,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 686,
+        "from_id": "cec50b17:3",
+        "to_id": "human",
+        "content": "report_file param live on send_message and report_done — long reports written to .synapse/reports/",
+        "priority": 5,
+        "created_at": 1780695071095,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 3827,
+        "event_id": "evt_1780695006529_764v2",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1780695006529
+      },
+      {
+        "id": 3829,
+        "event_id": "evt_1780695012460_7x7rm",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780695012460
+      },
+      {
+        "id": 3830,
+        "event_id": "evt_1780695015005_ewpcq",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780695015005
+      },
+      {
+        "id": 3831,
+        "event_id": "evt_1780695018044_l30eh",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780695018044
+      },
+      {
+        "id": 3832,
+        "event_id": "evt_1780695018388_8h6xf",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780695018388
+      },
+      {
+        "id": 3833,
+        "event_id": "evt_1780695021177_r1g90",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780695021177
+      },
+      {
+        "id": 3834,
+        "event_id": "evt_1780695027203_jnaiu",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1780695027203
+      },
+      {
+        "id": 3835,
+        "event_id": "evt_1780695034432_s4y4d",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 45,
+        "timestamp": 1780695034432
+      },
+      {
+        "id": 3836,
+        "event_id": "evt_1780695043414_p96l2",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780695043414
+      },
+      {
+        "id": 3837,
+        "event_id": "evt_1780695045959_9gztj",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 75,
+        "timestamp": 1780695045959
+      },
+      {
+        "id": 3838,
+        "event_id": "evt_1780695048297_pf2dk",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780695048297
+      },
+      {
+        "id": 3839,
+        "event_id": "evt_1780695058608_m4fkj",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780695058608
+      },
+      {
+        "id": 3840,
+        "event_id": "evt_1780695064503_3fj5w",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 3556,
+        "timestamp": 1780695064503
+      },
+      {
+        "id": 3841,
+        "event_id": "evt_1780695071148_yvgud",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__report_done",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1780695071148
+      },
+      {
+        "id": 3842,
+        "event_id": "evt_1780695073429_v9heh",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "0db4a44c-7e91-45ca-b28b-641a25b832a6",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780695073429
+      }
+    ]
   }
 }

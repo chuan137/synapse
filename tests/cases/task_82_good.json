@@ -1,0 +1,216 @@
+{
+  "id": 82,
+  "task": {
+    "id": 82,
+    "agent_id": "cec50b17:0",
+    "title": "Clarify task doc naming in sequence — both files may coexist",
+    "status": "completed",
+    "started_at": 1780863942536,
+    "finished_at": 1780863957967,
+    "trigger_msg_id": 1264,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "6faa41b"
+  },
+  "linked_msg_ids": [
+    1264
+  ],
+  "messages": [
+    {
+      "id": 1265,
+      "from_id": "cec50b17:0",
+      "to_id": "human",
+      "content": "✅ committed 6faa41b: docs: add task doc naming convention before sequence",
+      "priority": 5,
+      "created_at": 1780863957967,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 6729,
+      "event_id": "evt_1780863942650_4gv0l",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 117,
+      "timestamp": 1780863942650
+    },
+    {
+      "id": 6730,
+      "event_id": "evt_1780863946486_js29w",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780863946486
+    },
+    {
+      "id": 6731,
+      "event_id": "evt_1780863951047_4kexi",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780863951047
+    },
+    {
+      "id": 6732,
+      "event_id": "evt_1780863954343_e7rsy",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780863954343
+    },
+    {
+      "id": 6733,
+      "event_id": "evt_1780863957965_l6hez",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 113,
+      "timestamp": 1780863957965
+    }
+  ],
+  "metrics": {
+    "tool_calls": 5,
+    "duration_ms": 15431,
+    "traceability_score": 2,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 82,
+  "title": "Clarify task doc naming in sequence — both files may coexist",
+  "trigger_msg_id": 1264,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "6faa41b",
+  "started_at": 1780863942536,
+  "finished_at": 1780863957967,
+  "total_duration_ms": 15431,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 117,
+          "p90_ms": 117,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "avg_ms": 53,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 1,
+          "avg_ms": 113,
+          "p90_ms": 113,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 386
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1265,
+        "from_id": "cec50b17:0",
+        "to_id": "human",
+        "content": "✅ committed 6faa41b: docs: add task doc naming convention before sequence",
+        "priority": 5,
+        "created_at": 1780863957967,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 6729,
+        "event_id": "evt_1780863942650_4gv0l",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 117,
+        "timestamp": 1780863942650
+      },
+      {
+        "id": 6730,
+        "event_id": "evt_1780863946486_js29w",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780863946486
+      },
+      {
+        "id": 6731,
+        "event_id": "evt_1780863951047_4kexi",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780863951047
+      },
+      {
+        "id": 6732,
+        "event_id": "evt_1780863954343_e7rsy",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780863954343
+      },
+      {
+        "id": 6733,
+        "event_id": "evt_1780863957965_l6hez",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 113,
+        "timestamp": 1780863957965
+      }
+    ]
+  }
+}

@@ -1,6 +1,5 @@
 {
   "id": 8,
-  "label": "good",
   "task": {
     "id": 8,
     "agent_id": "cec50b17:3",
@@ -29,7 +28,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -209,5 +209,264 @@
     "duration_ms": 85294,
     "traceability_score": 2,
     "has_commit": false
+  },
+  "schema_version": 2,
+  "task_id": 8,
+  "title": "Restructure activity-recording flow: agent_id, commit-before-finish, update docs",
+  "trigger_msg_id": 2,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": null,
+  "started_at": 1780677689397,
+  "finished_at": 1780677774691,
+  "total_duration_ms": 85294,
+  "agents": {
+    "developer:3": {
+      "agent_id": "cec50b17:3",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__start_activity": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 677,
+          "p90_ms": 2950,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 5,
+          "avg_ms": 52,
+          "p90_ms": 58,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 5,
+          "avg_ms": 55,
+          "p90_ms": 61,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 4022
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 601,
+        "from_id": "cec50b17:3",
+        "to_id": "cec50b17:0",
+        "content": "DONE — activity-recording restructure\n\n**Files changed:**\n- `src/mcp-server.ts` (+6/-2): added `agent_id` param to `start_activity` schema; handler uses `agent_id ?? AGENT_ID`\n- `src/db.ts` (+8/-2): `attachCommitToCurrentActivity` SQL now `ORDER BY (agent_id = ?) DESC, started_at DESC` — prefers committer's activity, falls back to most recent in-progress across all agents; added JSDoc\n- `templates/SYNAPSE-worker.md` (+5/-7): removed `start_activity` (step 2) and `finish_activity` (step 5) from per-task workflow; removed \"finish the activity normally\" from blocked recovery\n- `templates/SYNAPSE-orchestrator.md` (+12/0): added \"Recording task activities\" section with the send → start_activity → DONE → commit → finish_activity flow, plus self-driven variant\n\n**Build:** `bun run build` → clean\n\n**New orchestrator workflow:** `send_message` task → `start_activity({agent_id: worker})` → wait for DONE → `git commit` → `finish_activity`. Activity is still `in_progress` at commit time so the hook's in-progress lookup attaches the SHA correctly; `finish_activity` closes it after.\n\n**Self-driven case still works:** calling `start_activity` without `agent_id` defaults to the calling agent (orchestrator), same behaviour as before.",
+        "priority": 5,
+        "created_at": 1780677771927,
+        "read_at": 1780677780199,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 3405,
+        "event_id": "evt_1780677689445_yxgr0",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "mcp__synapse-bus__start_activity",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780677689445
+      },
+      {
+        "id": 3406,
+        "event_id": "evt_1780677693274_ud5og",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 160,
+        "timestamp": 1780677693274
+      },
+      {
+        "id": 3407,
+        "event_id": "evt_1780677693686_94opp",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 85,
+        "timestamp": 1780677693686
+      },
+      {
+        "id": 3408,
+        "event_id": "evt_1780677696314_rla37",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780677696314
+      },
+      {
+        "id": 3409,
+        "event_id": "evt_1780677696788_c0cld",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780677696788
+      },
+      {
+        "id": 3410,
+        "event_id": "evt_1780677699984_lx796",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780677699984
+      },
+      {
+        "id": 3411,
+        "event_id": "evt_1780677702613_8vrsi",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 111,
+        "timestamp": 1780677702613
+      },
+      {
+        "id": 3412,
+        "event_id": "evt_1780677705084_0g8wg",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1780677705084
+      },
+      {
+        "id": 3413,
+        "event_id": "evt_1780677705137_m25zk",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780677705137
+      },
+      {
+        "id": 3414,
+        "event_id": "evt_1780677719416_whl6u",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780677719416
+      },
+      {
+        "id": 3415,
+        "event_id": "evt_1780677724493_ytneo",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780677724493
+      },
+      {
+        "id": 3416,
+        "event_id": "evt_1780677731748_nssau",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 61,
+        "timestamp": 1780677731748
+      },
+      {
+        "id": 3417,
+        "event_id": "evt_1780677742140_fx0zb",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 57,
+        "timestamp": 1780677742140
+      },
+      {
+        "id": 3418,
+        "event_id": "evt_1780677751063_xjqmm",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780677751063
+      },
+      {
+        "id": 3419,
+        "event_id": "evt_1780677756345_jwi4e",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 2950,
+        "timestamp": 1780677756345
+      },
+      {
+        "id": 3420,
+        "event_id": "evt_1780677759194_rva35",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 81,
+        "timestamp": 1780677759194
+      },
+      {
+        "id": 3421,
+        "event_id": "evt_1780677771973_lhibk",
+        "synapse_agent_id": "cec50b17:3",
+        "session_id": "dbdf6b6c-4717-4c16-a4e5-c2856187a368",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780677771973
+      }
+    ]
   }
 }

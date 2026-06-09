@@ -1,0 +1,563 @@
+{
+  "id": 96,
+  "task": {
+    "id": 96,
+    "agent_id": "cec50b17:35",
+    "title": "Unify task workflow: start_task always first, delegate_task only sends message",
+    "status": "completed",
+    "started_at": 1780914466104,
+    "finished_at": 1780914569138,
+    "trigger_msg_id": 1339,
+    "result_msg_id": null,
+    "source_msg_id": 1337,
+    "commit_sha": "ec52130"
+  },
+  "linked_msg_ids": [
+    1337,
+    1339
+  ],
+  "messages": [
+    {
+      "id": 1339,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:35",
+      "content": "The human wants a unified task workflow where `start_task` is always called first (creates the task record), and `delegate_task` only sends a message to the worker — it should NOT create a task record internally.\n\n## What to change\n\n**1. Find and remove the internal `start_task` call in `delegate_task`**\n\nLook in `src/index.ts` (the MCP tool handler for `delegate_task`). It currently calls `start_task` internally to open a task record. Remove that internal call so `delegate_task` only:\n- Writes the task file (if `task_file: true`)\n- Sends the message to the worker\n\nThe task record must already exist (created by the orchestrator's explicit `start_task` call) before `delegate_task` is called.\n\n**2. Update `templates/SYNAPSE-orchestrator.md`**\n\nRewrite the \"Canonical Per-Task Sequence\" to a single unified sequence:\n\n```\n1. start_task    — ALWAYS call first, for every task (delegated or self-driven).\n                   • Pass trigger_msg_id = the bus message ID that initiated this task\n                   • This opens the task record on S-Deck\n\n2. Research/Plan — OPTIONAL.\n                   • Delegate to a subagent if investigation needed\n                   • Save plan to .synapse/tasks/<taskId>-plan.md\n\n3. Select worker — call list_workers\n\n4. delegate_task — send task to worker (does NOT create a task record — start_task already did that)\n                   • Pass source_msg_id = the bus message ID that initiated this task\n                   • [rest of existing delegate_task notes]\n\n5. Wait          — read_messages until DONE\n\n6. Verify        — OPTIONAL\n\n7. Merge commit  — synapse worktree merge <slug>\n\n8. finish_task   — after commit exists\n```\n\nRemove the separate \"self-driven\" vs \"delegated\" split — it's one sequence now.\n\n**3. Copy to `.synapse/SYNAPSE-orchestrator.md`**\n\nPer CLAUDE.md: after editing `templates/SYNAPSE-orchestrator.md`, copy to `.synapse/SYNAPSE-orchestrator.md`.\n\n## Worktree\n\nRun: `synapse worktree create developer-35-unify-task-workflow`\nWork in `.synapse/worktrees/developer-35-unify-task-workflow`. Commit all changes there. Do not push.\n\nReport DONE with a summary of what changed.",
+      "priority": 5,
+      "created_at": 1780914466104,
+      "read_at": 1780914468529,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1342,
+      "from_id": "cec50b17:35",
+      "to_id": "human",
+      "content": "✅ committed ec52130: feat(delegate_task): remove internal start_task; unify task sequence",
+      "priority": 5,
+      "created_at": 1780914569138,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 7253,
+      "event_id": "evt_1780914468666_f2dqr",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 141,
+      "timestamp": 1780914468666
+    },
+    {
+      "id": 7255,
+      "event_id": "evt_1780914472113_98mjt",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780914472113
+    },
+    {
+      "id": 7257,
+      "event_id": "evt_1780914475118_o0tdv",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 216,
+      "timestamp": 1780914475118
+    },
+    {
+      "id": 7258,
+      "event_id": "evt_1780914477859_bba6b",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 313,
+      "timestamp": 1780914477859
+    },
+    {
+      "id": 7259,
+      "event_id": "evt_1780914480263_p3x1o",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 90,
+      "timestamp": 1780914480263
+    },
+    {
+      "id": 7260,
+      "event_id": "evt_1780914482754_07d2s",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780914482754
+    },
+    {
+      "id": 7262,
+      "event_id": "evt_1780914487392_62535",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780914487392
+    },
+    {
+      "id": 7264,
+      "event_id": "evt_1780914489627_wytzn",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 46,
+      "timestamp": 1780914489627
+    },
+    {
+      "id": 7268,
+      "event_id": "evt_1780914501115_3aaa3",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780914501115
+    },
+    {
+      "id": 7274,
+      "event_id": "evt_1780914514212_0wz6h",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780914514212
+    },
+    {
+      "id": 7277,
+      "event_id": "evt_1780914517263_hy0nw",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 90,
+      "timestamp": 1780914517263
+    },
+    {
+      "id": 7280,
+      "event_id": "evt_1780914520548_w3q3q",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780914520548
+    },
+    {
+      "id": 7283,
+      "event_id": "evt_1780914526103_hz2c3",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 3051,
+      "timestamp": 1780914526103
+    },
+    {
+      "id": 7286,
+      "event_id": "evt_1780914530192_z687h",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780914530192
+    },
+    {
+      "id": 7289,
+      "event_id": "evt_1780914547327_ujk4n",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 53,
+      "timestamp": 1780914547327
+    },
+    {
+      "id": 7291,
+      "event_id": "evt_1780914550469_21jsm",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1780914550469
+    },
+    {
+      "id": 7293,
+      "event_id": "evt_1780914554122_6ek7v",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 51,
+      "timestamp": 1780914554122
+    },
+    {
+      "id": 7295,
+      "event_id": "evt_1780914557961_o6sgg",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 97,
+      "timestamp": 1780914557961
+    },
+    {
+      "id": 7296,
+      "event_id": "evt_1780914561509_vyy4z",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 129,
+      "timestamp": 1780914561509
+    },
+    {
+      "id": 7299,
+      "event_id": "evt_1780914569136_fk6km",
+      "synapse_agent_id": "cec50b17:35",
+      "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 97,
+      "timestamp": 1780914569136
+    }
+  ],
+  "metrics": {
+    "tool_calls": 20,
+    "duration_ms": 103034,
+    "traceability_score": 1,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 96,
+  "title": "Unify task workflow: start_task always first, delegate_task only sends message",
+  "trigger_msg_id": 1339,
+  "source_msg_id": 1337,
+  "result_msg_id": null,
+  "commit_sha": "ec52130",
+  "started_at": 1780914466104,
+  "finished_at": 1780914569138,
+  "total_duration_ms": 103034,
+  "agents": {
+    "developer:35": {
+      "agent_id": "cec50b17:35",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 141,
+          "p90_ms": 141,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 49,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 7,
+          "avg_ms": 570,
+          "p90_ms": 3051,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 6,
+          "avg_ms": 56,
+          "p90_ms": 90,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 5,
+          "avg_ms": 53,
+          "p90_ms": 60,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 4785
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1339,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:35",
+        "content": "The human wants a unified task workflow where `start_task` is always called first (creates the task record), and `delegate_task` only sends a message to the worker — it should NOT create a task record internally.\n\n## What to change\n\n**1. Find and remove the internal `start_task` call in `delegate_task`**\n\nLook in `src/index.ts` (the MCP tool handler for `delegate_task`). It currently calls `start_task` internally to open a task record. Remove that internal call so `delegate_task` only:\n- Writes the task file (if `task_file: true`)\n- Sends the message to the worker\n\nThe task record must already exist (created by the orchestrator's explicit `start_task` call) before `delegate_task` is called.\n\n**2. Update `templates/SYNAPSE-orchestrator.md`**\n\nRewrite the \"Canonical Per-Task Sequence\" to a single unified sequence:\n\n```\n1. start_task    — ALWAYS call first, for every task (delegated or self-driven).\n                   • Pass trigger_msg_id = the bus message ID that initiated this task\n                   • This opens the task record on S-Deck\n\n2. Research/Plan — OPTIONAL.\n                   • Delegate to a subagent if investigation needed\n                   • Save plan to .synapse/tasks/<taskId>-plan.md\n\n3. Select worker — call list_workers\n\n4. delegate_task — send task to worker (does NOT create a task record — start_task already did that)\n                   • Pass source_msg_id = the bus message ID that initiated this task\n                   • [rest of existing delegate_task notes]\n\n5. Wait          — read_messages until DONE\n\n6. Verify        — OPTIONAL\n\n7. Merge commit  — synapse worktree merge <slug>\n\n8. finish_task   — after commit exists\n```\n\nRemove the separate \"self-driven\" vs \"delegated\" split — it's one sequence now.\n\n**3. Copy to `.synapse/SYNAPSE-orchestrator.md`**\n\nPer CLAUDE.md: after editing `templates/SYNAPSE-orchestrator.md`, copy to `.synapse/SYNAPSE-orchestrator.md`.\n\n## Worktree\n\nRun: `synapse worktree create developer-35-unify-task-workflow`\nWork in `.synapse/worktrees/developer-35-unify-task-workflow`. Commit all changes there. Do not push.\n\nReport DONE with a summary of what changed.",
+        "priority": 5,
+        "created_at": 1780914466104,
+        "read_at": 1780914468529,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1342,
+        "from_id": "cec50b17:35",
+        "to_id": "human",
+        "content": "✅ committed ec52130: feat(delegate_task): remove internal start_task; unify task sequence",
+        "priority": 5,
+        "created_at": 1780914569138,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 7253,
+        "event_id": "evt_1780914468666_f2dqr",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 141,
+        "timestamp": 1780914468666
+      },
+      {
+        "id": 7255,
+        "event_id": "evt_1780914472113_98mjt",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780914472113
+      },
+      {
+        "id": 7257,
+        "event_id": "evt_1780914475118_o0tdv",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 216,
+        "timestamp": 1780914475118
+      },
+      {
+        "id": 7258,
+        "event_id": "evt_1780914477859_bba6b",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 313,
+        "timestamp": 1780914477859
+      },
+      {
+        "id": 7259,
+        "event_id": "evt_1780914480263_p3x1o",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 90,
+        "timestamp": 1780914480263
+      },
+      {
+        "id": 7260,
+        "event_id": "evt_1780914482754_07d2s",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780914482754
+      },
+      {
+        "id": 7262,
+        "event_id": "evt_1780914487392_62535",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780914487392
+      },
+      {
+        "id": 7264,
+        "event_id": "evt_1780914489627_wytzn",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 46,
+        "timestamp": 1780914489627
+      },
+      {
+        "id": 7268,
+        "event_id": "evt_1780914501115_3aaa3",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 60,
+        "timestamp": 1780914501115
+      },
+      {
+        "id": 7274,
+        "event_id": "evt_1780914514212_0wz6h",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780914514212
+      },
+      {
+        "id": 7277,
+        "event_id": "evt_1780914517263_hy0nw",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 90,
+        "timestamp": 1780914517263
+      },
+      {
+        "id": 7280,
+        "event_id": "evt_1780914520548_w3q3q",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780914520548
+      },
+      {
+        "id": 7283,
+        "event_id": "evt_1780914526103_hz2c3",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 3051,
+        "timestamp": 1780914526103
+      },
+      {
+        "id": 7286,
+        "event_id": "evt_1780914530192_z687h",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780914530192
+      },
+      {
+        "id": 7289,
+        "event_id": "evt_1780914547327_ujk4n",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780914547327
+      },
+      {
+        "id": 7291,
+        "event_id": "evt_1780914550469_21jsm",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1780914550469
+      },
+      {
+        "id": 7293,
+        "event_id": "evt_1780914554122_6ek7v",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780914554122
+      },
+      {
+        "id": 7295,
+        "event_id": "evt_1780914557961_o6sgg",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 97,
+        "timestamp": 1780914557961
+      },
+      {
+        "id": 7296,
+        "event_id": "evt_1780914561509_vyy4z",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 129,
+        "timestamp": 1780914561509
+      },
+      {
+        "id": 7299,
+        "event_id": "evt_1780914569136_fk6km",
+        "synapse_agent_id": "cec50b17:35",
+        "session_id": "b55c34a2-ecdb-4d61-8967-5f3077615972",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 97,
+        "timestamp": 1780914569136
+      }
+    ]
+  }
+}

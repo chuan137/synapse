@@ -1,0 +1,406 @@
+{
+  "id": 116,
+  "task": {
+    "id": 116,
+    "agent_id": "cec50b17:0",
+    "title": "Eval-loop v2 phase 1: v2 trajectory schema + extractor + evaluator with per-role thresholds",
+    "status": "completed",
+    "started_at": 1781025699376,
+    "finished_at": 1781026054275,
+    "trigger_msg_id": 1562,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "89b8241"
+  },
+  "linked_msg_ids": [
+    1562
+  ],
+  "messages": [
+    {
+      "id": 1564,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:37",
+      "content": "Task brief at .synapse/tasks/116.md\n\nEval-loop v2 phase 1 — fine-grained per-agent / per-tool trajectory data + per-role empirical thresholds.\n\nFull task spec: `.synapse/tasks/116.md`. Read it before starting.\n…",
+      "priority": 5,
+      "created_at": 1781025767617,
+      "read_at": 1781025771243,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    },
+    {
+      "id": 1565,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:37",
+      "content": "Heads up: my earlier `delegate_task` overwrote `.synapse/tasks/116.md` with just the short reference (the `task_file: true` flag wrote the message content to the file, replacing the full spec I'd authored). I've now restored the full spec at `.synapse/tasks/116.md`. Please Read it again before starting. The actual deliverables are sections A through G — schema-v2, extractor v2, `synapse eval calibrate`, evaluator with per-role thresholds, DB migration, tests, README. Sorry for the noise.",
+      "priority": 5,
+      "created_at": 1781025827967,
+      "read_at": 1781026077589,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "message"
+    },
+    {
+      "id": 1566,
+      "from_id": "cec50b17:0",
+      "to_id": "human",
+      "content": "FINDING (Synapse defect, not blocking): `delegate_task` with `task_file: true` overwrites the existing `.synapse/tasks/<id>.md` file with the short message content instead of preserving a separately-authored spec. I authored 100+ lines of spec at the file path, then `delegate_task(task_file=true, content=<short ref>)` clobbered it. The intuitive UX would be: if the file exists, send the short ref pointing at it; if not, write `content` to the file. Worth a small fix in the MCP tool. Restored the spec manually for task 116. Driving on.",
+      "priority": 5,
+      "created_at": 1781025834520,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": "finding"
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 8399,
+      "event_id": "evt_1781025699426_qqctk",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 54,
+      "timestamp": 1781025699426
+    },
+    {
+      "id": 8400,
+      "event_id": "evt_1781025702106_qsjeh",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 203,
+      "timestamp": 1781025702106
+    },
+    {
+      "id": 8401,
+      "event_id": "evt_1781025706959_xrxdd",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 70,
+      "timestamp": 1781025706959
+    },
+    {
+      "id": 8402,
+      "event_id": "evt_1781025757544_9ln21",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "Write",
+      "status": "ok",
+      "duration_ms": 58,
+      "timestamp": 1781025757544
+    },
+    {
+      "id": 8403,
+      "event_id": "evt_1781025767670_axos3",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 70,
+      "timestamp": 1781025767670
+    },
+    {
+      "id": 8404,
+      "event_id": "evt_1781025771217_8yhlp",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1781025771217
+    },
+    {
+      "id": 8423,
+      "event_id": "evt_1781025820303_4ywtv",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "Write",
+      "status": "ok",
+      "duration_ms": 275,
+      "timestamp": 1781025820303
+    },
+    {
+      "id": 8425,
+      "event_id": "evt_1781025828016_iuahj",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1781025828016
+    },
+    {
+      "id": 8426,
+      "event_id": "evt_1781025834569_pwcgl",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__send_message",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1781025834569
+    },
+    {
+      "id": 8427,
+      "event_id": "evt_1781025837250_0dfly",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1781025837250
+    }
+  ],
+  "metrics": {
+    "tool_calls": 10,
+    "duration_ms": 354899,
+    "traceability_score": 2,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 116,
+  "title": "Eval-loop v2 phase 1: v2 trajectory schema + extractor + evaluator with per-role thresholds",
+  "trigger_msg_id": 1562,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "89b8241",
+  "started_at": 1781025699376,
+  "finished_at": 1781026054275,
+  "total_duration_ms": 354899,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 54,
+          "p90_ms": 54,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 2,
+          "avg_ms": 137,
+          "p90_ms": 203,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Write": {
+          "calls": 2,
+          "avg_ms": 167,
+          "p90_ms": 275,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__delegate_task": {
+          "calls": 1,
+          "avg_ms": 70,
+          "p90_ms": 70,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__send_message": {
+          "calls": 2,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 3,
+      "active_duration_ms": 936
+    },
+    "developer:37": {
+      "agent_id": "cec50b17:37",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 2,
+      "messages_out": 0,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1564,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:37",
+        "content": "Task brief at .synapse/tasks/116.md\n\nEval-loop v2 phase 1 — fine-grained per-agent / per-tool trajectory data + per-role empirical thresholds.\n\nFull task spec: `.synapse/tasks/116.md`. Read it before starting.\n…",
+        "priority": 5,
+        "created_at": 1781025767617,
+        "read_at": 1781025771243,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      },
+      {
+        "id": 1565,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:37",
+        "content": "Heads up: my earlier `delegate_task` overwrote `.synapse/tasks/116.md` with just the short reference (the `task_file: true` flag wrote the message content to the file, replacing the full spec I'd authored). I've now restored the full spec at `.synapse/tasks/116.md`. Please Read it again before starting. The actual deliverables are sections A through G — schema-v2, extractor v2, `synapse eval calibrate`, evaluator with per-role thresholds, DB migration, tests, README. Sorry for the noise.",
+        "priority": 5,
+        "created_at": 1781025827967,
+        "read_at": 1781026077589,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "message"
+      },
+      {
+        "id": 1566,
+        "from_id": "cec50b17:0",
+        "to_id": "human",
+        "content": "FINDING (Synapse defect, not blocking): `delegate_task` with `task_file: true` overwrites the existing `.synapse/tasks/<id>.md` file with the short message content instead of preserving a separately-authored spec. I authored 100+ lines of spec at the file path, then `delegate_task(task_file=true, content=<short ref>)` clobbered it. The intuitive UX would be: if the file exists, send the short ref pointing at it; if not, write `content` to the file. Worth a small fix in the MCP tool. Restored the spec manually for task 116. Driving on.",
+        "priority": 5,
+        "created_at": 1781025834520,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": "finding"
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 8399,
+        "event_id": "evt_1781025699426_qqctk",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 54,
+        "timestamp": 1781025699426
+      },
+      {
+        "id": 8400,
+        "event_id": "evt_1781025702106_qsjeh",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 203,
+        "timestamp": 1781025702106
+      },
+      {
+        "id": 8401,
+        "event_id": "evt_1781025706959_xrxdd",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 70,
+        "timestamp": 1781025706959
+      },
+      {
+        "id": 8402,
+        "event_id": "evt_1781025757544_9ln21",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 58,
+        "timestamp": 1781025757544
+      },
+      {
+        "id": 8403,
+        "event_id": "evt_1781025767670_axos3",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 70,
+        "timestamp": 1781025767670
+      },
+      {
+        "id": 8404,
+        "event_id": "evt_1781025771217_8yhlp",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1781025771217
+      },
+      {
+        "id": 8423,
+        "event_id": "evt_1781025820303_4ywtv",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 275,
+        "timestamp": 1781025820303
+      },
+      {
+        "id": 8425,
+        "event_id": "evt_1781025828016_iuahj",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1781025828016
+      },
+      {
+        "id": 8426,
+        "event_id": "evt_1781025834569_pwcgl",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__send_message",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1781025834569
+      },
+      {
+        "id": 8427,
+        "event_id": "evt_1781025837250_0dfly",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "77fbe0cb-5573-4d2a-82a3-af17c89ac373",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1781025837250
+      }
+    ]
+  }
+}

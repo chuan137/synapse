@@ -1,0 +1,350 @@
+{
+  "id": 84,
+  "task": {
+    "id": 84,
+    "agent_id": "cec50b17:0",
+    "title": "Remove ENV_VARS_TO_FORWARD from worker spawn",
+    "status": "completed",
+    "started_at": 1780866248073,
+    "finished_at": 1780866310835,
+    "trigger_msg_id": 1277,
+    "result_msg_id": 1281,
+    "source_msg_id": null,
+    "commit_sha": "b7e0b6408902c876f5f62f62b6674abc0cdd8a69"
+  },
+  "linked_msg_ids": [
+    1277,
+    1281
+  ],
+  "messages": [
+    {
+      "id": 1279,
+      "from_id": "cec50b17:0",
+      "to_id": "cec50b17:27",
+      "content": "Work inside `.synapse/worktrees/developer-0-remove-env-forwarding`. Commit there. Do not push.\n\n**Task:** Remove the `ENV_VARS_TO_FORWARD` feature from `src/spawn.ts`. This feature explicitly forwards ANTHROPIC_* and proxy env vars from the parent process into the worker launcher script. We want to remove it to prevent env vars from leaking across projects when workers are spawned.\n\n**What to do:**\nIn `src/spawn.ts`, find and remove the `ENV_VARS_TO_FORWARD` array and all code that uses it to inject `export VAR=...` lines into the launcher script. The launcher script should only set `SYNAPSE_DB_PATH` (not any ANTHROPIC or proxy vars). Workers will rely on whatever env they inherit naturally from their tmux window.\n\nSpecifically remove:\n- The `ENV_VARS_TO_FORWARD` constant (the array with ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, etc.)\n- The `.filter()` and `.map()` that turn it into `export` lines\n- The `...envLines` spread in the `writeFileSync` call for the launcher script\n- Any `const envLines = ...` variable\n\nKeep the `SYNAPSE_DB_PATH` export in the launcher — only remove the ANTHROPIC/proxy var forwarding.\n\nAfter editing, run `npm run build` to verify it compiles. Then commit with a clear message.",
+      "priority": 5,
+      "created_at": 1780866261655,
+      "read_at": 1780866263800,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    },
+    {
+      "id": 1281,
+      "from_id": "cec50b17:27",
+      "to_id": "cec50b17:0",
+      "content": "DONE — Removed ENV_VARS_TO_FORWARD from src/spawn.ts.\n\n**Files changed:**\n- `src/spawn.ts`: Deleted the `ENV_VARS_TO_FORWARD` array, `envLines` variable (filter+map), and the `...envLines` spread. The launcher script now only sets `SYNAPSE_DB_PATH`; ANTHROPIC_* and proxy vars are no longer injected.\n\n**Build:** `npm run build` — clean, no errors.\n\n**Commit:** b7e0b64 on branch `synapse/developer-0-remove-env-forwarding`",
+      "priority": 5,
+      "created_at": 1780866292048,
+      "read_at": 1780866293917,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 6884,
+      "event_id": "evt_1780866248122_peoty",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": 1780866248122
+    },
+    {
+      "id": 6885,
+      "event_id": "evt_1780866250949_0vff7",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 200,
+      "timestamp": 1780866250949
+    },
+    {
+      "id": 6886,
+      "event_id": "evt_1780866252589_m6j5t",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "mcp__synapse-bus__list_workers",
+      "status": "ok",
+      "duration_ms": 48,
+      "timestamp": 1780866252589
+    },
+    {
+      "id": 6887,
+      "event_id": "evt_1780866261701_qyx1n",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "mcp__synapse-bus__delegate_task",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780866261701
+    },
+    {
+      "id": 6889,
+      "event_id": "evt_1780866263913_5ph4v",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 56,
+      "timestamp": 1780866263913
+    },
+    {
+      "id": 6896,
+      "event_id": "evt_1780866293971_y46cu",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "mcp__synapse-bus__read_messages",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780866293971
+    },
+    {
+      "id": 6898,
+      "event_id": "evt_1780866296260_seg4n",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "mcp__synapse-bus__update_status",
+      "status": "ok",
+      "duration_ms": 196,
+      "timestamp": 1780866296260
+    },
+    {
+      "id": 6899,
+      "event_id": "evt_1780866300521_1pklk",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 80,
+      "timestamp": 1780866300521
+    },
+    {
+      "id": 6900,
+      "event_id": "evt_1780866304374_fiq47",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 66,
+      "timestamp": 1780866304374
+    }
+  ],
+  "metrics": {
+    "tool_calls": 9,
+    "duration_ms": 62762,
+    "traceability_score": 1,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 84,
+  "title": "Remove ENV_VARS_TO_FORWARD from worker spawn",
+  "trigger_msg_id": 1277,
+  "source_msg_id": null,
+  "result_msg_id": 1281,
+  "commit_sha": "b7e0b6408902c876f5f62f62b6674abc0cdd8a69",
+  "started_at": 1780866248073,
+  "finished_at": 1780866310835,
+  "total_duration_ms": 62762,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 52,
+          "p90_ms": 52,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 3,
+          "avg_ms": 115,
+          "p90_ms": 200,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__list_workers": {
+          "calls": 1,
+          "avg_ms": 48,
+          "p90_ms": 48,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__delegate_task": {
+          "calls": 1,
+          "avg_ms": 49,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 2,
+          "avg_ms": 126,
+          "p90_ms": 196,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 59,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 806
+    },
+    "developer:27": {
+      "agent_id": "cec50b17:27",
+      "role": "developer",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1279,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:27",
+        "content": "Work inside `.synapse/worktrees/developer-0-remove-env-forwarding`. Commit there. Do not push.\n\n**Task:** Remove the `ENV_VARS_TO_FORWARD` feature from `src/spawn.ts`. This feature explicitly forwards ANTHROPIC_* and proxy env vars from the parent process into the worker launcher script. We want to remove it to prevent env vars from leaking across projects when workers are spawned.\n\n**What to do:**\nIn `src/spawn.ts`, find and remove the `ENV_VARS_TO_FORWARD` array and all code that uses it to inject `export VAR=...` lines into the launcher script. The launcher script should only set `SYNAPSE_DB_PATH` (not any ANTHROPIC or proxy vars). Workers will rely on whatever env they inherit naturally from their tmux window.\n\nSpecifically remove:\n- The `ENV_VARS_TO_FORWARD` constant (the array with ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, etc.)\n- The `.filter()` and `.map()` that turn it into `export` lines\n- The `...envLines` spread in the `writeFileSync` call for the launcher script\n- Any `const envLines = ...` variable\n\nKeep the `SYNAPSE_DB_PATH` export in the launcher — only remove the ANTHROPIC/proxy var forwarding.\n\nAfter editing, run `npm run build` to verify it compiles. Then commit with a clear message.",
+        "priority": 5,
+        "created_at": 1780866261655,
+        "read_at": 1780866263800,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 1281,
+        "from_id": "cec50b17:27",
+        "to_id": "cec50b17:0",
+        "content": "DONE — Removed ENV_VARS_TO_FORWARD from src/spawn.ts.\n\n**Files changed:**\n- `src/spawn.ts`: Deleted the `ENV_VARS_TO_FORWARD` array, `envLines` variable (filter+map), and the `...envLines` spread. The launcher script now only sets `SYNAPSE_DB_PATH`; ANTHROPIC_* and proxy vars are no longer injected.\n\n**Build:** `npm run build` — clean, no errors.\n\n**Commit:** b7e0b64 on branch `synapse/developer-0-remove-env-forwarding`",
+        "priority": 5,
+        "created_at": 1780866292048,
+        "read_at": 1780866293917,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 6884,
+        "event_id": "evt_1780866248122_peoty",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 52,
+        "timestamp": 1780866248122
+      },
+      {
+        "id": 6885,
+        "event_id": "evt_1780866250949_0vff7",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 200,
+        "timestamp": 1780866250949
+      },
+      {
+        "id": 6886,
+        "event_id": "evt_1780866252589_m6j5t",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "mcp__synapse-bus__list_workers",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780866252589
+      },
+      {
+        "id": 6887,
+        "event_id": "evt_1780866261701_qyx1n",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "mcp__synapse-bus__delegate_task",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780866261701
+      },
+      {
+        "id": 6889,
+        "event_id": "evt_1780866263913_5ph4v",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 56,
+        "timestamp": 1780866263913
+      },
+      {
+        "id": 6896,
+        "event_id": "evt_1780866293971_y46cu",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780866293971
+      },
+      {
+        "id": 6898,
+        "event_id": "evt_1780866296260_seg4n",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 196,
+        "timestamp": 1780866296260
+      },
+      {
+        "id": 6899,
+        "event_id": "evt_1780866300521_1pklk",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 80,
+        "timestamp": 1780866300521
+      },
+      {
+        "id": 6900,
+        "event_id": "evt_1780866304374_fiq47",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "ba6ec19f-aa2c-4681-8329-350a26b71d3a",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 66,
+        "timestamp": 1780866304374
+      }
+    ]
+  }
+}

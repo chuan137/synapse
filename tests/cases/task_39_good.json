@@ -1,6 +1,5 @@
 {
   "id": 39,
-  "label": "good",
   "task": {
     "id": 39,
     "agent_id": "cec50b17:23",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 826,
@@ -44,7 +44,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 827,
@@ -58,7 +59,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     },
     {
       "id": 828,
@@ -72,7 +74,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -132,5 +135,189 @@
     "duration_ms": 36073,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 39,
+  "title": "Add source_msg_id lint check in guard.ts",
+  "trigger_msg_id": 825,
+  "source_msg_id": null,
+  "result_msg_id": 827,
+  "commit_sha": "c9d442d",
+  "started_at": 1780743241790,
+  "finished_at": 1780743277863,
+  "total_duration_ms": 36073,
+  "agents": {
+    "developer:23": {
+      "agent_id": "cec50b17:23",
+      "role": "developer",
+      "tools": {
+        "mcp__synapse-bus__read_messages": {
+          "calls": 1,
+          "avg_ms": 204,
+          "p90_ms": 204,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "mcp__synapse-bus__update_status": {
+          "calls": 1,
+          "avg_ms": 49,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 73,
+          "p90_ms": 73,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 59,
+          "p90_ms": 59,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 1,
+          "avg_ms": 3297,
+          "p90_ms": 3297,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 3,
+      "active_duration_ms": 3682
+    },
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {},
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 0
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 825,
+        "from_id": "cec50b17:0",
+        "to_id": "cec50b17:23",
+        "content": "Add a lint check to `src/hooks/guard.ts` that enforces `source_msg_id` is explicitly set on every `delegate_task` call.\n\n## What to add\n\nIn the `guard()` function, add a new check **before** the existing `guardReason()` / operator-approval flow:\n\n```typescript\n// Lint check: delegate_task must declare source_msg_id (null is valid; absent is not)\nif (tool === 'mcp__synapse-bus__delegate_task') {\n  if (!('source_msg_id' in input)) {\n    return deny(\n      'source_msg_id is required on delegate_task. ' +\n      'Pass source_msg_id: <message_id> if this task was triggered by a human message ' +\n      '(get the ID from read_messages), or source_msg_id: null if self-initiated. ' +\n      'This field is required for task traceability.'\n    );\n  }\n  return allow();\n}\n```\n\nPlace this block at the top of `guard()`, right after extracting `tool`, `input`, `sessionId` — before the `guardReason()` call and before the `agent` lookup. This way:\n- No operator UI is shown\n- No waiting for approval\n- The deny reason is injected immediately into the agent's context as a tool result\n- The agent retries with the field set\n\n## Notes\n- `tool` for MCP tools is the full namespaced name: `mcp__synapse-bus__delegate_task`\n- `input` is `payload.tool_input` — already extracted at the top of `guard()`\n- `'source_msg_id' in input` is true whether the value is a number or `null` — only fails when the key is entirely absent\n- The `allow()` at the end of the block exits early so the normal guard flow (destructive Bash, sensitive paths) doesn't run for this tool\n\nRun `npm run build`. Commit: `feat: lint check — require source_msg_id on delegate_task calls`\n\nReport DONE to cec50b17:0.",
+        "priority": 5,
+        "created_at": 1780743241790,
+        "read_at": 1780743248297,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 826,
+        "from_id": "cec50b17:23",
+        "to_id": "human",
+        "content": "✅ committed c9d442d: feat: lint check — require source_msg_id on delegate_task calls",
+        "priority": 5,
+        "created_at": 1780743271504,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 827,
+        "from_id": "cec50b17:23",
+        "to_id": "cec50b17:0",
+        "content": "DONE (commit c9d442d). Added to `src/hooks/guard.ts` in `guard()`, before the `guardReason()` call:\n\n- Checks `tool === 'mcp__synapse-bus__delegate_task'`\n- If `source_msg_id` key is absent from `input`, immediately `deny()` with a descriptive message telling the agent to pass either a message ID or `null`\n- If key is present (any value including `null`), `allow()` early — skips the destructive Bash / sensitive path checks entirely\n\n`npm run build` clean.",
+        "priority": 5,
+        "created_at": 1780743277863,
+        "read_at": 1780743280524,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      },
+      {
+        "id": 828,
+        "from_id": "cec50b17:23",
+        "to_id": "human",
+        "content": "DONE: delegate_task guard requires source_msg_id (c9d442d)",
+        "priority": 5,
+        "created_at": 1780743277863,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 4480,
+        "event_id": "evt_1780743248498_49m4x",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__read_messages",
+        "status": "ok",
+        "duration_ms": 204,
+        "timestamp": 1780743248498
+      },
+      {
+        "id": 4481,
+        "event_id": "evt_1780743251950_z2dvj",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "mcp__synapse-bus__update_status",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780743251950
+      },
+      {
+        "id": 4482,
+        "event_id": "evt_1780743254864_x1rr4",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 73,
+        "timestamp": 1780743254864
+      },
+      {
+        "id": 4483,
+        "event_id": "evt_1780743264809_84b39",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780743264809
+      },
+      {
+        "id": 4484,
+        "event_id": "evt_1780743271502_bhk7b",
+        "synapse_agent_id": "cec50b17:23",
+        "session_id": "c4117564-e0ef-454d-b7bf-bca12a1828c5",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 3297,
+        "timestamp": 1780743271502
+      }
+    ]
   }
 }

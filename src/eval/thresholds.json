@@ -1,0 +1,23 @@
+{
+  "calibrated_at": "2026-06-09T17:31:54.604Z",
+  "sample_size": {
+    "developer": 23,
+    "orchestrator": 21
+  },
+  "by_role": {
+    "developer": {
+      "tool_calls_p90": 25,
+      "duration_ms_p90": 3894,
+      "error_rate_max": 0.05,
+      "has_commit": true
+    },
+    "orchestrator": {
+      "tool_calls_p90": 15,
+      "duration_ms_p90": 2531,
+      "error_rate_max": 0.05
+    }
+  },
+  "task_level": {
+    "traceability_score_max": 1
+  }
+}

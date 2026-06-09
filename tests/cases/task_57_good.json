@@ -1,6 +1,5 @@
 {
   "id": 57,
-  "label": "good",
   "task": {
     "id": 57,
     "agent_id": "cec50b17:25",
@@ -30,7 +29,8 @@
       "approved_at": null,
       "request_options": null,
       "selected_option": null,
-      "task_id": null
+      "task_id": null,
+      "type": null
     }
   ],
   "tool_metrics": [
@@ -160,5 +160,212 @@
     "duration_ms": 62733,
     "traceability_score": 1,
     "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 57,
+  "title": "Synapse-Evolve Phase 2: trajectory evaluator with threshold scoring",
+  "trigger_msg_id": 971,
+  "source_msg_id": 964,
+  "result_msg_id": null,
+  "commit_sha": "4d30d42",
+  "started_at": 1780755383769,
+  "finished_at": 1780755446502,
+  "total_duration_ms": 62733,
+  "agents": {
+    "developer:25": {
+      "agent_id": "cec50b17:25",
+      "role": "developer",
+      "tools": {
+        "ExitWorktree": {
+          "calls": 0,
+          "avg_ms": 0,
+          "p90_ms": 0,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "EnterWorktree": {
+          "calls": 1,
+          "avg_ms": 86,
+          "p90_ms": 86,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 5,
+          "avg_ms": 289,
+          "p90_ms": 863,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Write": {
+          "calls": 2,
+          "avg_ms": 52,
+          "p90_ms": 53,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 2,
+          "avg_ms": 52,
+          "p90_ms": 55,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "avg_ms": 51,
+          "p90_ms": 51,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 1790
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 972,
+        "from_id": "cec50b17:25",
+        "to_id": "human",
+        "content": "✅ committed 4d30d42: feat: eval Phase 2 — trajectory evaluator with threshold scoring",
+        "priority": 5,
+        "created_at": 1780755446502,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 5185,
+        "event_id": "evt_1780755394137_qxhpv",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "ExitWorktree",
+        "status": "ok",
+        "duration_ms": null,
+        "timestamp": 1780755394137
+      },
+      {
+        "id": 5186,
+        "event_id": "evt_1780755397495_9xth8",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "EnterWorktree",
+        "status": "ok",
+        "duration_ms": 86,
+        "timestamp": 1780755397495
+      },
+      {
+        "id": 5187,
+        "event_id": "evt_1780755401612_pckuz",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 85,
+        "timestamp": 1780755401612
+      },
+      {
+        "id": 5188,
+        "event_id": "evt_1780755409090_jkmyd",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780755409090
+      },
+      {
+        "id": 5189,
+        "event_id": "evt_1780755412694_0358b",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 55,
+        "timestamp": 1780755412694
+      },
+      {
+        "id": 5190,
+        "event_id": "evt_1780755418705_ibb13",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Write",
+        "status": "ok",
+        "duration_ms": 53,
+        "timestamp": 1780755418705
+      },
+      {
+        "id": 5191,
+        "event_id": "evt_1780755422672_0m3c8",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 217,
+        "timestamp": 1780755422672
+      },
+      {
+        "id": 5192,
+        "event_id": "evt_1780755425439_9l4yu",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 48,
+        "timestamp": 1780755425439
+      },
+      {
+        "id": 5193,
+        "event_id": "evt_1780755433390_ucu37",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 51,
+        "timestamp": 1780755433390
+      },
+      {
+        "id": 5194,
+        "event_id": "evt_1780755436739_j6o7n",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 863,
+        "timestamp": 1780755436739
+      },
+      {
+        "id": 5195,
+        "event_id": "evt_1780755440043_2ecsl",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 172,
+        "timestamp": 1780755440043
+      },
+      {
+        "id": 5196,
+        "event_id": "evt_1780755446500_a3zy2",
+        "synapse_agent_id": "cec50b17:25",
+        "session_id": "de3b862e-f814-4133-ae53-ec1fe36e47ee",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 110,
+        "timestamp": 1780755446500
+      }
+    ]
   }
 }

@@ -1,0 +1,216 @@
+{
+  "id": 83,
+  "task": {
+    "id": 83,
+    "agent_id": "cec50b17:0",
+    "title": "Update worker sequence to reference both task doc files",
+    "status": "completed",
+    "started_at": 1780864022047,
+    "finished_at": 1780864037132,
+    "trigger_msg_id": 1267,
+    "result_msg_id": null,
+    "source_msg_id": null,
+    "commit_sha": "614968b"
+  },
+  "linked_msg_ids": [
+    1267
+  ],
+  "messages": [
+    {
+      "id": 1268,
+      "from_id": "cec50b17:0",
+      "to_id": "human",
+      "content": "✅ committed 614968b: docs: update worker sequence to reference both task doc files",
+      "priority": 5,
+      "created_at": 1780864037132,
+      "read_at": null,
+      "needs_approval": 0,
+      "approved_at": null,
+      "request_options": null,
+      "selected_option": null,
+      "task_id": null,
+      "type": null
+    }
+  ],
+  "tool_metrics": [
+    {
+      "id": 6740,
+      "event_id": "evt_1780864022093_8f2vs",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "mcp__synapse-bus__start_task",
+      "status": "ok",
+      "duration_ms": 49,
+      "timestamp": 1780864022093
+    },
+    {
+      "id": 6741,
+      "event_id": "evt_1780864026889_vpw6b",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 59,
+      "timestamp": 1780864026889
+    },
+    {
+      "id": 6742,
+      "event_id": "evt_1780864029529_4vc7p",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Read",
+      "status": "ok",
+      "duration_ms": 50,
+      "timestamp": 1780864029529
+    },
+    {
+      "id": 6743,
+      "event_id": "evt_1780864033886_clzc2",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Edit",
+      "status": "ok",
+      "duration_ms": 60,
+      "timestamp": 1780864033886
+    },
+    {
+      "id": 6744,
+      "event_id": "evt_1780864037130_p8x1r",
+      "synapse_agent_id": "cec50b17:0",
+      "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+      "tool": "Bash",
+      "status": "ok",
+      "duration_ms": 115,
+      "timestamp": 1780864037130
+    }
+  ],
+  "metrics": {
+    "tool_calls": 5,
+    "duration_ms": 15085,
+    "traceability_score": 2,
+    "has_commit": true
+  },
+  "schema_version": 2,
+  "task_id": 83,
+  "title": "Update worker sequence to reference both task doc files",
+  "trigger_msg_id": 1267,
+  "source_msg_id": null,
+  "result_msg_id": null,
+  "commit_sha": "614968b",
+  "started_at": 1780864022047,
+  "finished_at": 1780864037132,
+  "total_duration_ms": 15085,
+  "agents": {
+    "orchestrator:0": {
+      "agent_id": "cec50b17:0",
+      "role": "orchestrator",
+      "tools": {
+        "mcp__synapse-bus__start_task": {
+          "calls": 1,
+          "avg_ms": 49,
+          "p90_ms": 49,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "avg_ms": 60,
+          "p90_ms": 60,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Read": {
+          "calls": 1,
+          "avg_ms": 50,
+          "p90_ms": 50,
+          "errors": 0,
+          "error_rate": 0
+        },
+        "Bash": {
+          "calls": 1,
+          "avg_ms": 115,
+          "p90_ms": 115,
+          "errors": 0,
+          "error_rate": 0
+        }
+      },
+      "blocked_events": [],
+      "messages_in": 0,
+      "messages_out": 1,
+      "active_duration_ms": 333
+    }
+  },
+  "blocked_events": [],
+  "label": "good",
+  "raw": {
+    "messages": [
+      {
+        "id": 1268,
+        "from_id": "cec50b17:0",
+        "to_id": "human",
+        "content": "✅ committed 614968b: docs: update worker sequence to reference both task doc files",
+        "priority": 5,
+        "created_at": 1780864037132,
+        "read_at": null,
+        "needs_approval": 0,
+        "approved_at": null,
+        "request_options": null,
+        "selected_option": null,
+        "task_id": null,
+        "type": null
+      }
+    ],
+    "tool_metrics": [
+      {
+        "id": 6740,
+        "event_id": "evt_1780864022093_8f2vs",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "mcp__synapse-bus__start_task",
+        "status": "ok",
+        "duration_ms": 49,
+        "timestamp": 1780864022093
+      },
+      {
+        "id": 6741,
+        "event_id": "evt_1780864026889_vpw6b",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 59,
+        "timestamp": 1780864026889
+      },
+      {
+        "id": 6742,
+        "event_id": "evt_1780864029529_4vc7p",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Read",
+        "status": "ok",
+        "duration_ms": 50,
+        "timestamp": 1780864029529
+      },
+      {
+        "id": 6743,
+        "event_id": "evt_1780864033886_clzc2",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Edit",
+        "status": "ok",
+        "duration_ms": 60,
+        "timestamp": 1780864033886
+      },
+      {
+        "id": 6744,
+        "event_id": "evt_1780864037130_p8x1r",
+        "synapse_agent_id": "cec50b17:0",
+        "session_id": "6cf7a545-4106-4ce5-9142-06ac1a9c2435",
+        "tool": "Bash",
+        "status": "ok",
+        "duration_ms": 115,
+        "timestamp": 1780864037130
+      }
+    ]
+  }
+}
