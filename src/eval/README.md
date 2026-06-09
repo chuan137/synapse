@@ -166,6 +166,60 @@ Both paths are valid. Empty `agents` maps are valid v2 (orchestrator-only tasks 
 
 ---
 
+## Critic + Gate v2
+
+### Critic
+
+`synapse eval --critic` reads a v2 case file, extracts the `agents` map, soft signals, and failure metrics, then prompts an LLM (sonnet) to propose a per-role protocol patch.
+
+**Patch output format** (`tests/patches/task_<id>_patch.md`):
+```
+---
+target_file: templates/SYNAPSE-worker.md
+target_role: developer
+failure_metric: tool_calls
+---
+# Critic patch for Task #103
+
+## Root cause
+The orchestrator didn't call read_messages before start_task...
+
+## Proposed rule change
+Add: "Before calling start_task..."
+
+## Expected impact
+traceability_score → 0
+```
+
+- `target_file`: which protocol template the patch targets (`SYNAPSE-worker.md`, `SYNAPSE-orchestrator.md`, or `SYNAPSE.md` for cross-role)
+- `target_role`: the agent role that failed; `null` = cross-role
+- `failure_metric`: which threshold or signal triggered the patch
+
+### Gate
+
+`synapse eval --gate` validates each patch:
+1. **Regression check**: re-evaluates good cases against the patch's target role. Role-specific patches only re-check cases where that role was the primary agent. Cross-role patches re-check all cases.
+2. **Coverage check**: asks Haiku whether the patch logically addresses the per-role failure (`ROLE_ADDRESSED: YES/NO`).
+
+**Gate output** (`tests/gate_results/gate_task_<id>_patch.json`):
+```json
+{
+  "patch_file": "tests/patches/task_103_patch.md",
+  "target_role": "orchestrator",
+  "target_file": "templates/SYNAPSE-orchestrator.md",
+  "regression_pass": true,
+  "coverage_verdict": "VERDICT: ADEQUATE\nROLE_ADDRESSED: YES\nREASON: ...",
+  "coverage_verdict_role": true,
+  "deploy_recommended": true
+}
+```
+
+`deploy_recommended = regression_pass AND adequate AND role_addressed`.
+
+See `tests/patches/README.md` for the patch frontmatter reference.
+
+---
+
 ## Tests
 
 ```sh
