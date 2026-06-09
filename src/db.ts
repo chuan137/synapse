@@ -144,6 +144,8 @@ export function openDb(dbPath: string): Database.Database {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_results_unique ON eval_results(task_id, metric)`,
     `ALTER TABLE eval_results ADD COLUMN role TEXT`,
     `ALTER TABLE eval_results ADD COLUMN agent_id TEXT`,
+    `ALTER TABLE agent_status ADD COLUMN current_task_id INTEGER`,
+    `ALTER TABLE tool_metrics ADD COLUMN task_id INTEGER`,
   ]) {
     try { database.exec(sql); } catch { /* already applied or not applicable */ }
   }
@@ -203,6 +205,7 @@ export interface AgentStatus {
   tmux_pane: string | null;
   state: 'idle' | 'working' | 'blocked' | 'error';
   current_task: string | null;
+  current_task_id: number | null;
   updated_at: number;
   ended_at: number | null;
   boot_task: string | null;
@@ -319,10 +322,10 @@ const stmts = {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `),
 
-  insertToolMetric: db.prepare<[string, string, string, string, string, number | null, number]>(`
+  insertToolMetric: db.prepare<[string, string, string, string, string, number | null, number, number | null]>(`
     INSERT OR IGNORE INTO tool_metrics
-      (event_id, synapse_agent_id, session_id, tool, status, duration_ms, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+      (event_id, synapse_agent_id, session_id, tool, status, duration_ms, timestamp, task_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `),
 
   recentEvents: db.prepare<[number], EventRow>(`
@@ -825,8 +828,12 @@ export function ingestEvent(ev: InspectorEvent): string | null {
         ? payload.tool
         : ev.event.slice('tool:after:'.length);
       const status = payload.status === 'error' ? 'error' : 'ok';
+      // Read current_task_id cookie for this agent (set by delegate_task, cleared by report_done/finish_task).
+      // Workers have exactly one active task at a time; orchestrators interleave → always NULL.
+      const agentRow = db.prepare(`SELECT current_task_id FROM agent_status WHERE agent_id = ?`).get(agent.agent_id) as { current_task_id: number | null } | undefined;
+      const taskId = agentRow?.current_task_id ?? null;
       stmts.insertToolMetric.run(
-        ev.id, agent.agent_id, ev.sessionId, tool, status, durationMs, ev.timestamp,
+        ev.id, agent.agent_id, ev.sessionId, tool, status, durationMs, ev.timestamp, taskId,
       );
     }
 
@@ -1033,6 +1040,21 @@ export function writeEvalResults(
 export function getRoleByAgentId(agentId: string): string | null {
   const row = db.prepare(`SELECT role FROM agent_status WHERE agent_id = ?`).get(agentId) as any;
   return row?.role ?? null;
+}
+
+/** Set the active task cookie for a worker agent. Called on delegate_task. */
+export function setCurrentTaskId(agentId: string, taskId: number): void {
+  db.prepare(`UPDATE agent_status SET current_task_id = ? WHERE agent_id = ?`).run(taskId, agentId);
+}
+
+/** Clear the active task cookie for a worker agent. Called on report_done. */
+export function clearCurrentTaskId(agentId: string): void {
+  db.prepare(`UPDATE agent_status SET current_task_id = NULL WHERE agent_id = ?`).run(agentId);
+}
+
+/** Safety net: clear cookie from any agent still holding the given task_id. Called on finish_task. */
+export function clearCurrentTaskIdForTask(taskId: number): void {
+  db.prepare(`UPDATE agent_status SET current_task_id = NULL WHERE current_task_id = ?`).run(taskId);
 }
 
 export function getEvalResults(taskId: number): EvalResultRow[] {

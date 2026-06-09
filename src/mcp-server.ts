@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -587,6 +587,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       commit_sha?: string;
     };
     const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
+    // Safety net: clear cookie from any worker still attributed to this task
+    clearCurrentTaskIdForTask(task_id);
     if (ok && status === 'completed') {
       const indexJs = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
       const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(task_id)], {
@@ -639,6 +641,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       outboundContent = `Task brief at .synapse/tasks/${fileId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
     }
     const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
+    // Set worker cookie: attribute subsequent tool_metrics rows to this task.
+    // Only set when task_id is known; orchestrators never receive a cookie.
+    if (task_id !== undefined) {
+      setCurrentTaskId(to_id, task_id);
+    }
     return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}` }] };
   }
 
@@ -651,6 +658,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
     // Full content always goes to orchestrator
     const orchMsgId = sendMessage(AGENT_ID, orchestrator_id, content, 5);
+    // Clear worker cookie — this worker's task is done
+    clearCurrentTaskId(AGENT_ID);
     // Human message: file it or summarize inline
     let humanMsg: string;
     if (report_file) {
