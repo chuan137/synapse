@@ -551,8 +551,9 @@ program
   .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')
   .option('--gate', 'Run validation gate on all critic patches')
   .option('--calibrate', 'Compute per-role p90 thresholds from good cases and write src/eval/thresholds.json')
+  .option('--from-curated', 'Calibrate from tests/cases/ (pinned baseline) instead of .synapse/cases/ (full raw corpus)')
   .option('--percentile <n>', 'Percentile for --calibrate threshold computation', '90')
-  .option('--regenerate-all', 'Re-extract every task that has an existing case file (upgrades v1 to v2)')
+  .option('--regenerate-all', 'Re-extract every task that has an existing raw case file (upgrades v1 to v2)')
   .option('--limit <n>', 'Number of most recent completed tasks to evaluate', '20')
   .option('--task-id <n>', 'Evaluate a single task by ID and write results to eval_results table')
   .action(async (options) => {
@@ -561,27 +562,54 @@ program
     const { writeFileSync, readdirSync } = await import('fs');
     const { join } = await import('path');
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
-    const casesDir = join(process.cwd(), 'tests', 'cases');
+    // Raw cases: auto-extracted, gitignored, full corpus for calibration.
+    // Curated cases: hand-selected via `eval select`, committed, regression baseline.
+    const rawCasesDir     = join(process.cwd(), '.synapse', 'cases');
+    const curatedCasesDir = join(process.cwd(), 'tests', 'cases');
+    const casesDir = rawCasesDir;   // eval reads raw by default
     const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
     const limit = parseInt(options.limit, 10);
 
     if (options.calibrate) {
-      const { readdirSync: readDir, readFileSync: readF, writeFileSync: writeF, existsSync: checkExists } = await import('fs');
+      const { readdirSync: readDir, readFileSync: readF, writeFileSync: writeF, existsSync: checkExists, mkdirSync: mkDir } = await import('fs');
       const { fileURLToPath: fu } = await import('url');
       const { dirname: dn } = await import('path');
       const pct = Math.min(100, Math.max(1, parseInt(options.percentile ?? '90', 10))) / 100;
       const MIN_SAMPLES = 3;
 
-      if (!checkExists(casesDir)) {
-        process.stderr.write(`error: cases directory not found: ${casesDir}\n`);
-        process.exit(1);
+      // Default: read from raw corpus (.synapse/cases/) for broader calibration.
+      // --from-curated: read from tests/cases/ for pinned regression-stable thresholds.
+      const calibrateDir = options.fromCurated ? curatedCasesDir : rawCasesDir;
+      const calibrateLabel = options.fromCurated ? 'curated (tests/cases/)' : 'raw (.synapse/cases/)';
+
+      if (!checkExists(calibrateDir)) {
+        if (options.fromCurated) {
+          process.stdout.write(`WARNING: curated dir empty (${calibrateDir} not found). Writing _default-only thresholds.\n`);
+        } else {
+          process.stderr.write(`error: raw cases directory not found: ${calibrateDir}\n`);
+          process.exit(1);
+        }
       }
 
-      const goodFiles = readDir(casesDir).filter((f: string) => f.endsWith('_good.json'));
+      const goodFiles = checkExists(calibrateDir)
+        ? readDir(calibrateDir).filter((f: string) => f.endsWith('_good.json'))
+        : [];
+
       if (goodFiles.length === 0) {
-        process.stderr.write(`No *_good.json cases found in ${casesDir}\n`);
-        process.exit(1);
+        process.stdout.write(`WARNING: No *_good.json cases found in ${calibrateDir} — writing default thresholds only.\n`);
+        const evalSrcDir = join(process.cwd(), 'src', 'eval');
+        mkDir(evalSrcDir, { recursive: true });
+        writeF(join(evalSrcDir, 'thresholds.json'), JSON.stringify({
+          calibrated_at: new Date().toISOString(),
+          sample_size: {},
+          by_role: {},
+          task_level: { traceability_score_max: 1 },
+          _warning: `No cases found in ${calibrateLabel} — thresholds are empty defaults`,
+        }, null, 2));
+        process.exit(0);
       }
+
+      process.stdout.write(`Calibrating from ${calibrateLabel} (${goodFiles.length} good cases)...\n`);
 
       const byRole: Record<string, {
         toolCalls: number[]; durationMs: number[]; activeDurationMs: number[];
@@ -590,7 +618,7 @@ program
       }> = {};
 
       for (const f of goodFiles) {
-        const c = JSON.parse(readF(join(casesDir, f), 'utf8')) as any;
+        const c = JSON.parse(readF(join(calibrateDir, f), 'utf8')) as any;
         if (c.label !== 'good') continue;
 
         // v2 path: per-agent stats
@@ -679,8 +707,9 @@ program
 
     if (options.regenerateAll) {
       const { regenerateAllCases } = await import('./eval/extract.js');
-      process.stdout.write(`Regenerating all case files in ${casesDir}...\n`);
-      const count = regenerateAllCases(dbPath, casesDir);
+      // Regenerate reads existing case files (raw dir) and re-extracts from DB
+      process.stdout.write(`Regenerating all case files in ${rawCasesDir}...\n`);
+      const count = regenerateAllCases(dbPath, rawCasesDir);
       process.stdout.write(`Regenerated ${count} case files.\n`);
       process.exit(0);
     }
@@ -790,6 +819,88 @@ program
         process.stdout.write(`  ${p}: regression=${result.regression_pass} coverage=${result.deploy_recommended ? 'ADEQUATE' : 'INADEQUATE'} → ${result.deploy_recommended ? 'DEPLOY ✓' : 'HOLD ✗'}\n`);
       }
     }
+  });
+
+program
+  .command('eval-select [task_id]')
+  .description('Select/deselect a raw case for the curated test corpus, or list the curated set')
+  .option('--label <label>', 'Override label (good|bad) — inferred from filename if omitted')
+  .option('--remove', 'Remove task from curated set (does NOT touch raw)')
+  .option('--list', 'List all cases currently in the curated set')
+  .action(async (taskId: string | undefined, options) => {
+    const { copyFileSync, readdirSync: readDir, rmSync, existsSync: checkExists, readFileSync: readF, mkdirSync: mkDir } = await import('fs');
+    const { join } = await import('path');
+
+    const rawDir     = join(process.cwd(), '.synapse', 'cases');
+    const curatedDir = join(process.cwd(), 'tests', 'cases');
+
+    if (options.list) {
+      if (!checkExists(curatedDir)) {
+        process.stdout.write('Curated set: empty (tests/cases/ does not exist)\n');
+        process.exit(0);
+      }
+      const files = readDir(curatedDir).filter((f: string) => f.endsWith('.json'));
+      if (files.length === 0) {
+        process.stdout.write('Curated set: empty. Use `synapse eval-select <id>` to add cases.\n');
+        process.exit(0);
+      }
+      process.stdout.write(`Curated set (${files.length} cases):\n`);
+      for (const f of files.sort()) {
+        try {
+          const c = JSON.parse(readF(join(curatedDir, f), 'utf8'));
+          const title = c.title ?? c.task?.title ?? '(no title)';
+          const sha = c.commit_sha ?? c.task?.commit_sha ?? '';
+          process.stdout.write(`  ${f.replace('.json', '')}: ${String(title).slice(0, 50)}${sha ? ` [${sha.slice(0, 7)}]` : ''}\n`);
+        } catch {
+          process.stdout.write(`  ${f.replace('.json', '')}: (unreadable)\n`);
+        }
+      }
+      process.exit(0);
+    }
+
+    if (!taskId) {
+      process.stderr.write('error: task_id required (or use --list)\n');
+      process.exit(1);
+    }
+
+    if (options.remove) {
+      // Remove from curated only
+      if (!checkExists(curatedDir)) { process.stdout.write(`Not in curated set.\n`); process.exit(0); }
+      const files = readDir(curatedDir).filter((f: string) => f.startsWith(`task_${taskId}_`));
+      if (files.length === 0) { process.stdout.write(`Task #${taskId} not in curated set.\n`); process.exit(0); }
+      for (const f of files) { rmSync(join(curatedDir, f)); }
+      process.stdout.write(`Removed task #${taskId} from curated set.\n`);
+      process.exit(0);
+    }
+
+    // Select: copy from raw to curated
+    if (!checkExists(rawDir)) {
+      process.stderr.write(`error: raw cases dir not found: ${rawDir}\n`);
+      process.exit(1);
+    }
+
+    // Determine source filename
+    let srcFile: string | null = null;
+    if (options.label) {
+      const candidate = join(rawDir, `task_${taskId}_${options.label}.json`);
+      if (checkExists(candidate)) srcFile = candidate;
+    } else {
+      // Infer label from existing file
+      for (const label of ['good', 'bad']) {
+        const candidate = join(rawDir, `task_${taskId}_${label}.json`);
+        if (checkExists(candidate)) { srcFile = candidate; break; }
+      }
+    }
+
+    if (!srcFile) {
+      process.stderr.write(`error: no case file found for task #${taskId} in ${rawDir}\n`);
+      process.exit(1);
+    }
+
+    mkDir(curatedDir, { recursive: true });
+    const destFile = join(curatedDir, srcFile.split('/').pop()!);
+    copyFileSync(srcFile, destFile);
+    process.stdout.write(`Selected: ${destFile}\n`);
   });
 
 program

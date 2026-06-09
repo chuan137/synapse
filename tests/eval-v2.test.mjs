@@ -15,7 +15,10 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-const CASES_DIR = join(ROOT, 'tests', 'cases');
+// Raw cases: .synapse/cases/ (gitignored, full corpus). Tests/cases/ is the curated set (may be empty).
+const CASES_DIR = existsSync(join(ROOT, '.synapse', 'cases'))
+  ? join(ROOT, '.synapse', 'cases')
+  : join(ROOT, 'tests', 'cases');
 const THRESHOLDS_PATH = join(ROOT, 'src', 'eval', 'thresholds.json');
 
 let passed = 0;

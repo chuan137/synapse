@@ -265,8 +265,11 @@ export function generateWindowReport(dbPath: string, opts: WindowReportOptions):
 
   // ── Blocked events (from case files if available) ─────────────────────────
   // Load from case JSON files (they carry blocked_events arrays from the v2 extractor)
+  // Window reports use the raw corpus (.synapse/cases/) for recency; fall back to tests/cases/
 
-  const casesDir = join(process.cwd(), 'tests', 'cases');
+  const casesDir = existsSync(join(process.cwd(), '.synapse', 'cases'))
+    ? join(process.cwd(), '.synapse', 'cases')
+    : join(process.cwd(), 'tests', 'cases');
   const blockedCounts: Record<'CONFUSED' | 'ERROR' | 'WAITING' | 'OTHER', string[]> = {
     CONFUSED: [], ERROR: [], WAITING: [], OTHER: [],
   };

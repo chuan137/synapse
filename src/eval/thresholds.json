@@ -1,25 +1,9 @@
 {
-  "calibrated_at": "2026-06-09T20:26:52.899Z",
-  "sample_size": {
-    "developer": 114,
-    "orchestrator": 111
-  },
-  "by_role": {
-    "developer": {
-      "tool_calls_p90": 30,
-      "duration_ms_p90": 6263,
-      "error_rate_max": 0.05,
-      "has_commit": true,
-      "wall_clock_ms_p90": 173171
-    },
-    "orchestrator": {
-      "tool_calls_p90": 10,
-      "duration_ms_p90": 1216,
-      "error_rate_max": 0.05,
-      "wall_clock_ms_p90": 335526
-    }
-  },
+  "calibrated_at": "2026-06-09T21:28:42.446Z",
+  "sample_size": {},
+  "by_role": {},
   "task_level": {
     "traceability_score_max": 1
-  }
+  },
+  "_warning": "No cases found in curated (tests/cases/) — thresholds are empty defaults"
 }
