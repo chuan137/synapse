@@ -41,7 +41,8 @@
       "tool": "mcp__synapse-bus__start_task",
       "status": "ok",
       "duration_ms": 54,
-      "timestamp": 1780935077891
+      "timestamp": 1780935077891,
+      "task_id": null
     },
     {
       "id": 8177,
@@ -51,7 +52,8 @@
       "tool": "mcp__synapse-bus__delegate_task",
       "status": "ok",
       "duration_ms": 52,
-      "timestamp": 1780935086755
+      "timestamp": 1780935086755,
+      "task_id": null
     },
     {
       "id": 8178,
@@ -61,7 +63,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 51,
-      "timestamp": 1780935089185
+      "timestamp": 1780935089185,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -151,7 +154,8 @@
         "tool": "mcp__synapse-bus__start_task",
         "status": "ok",
         "duration_ms": 54,
-        "timestamp": 1780935077891
+        "timestamp": 1780935077891,
+        "task_id": null
       },
       {
         "id": 8177,
@@ -161,7 +165,8 @@
         "tool": "mcp__synapse-bus__delegate_task",
         "status": "ok",
         "duration_ms": 52,
-        "timestamp": 1780935086755
+        "timestamp": 1780935086755,
+        "task_id": null
       },
       {
         "id": 8178,
@@ -171,7 +176,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 51,
-        "timestamp": 1780935089185
+        "timestamp": 1780935089185,
+        "task_id": null
       }
     ]
   }

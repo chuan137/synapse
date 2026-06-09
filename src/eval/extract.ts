@@ -204,13 +204,27 @@ function buildCase(db: any, task: any): TrajectoryCase {
     ORDER BY created_at
   `).all(task.started_at, task.finished_at, task.agent_id, task.agent_id) as Record<string, unknown>[]);
 
-  const tool_metrics = db.prepare(`
+  // Prefer direct FK attribution (populated by 12f3c41 worker cookie).
+  // Fall back to time-window for legacy rows (task_id IS NULL, pre-migration) and
+  // orchestrator-delegated tasks where workers report DONE before FK rows exist.
+  // Heuristic: try FK first; if 0 rows, fall back to time-window regardless of age.
+  // Both paths are equivalent for orchestrator-only tasks (neither returns worker rows).
+  let tool_metrics = db.prepare(`
     SELECT * FROM tool_metrics
-    WHERE synapse_agent_id = ?
-      AND timestamp >= ?
-      AND timestamp <= COALESCE(?, 9999999999999)
+    WHERE task_id = ?
     ORDER BY timestamp
-  `).all(task.agent_id, task.started_at, task.finished_at) as any[];
+  `).all(task.id) as any[];
+
+  if (tool_metrics.length === 0) {
+    // Time-window fallback: covers pre-migration rows and orch-only tasks
+    tool_metrics = db.prepare(`
+      SELECT * FROM tool_metrics
+      WHERE synapse_agent_id = ?
+        AND timestamp >= ?
+        AND timestamp <= COALESCE(?, 9999999999999)
+      ORDER BY timestamp
+    `).all(task.agent_id, task.started_at, task.finished_at) as any[];
+  }
 
   const missingLinks =
     (task.source_msg_id  ? 0 : 1) +

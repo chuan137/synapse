@@ -59,7 +59,7 @@ function getThresholds(role: string, file: ThresholdsFile) {
   return file.by_role[role] ?? file.by_role['_default'] ?? FALLBACK_THRESHOLDS.by_role['_default'];
 }
 
-function softSignals(agents: Record<string, AgentTrajectory> | undefined): string[] {
+function softSignals(agents: Record<string, AgentTrajectory> | undefined, totalDurationMs: number | null): string[] {
   if (!agents) return [];
   const signals: string[] = [];
 
@@ -90,6 +90,16 @@ function softSignals(agents: Record<string, AgentTrajectory> | undefined): strin
           signals.push(`under_delegation[${key}]: used ${ct} ${agent.tools[ct].calls}x on src/`);
         }
       }
+    }
+  }
+
+  // Task-level: wall-clock vs active-tool ratio (idle_drift)
+  // Flags workers stuck idle — long wall-clock but very little tool activity.
+  if (totalDurationMs !== null && totalDurationMs > 0) {
+    const totalActive = Object.values(agents).reduce((sum, a) => sum + a.active_duration_ms, 0);
+    const ratio = totalDurationMs / Math.max(totalActive, 1);
+    if (ratio > 10) {
+      signals.push(`idle_drift: wall_clock=${Math.round(totalDurationMs / 1000)}s active=${Math.round(totalActive / 1000)}s ratio=${ratio.toFixed(1)}`);
     }
   }
 
@@ -163,7 +173,7 @@ export function evaluateCases(casesDir: string): EvalResult[] {
       title: (c.task as any).title ?? '',
       pass,
       failures,
-      soft_failures: softSignals(c.agents),
+      soft_failures: softSignals(c.agents, (c as any).total_duration_ms ?? null),
       role: primaryRole,
       metrics,
     };

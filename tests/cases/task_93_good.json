@@ -72,7 +72,8 @@
       "tool": "mcp__synapse-bus__read_messages",
       "status": "ok",
       "duration_ms": 59,
-      "timestamp": 1780904996255
+      "timestamp": 1780904996255,
+      "task_id": null
     },
     {
       "id": 7133,
@@ -82,7 +83,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 53,
-      "timestamp": 1780904999025
+      "timestamp": 1780904999025,
+      "task_id": null
     },
     {
       "id": 7135,
@@ -92,7 +94,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 203,
-      "timestamp": 1780905004317
+      "timestamp": 1780905004317,
+      "task_id": null
     },
     {
       "id": 7136,
@@ -102,7 +105,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 137,
-      "timestamp": 1780905009271
+      "timestamp": 1780905009271,
+      "task_id": null
     },
     {
       "id": 7137,
@@ -112,7 +116,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 52,
-      "timestamp": 1780905012841
+      "timestamp": 1780905012841,
+      "task_id": null
     },
     {
       "id": 7138,
@@ -122,7 +127,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 95,
-      "timestamp": 1780905016824
+      "timestamp": 1780905016824,
+      "task_id": null
     },
     {
       "id": 7139,
@@ -132,7 +138,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 50,
-      "timestamp": 1780905019549
+      "timestamp": 1780905019549,
+      "task_id": null
     },
     {
       "id": 7140,
@@ -142,7 +149,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 79,
-      "timestamp": 1780905026425
+      "timestamp": 1780905026425,
+      "task_id": null
     },
     {
       "id": 7141,
@@ -152,7 +160,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 93,
-      "timestamp": 1780905036667
+      "timestamp": 1780905036667,
+      "task_id": null
     },
     {
       "id": 7142,
@@ -162,7 +171,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 75,
-      "timestamp": 1780905039342
+      "timestamp": 1780905039342,
+      "task_id": null
     },
     {
       "id": 7143,
@@ -172,7 +182,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 48,
-      "timestamp": 1780905042759
+      "timestamp": 1780905042759,
+      "task_id": null
     },
     {
       "id": 7144,
@@ -182,7 +193,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 49,
-      "timestamp": 1780905048677
+      "timestamp": 1780905048677,
+      "task_id": null
     },
     {
       "id": 7145,
@@ -192,7 +204,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 45,
-      "timestamp": 1780905054969
+      "timestamp": 1780905054969,
+      "task_id": null
     },
     {
       "id": 7146,
@@ -202,7 +215,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 68,
-      "timestamp": 1780905069027
+      "timestamp": 1780905069027,
+      "task_id": null
     },
     {
       "id": 7147,
@@ -212,7 +226,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 76,
-      "timestamp": 1780905072007
+      "timestamp": 1780905072007,
+      "task_id": null
     },
     {
       "id": 7148,
@@ -222,7 +237,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 70,
-      "timestamp": 1780905079669
+      "timestamp": 1780905079669,
+      "task_id": null
     },
     {
       "id": 7149,
@@ -232,7 +248,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 70,
-      "timestamp": 1780905085797
+      "timestamp": 1780905085797,
+      "task_id": null
     },
     {
       "id": 7150,
@@ -242,7 +259,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 75,
-      "timestamp": 1780905090819
+      "timestamp": 1780905090819,
+      "task_id": null
     },
     {
       "id": 7151,
@@ -252,7 +270,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 1011,
-      "timestamp": 1780905098551
+      "timestamp": 1780905098551,
+      "task_id": null
     },
     {
       "id": 7152,
@@ -262,7 +281,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 65,
-      "timestamp": 1780905101110
+      "timestamp": 1780905101110,
+      "task_id": null
     },
     {
       "id": 7153,
@@ -272,7 +292,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 72,
-      "timestamp": 1780905106364
+      "timestamp": 1780905106364,
+      "task_id": null
     },
     {
       "id": 7154,
@@ -282,7 +303,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 4491,
-      "timestamp": 1780905115785
+      "timestamp": 1780905115785,
+      "task_id": null
     },
     {
       "id": 7155,
@@ -292,7 +314,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 71,
-      "timestamp": 1780905118437
+      "timestamp": 1780905118437,
+      "task_id": null
     },
     {
       "id": 7156,
@@ -302,7 +325,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 347,
-      "timestamp": 1780905122128
+      "timestamp": 1780905122128,
+      "task_id": null
     },
     {
       "id": 7157,
@@ -312,7 +336,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 65,
-      "timestamp": 1780905131398
+      "timestamp": 1780905131398,
+      "task_id": null
     },
     {
       "id": 7158,
@@ -322,7 +347,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 1150,
-      "timestamp": 1780905137511
+      "timestamp": 1780905137511,
+      "task_id": null
     },
     {
       "id": 7159,
@@ -332,7 +358,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 67,
-      "timestamp": 1780905141020
+      "timestamp": 1780905141020,
+      "task_id": null
     },
     {
       "id": 7160,
@@ -342,7 +369,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 48,
-      "timestamp": 1780905145282
+      "timestamp": 1780905145282,
+      "task_id": null
     },
     {
       "id": 7161,
@@ -352,7 +380,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 47,
-      "timestamp": 1780905149601
+      "timestamp": 1780905149601,
+      "task_id": null
     },
     {
       "id": 7162,
@@ -362,7 +391,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 120113,
-      "timestamp": 1780905273237
+      "timestamp": 1780905273237,
+      "task_id": null
     },
     {
       "id": 7163,
@@ -372,7 +402,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 100,
-      "timestamp": 1780905276811
+      "timestamp": 1780905276811,
+      "task_id": null
     },
     {
       "id": 7164,
@@ -382,7 +413,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 107,
-      "timestamp": 1780905281963
+      "timestamp": 1780905281963,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -516,7 +548,8 @@
         "tool": "mcp__synapse-bus__read_messages",
         "status": "ok",
         "duration_ms": 59,
-        "timestamp": 1780904996255
+        "timestamp": 1780904996255,
+        "task_id": null
       },
       {
         "id": 7133,
@@ -526,7 +559,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 53,
-        "timestamp": 1780904999025
+        "timestamp": 1780904999025,
+        "task_id": null
       },
       {
         "id": 7135,
@@ -536,7 +570,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 203,
-        "timestamp": 1780905004317
+        "timestamp": 1780905004317,
+        "task_id": null
       },
       {
         "id": 7136,
@@ -546,7 +581,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 137,
-        "timestamp": 1780905009271
+        "timestamp": 1780905009271,
+        "task_id": null
       },
       {
         "id": 7137,
@@ -556,7 +592,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 52,
-        "timestamp": 1780905012841
+        "timestamp": 1780905012841,
+        "task_id": null
       },
       {
         "id": 7138,
@@ -566,7 +603,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 95,
-        "timestamp": 1780905016824
+        "timestamp": 1780905016824,
+        "task_id": null
       },
       {
         "id": 7139,
@@ -576,7 +614,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 50,
-        "timestamp": 1780905019549
+        "timestamp": 1780905019549,
+        "task_id": null
       },
       {
         "id": 7140,
@@ -586,7 +625,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 79,
-        "timestamp": 1780905026425
+        "timestamp": 1780905026425,
+        "task_id": null
       },
       {
         "id": 7141,
@@ -596,7 +636,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 93,
-        "timestamp": 1780905036667
+        "timestamp": 1780905036667,
+        "task_id": null
       },
       {
         "id": 7142,
@@ -606,7 +647,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 75,
-        "timestamp": 1780905039342
+        "timestamp": 1780905039342,
+        "task_id": null
       },
       {
         "id": 7143,
@@ -616,7 +658,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 48,
-        "timestamp": 1780905042759
+        "timestamp": 1780905042759,
+        "task_id": null
       },
       {
         "id": 7144,
@@ -626,7 +669,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 49,
-        "timestamp": 1780905048677
+        "timestamp": 1780905048677,
+        "task_id": null
       },
       {
         "id": 7145,
@@ -636,7 +680,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 45,
-        "timestamp": 1780905054969
+        "timestamp": 1780905054969,
+        "task_id": null
       },
       {
         "id": 7146,
@@ -646,7 +691,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 68,
-        "timestamp": 1780905069027
+        "timestamp": 1780905069027,
+        "task_id": null
       },
       {
         "id": 7147,
@@ -656,7 +702,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 76,
-        "timestamp": 1780905072007
+        "timestamp": 1780905072007,
+        "task_id": null
       },
       {
         "id": 7148,
@@ -666,7 +713,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 70,
-        "timestamp": 1780905079669
+        "timestamp": 1780905079669,
+        "task_id": null
       },
       {
         "id": 7149,
@@ -676,7 +724,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 70,
-        "timestamp": 1780905085797
+        "timestamp": 1780905085797,
+        "task_id": null
       },
       {
         "id": 7150,
@@ -686,7 +735,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 75,
-        "timestamp": 1780905090819
+        "timestamp": 1780905090819,
+        "task_id": null
       },
       {
         "id": 7151,
@@ -696,7 +746,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 1011,
-        "timestamp": 1780905098551
+        "timestamp": 1780905098551,
+        "task_id": null
       },
       {
         "id": 7152,
@@ -706,7 +757,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 65,
-        "timestamp": 1780905101110
+        "timestamp": 1780905101110,
+        "task_id": null
       },
       {
         "id": 7153,
@@ -716,7 +768,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 72,
-        "timestamp": 1780905106364
+        "timestamp": 1780905106364,
+        "task_id": null
       },
       {
         "id": 7154,
@@ -726,7 +779,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 4491,
-        "timestamp": 1780905115785
+        "timestamp": 1780905115785,
+        "task_id": null
       },
       {
         "id": 7155,
@@ -736,7 +790,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 71,
-        "timestamp": 1780905118437
+        "timestamp": 1780905118437,
+        "task_id": null
       },
       {
         "id": 7156,
@@ -746,7 +801,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 347,
-        "timestamp": 1780905122128
+        "timestamp": 1780905122128,
+        "task_id": null
       },
       {
         "id": 7157,
@@ -756,7 +812,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 65,
-        "timestamp": 1780905131398
+        "timestamp": 1780905131398,
+        "task_id": null
       },
       {
         "id": 7158,
@@ -766,7 +823,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 1150,
-        "timestamp": 1780905137511
+        "timestamp": 1780905137511,
+        "task_id": null
       },
       {
         "id": 7159,
@@ -776,7 +834,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 67,
-        "timestamp": 1780905141020
+        "timestamp": 1780905141020,
+        "task_id": null
       },
       {
         "id": 7160,
@@ -786,7 +845,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 48,
-        "timestamp": 1780905145282
+        "timestamp": 1780905145282,
+        "task_id": null
       },
       {
         "id": 7161,
@@ -796,7 +856,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 47,
-        "timestamp": 1780905149601
+        "timestamp": 1780905149601,
+        "task_id": null
       },
       {
         "id": 7162,
@@ -806,7 +867,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 120113,
-        "timestamp": 1780905273237
+        "timestamp": 1780905273237,
+        "task_id": null
       },
       {
         "id": 7163,
@@ -816,7 +878,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 100,
-        "timestamp": 1780905276811
+        "timestamp": 1780905276811,
+        "task_id": null
       },
       {
         "id": 7164,
@@ -826,7 +889,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 107,
-        "timestamp": 1780905281963
+        "timestamp": 1780905281963,
+        "task_id": null
       }
     ]
   }

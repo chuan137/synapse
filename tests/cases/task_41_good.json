@@ -87,7 +87,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 99,
-      "timestamp": 1780743385017
+      "timestamp": 1780743385017,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -208,7 +209,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 99,
-        "timestamp": 1780743385017
+        "timestamp": 1780743385017,
+        "task_id": null
       }
     ]
   }

@@ -72,7 +72,8 @@
       "tool": "mcp__synapse-bus__read_messages",
       "status": "ok",
       "duration_ms": 58,
-      "timestamp": 1780695006529
+      "timestamp": 1780695006529,
+      "task_id": null
     },
     {
       "id": 3829,
@@ -82,7 +83,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 52,
-      "timestamp": 1780695012460
+      "timestamp": 1780695012460,
+      "task_id": null
     },
     {
       "id": 3830,
@@ -92,7 +94,8 @@
       "tool": "mcp__synapse-bus__start_activity",
       "status": "ok",
       "duration_ms": 55,
-      "timestamp": 1780695015005
+      "timestamp": 1780695015005,
+      "task_id": null
     },
     {
       "id": 3831,
@@ -102,7 +105,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 49,
-      "timestamp": 1780695018044
+      "timestamp": 1780695018044,
+      "task_id": null
     },
     {
       "id": 3832,
@@ -112,7 +116,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 51,
-      "timestamp": 1780695018388
+      "timestamp": 1780695018388,
+      "task_id": null
     },
     {
       "id": 3833,
@@ -122,7 +127,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 45,
-      "timestamp": 1780695021177
+      "timestamp": 1780695021177,
+      "task_id": null
     },
     {
       "id": 3834,
@@ -132,7 +138,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 57,
-      "timestamp": 1780695027203
+      "timestamp": 1780695027203,
+      "task_id": null
     },
     {
       "id": 3835,
@@ -142,7 +149,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 45,
-      "timestamp": 1780695034432
+      "timestamp": 1780695034432,
+      "task_id": null
     },
     {
       "id": 3836,
@@ -152,7 +160,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 49,
-      "timestamp": 1780695043414
+      "timestamp": 1780695043414,
+      "task_id": null
     },
     {
       "id": 3837,
@@ -162,7 +171,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 75,
-      "timestamp": 1780695045959
+      "timestamp": 1780695045959,
+      "task_id": null
     },
     {
       "id": 3838,
@@ -172,7 +182,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 48,
-      "timestamp": 1780695048297
+      "timestamp": 1780695048297,
+      "task_id": null
     },
     {
       "id": 3839,
@@ -182,7 +193,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 50,
-      "timestamp": 1780695058608
+      "timestamp": 1780695058608,
+      "task_id": null
     },
     {
       "id": 3840,
@@ -192,7 +204,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 3556,
-      "timestamp": 1780695064503
+      "timestamp": 1780695064503,
+      "task_id": null
     },
     {
       "id": 3841,
@@ -202,7 +215,8 @@
       "tool": "mcp__synapse-bus__report_done",
       "status": "ok",
       "duration_ms": 58,
-      "timestamp": 1780695071148
+      "timestamp": 1780695071148,
+      "task_id": null
     },
     {
       "id": 3842,
@@ -212,7 +226,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 53,
-      "timestamp": 1780695073429
+      "timestamp": 1780695073429,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -360,7 +375,8 @@
         "tool": "mcp__synapse-bus__read_messages",
         "status": "ok",
         "duration_ms": 58,
-        "timestamp": 1780695006529
+        "timestamp": 1780695006529,
+        "task_id": null
       },
       {
         "id": 3829,
@@ -370,7 +386,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 52,
-        "timestamp": 1780695012460
+        "timestamp": 1780695012460,
+        "task_id": null
       },
       {
         "id": 3830,
@@ -380,7 +397,8 @@
         "tool": "mcp__synapse-bus__start_activity",
         "status": "ok",
         "duration_ms": 55,
-        "timestamp": 1780695015005
+        "timestamp": 1780695015005,
+        "task_id": null
       },
       {
         "id": 3831,
@@ -390,7 +408,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 49,
-        "timestamp": 1780695018044
+        "timestamp": 1780695018044,
+        "task_id": null
       },
       {
         "id": 3832,
@@ -400,7 +419,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 51,
-        "timestamp": 1780695018388
+        "timestamp": 1780695018388,
+        "task_id": null
       },
       {
         "id": 3833,
@@ -410,7 +430,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 45,
-        "timestamp": 1780695021177
+        "timestamp": 1780695021177,
+        "task_id": null
       },
       {
         "id": 3834,
@@ -420,7 +441,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 57,
-        "timestamp": 1780695027203
+        "timestamp": 1780695027203,
+        "task_id": null
       },
       {
         "id": 3835,
@@ -430,7 +452,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 45,
-        "timestamp": 1780695034432
+        "timestamp": 1780695034432,
+        "task_id": null
       },
       {
         "id": 3836,
@@ -440,7 +463,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 49,
-        "timestamp": 1780695043414
+        "timestamp": 1780695043414,
+        "task_id": null
       },
       {
         "id": 3837,
@@ -450,7 +474,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 75,
-        "timestamp": 1780695045959
+        "timestamp": 1780695045959,
+        "task_id": null
       },
       {
         "id": 3838,
@@ -460,7 +485,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 48,
-        "timestamp": 1780695048297
+        "timestamp": 1780695048297,
+        "task_id": null
       },
       {
         "id": 3839,
@@ -470,7 +496,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 50,
-        "timestamp": 1780695058608
+        "timestamp": 1780695058608,
+        "task_id": null
       },
       {
         "id": 3840,
@@ -480,7 +507,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 3556,
-        "timestamp": 1780695064503
+        "timestamp": 1780695064503,
+        "task_id": null
       },
       {
         "id": 3841,
@@ -490,7 +518,8 @@
         "tool": "mcp__synapse-bus__report_done",
         "status": "ok",
         "duration_ms": 58,
-        "timestamp": 1780695071148
+        "timestamp": 1780695071148,
+        "task_id": null
       },
       {
         "id": 3842,
@@ -500,7 +529,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 53,
-        "timestamp": 1780695073429
+        "timestamp": 1780695073429,
+        "task_id": null
       }
     ]
   }

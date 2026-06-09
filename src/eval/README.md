@@ -124,6 +124,21 @@ Soft signals are informational — they appear in `soft_failures[]` on `EvalResu
 | `confused_count` | blocked_events with category CONFUSED |
 | `over_delegation` | Orchestrator agent with no `delegate_task` / `spawn_agent` calls |
 | `under_delegation` | Orchestrator agent used Edit or Write |
+| `idle_drift` | `total_duration_ms / sum(active_duration_ms) > 10` — wall-clock far exceeds tool activity |
+
+`idle_drift` catches stuck workers: long wall-clock with little actual tool activity. Currently soft-only. Promote to a hard threshold once calibration data accumulates — use `wall_clock_ms_p90` in `thresholds.json` as the starting point.
+
+---
+
+## Tool Metrics Attribution
+
+Tool call attribution uses two paths in priority order:
+
+1. **FK path** (post-`12f3c41`): `SELECT * FROM tool_metrics WHERE task_id = ?`. Workers get `task_id` populated automatically via a cookie set on `delegate_task` and cleared on `report_done`. Orchestrators always have `task_id = NULL` by design (they interleave tasks).
+
+2. **Time-window fallback** (legacy): `WHERE synapse_agent_id = ? AND timestamp BETWEEN started_at AND finished_at`. Used when FK returns 0 rows — covers pre-migration rows and orchestrator-only tasks.
+
+Both paths are valid. Empty `agents` maps are valid v2 (orchestrator-only tasks produce no worker tool_metrics).
 
 ---
 

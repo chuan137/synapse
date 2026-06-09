@@ -23,7 +23,7 @@
       "content": "Investigate why the S-Deck UI shows no boot task (\"system prompt\" / \"boot prompt\") for the orchestrator agent (slot :0), while it appears to work for workers.\n\nContext:\n- Operator reports: \"Check the boot task for Orch, UI displays none\"\n- The dashboard has an \"agent system prompt modal\" (commit `3657b31`) that exposes `boot_task` storage via `/api/agents/:id/prompt`. Modal is opened via the kebab menu on the agent card.\n- For workers this seems to work; for the orchestrator it shows none/empty.\n\nInvestigation goals:\n1. Locate the code path: where is `boot_task` stored when an agent is created? Check both spawn flows — worker spawn (via `spawn_agent` MCP tool) AND orchestrator boot (the slot-0 bootstrap path).\n2. Compare: does the orchestrator boot path write `boot_task` at all? If not, that's the root cause.\n3. Verify with the live DB: query the agents table for slot :0 and report what `boot_task` (or equivalent column) holds.\n4. Check the API endpoint `/api/agents/:id/prompt` — does it construct the prompt from a stored `boot_task`, or compose it from base+slot+role+boot at request time? If composition, does the orchestrator path return empty?\n5. Check the frontend modal: does it handle empty/missing prompt gracefully, or just show \"none\"?\n\nDeliverable: a short FINDING report (inline if <300 tokens, else .synapse/tasks/113-report.md) with:\n- Root cause: where the orchestrator boot_task is missing or not surfaced\n- Affected files (paths + line numbers)\n- Suggested fix path (one or two sentences) — NOT an implementation; this is investigation only\n\nDo not edit code yet. No worktree needed for read-only investigation. Just report.",
       "priority": 5,
       "created_at": 1780948890587,
-      "read_at": null,
+      "read_at": 1781027305747,
       "needs_approval": 0,
       "approved_at": null,
       "request_options": null,
@@ -131,7 +131,8 @@
       "tool": "mcp__synapse-bus__start_task",
       "status": "ok",
       "duration_ms": 50,
-      "timestamp": 1780948824859
+      "timestamp": 1780948824859,
+      "task_id": null
     },
     {
       "id": 8263,
@@ -141,7 +142,8 @@
       "tool": "mcp__synapse-bus__delegate_task",
       "status": "ok",
       "duration_ms": 62,
-      "timestamp": 1780948890645
+      "timestamp": 1780948890645,
+      "task_id": null
     },
     {
       "id": 8264,
@@ -151,7 +153,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 54,
-      "timestamp": 1780948893169
+      "timestamp": 1780948893169,
+      "task_id": null
     },
     {
       "id": 8265,
@@ -161,7 +164,8 @@
       "tool": "mcp__synapse-bus__read_messages",
       "status": "ok",
       "duration_ms": 55,
-      "timestamp": 1780949453101
+      "timestamp": 1780949453101,
+      "task_id": null
     },
     {
       "id": 8266,
@@ -171,7 +175,8 @@
       "tool": "mcp__synapse-bus__list_workers",
       "status": "ok",
       "duration_ms": 52,
-      "timestamp": 1780949462114
+      "timestamp": 1780949462114,
+      "task_id": null
     },
     {
       "id": 8267,
@@ -181,7 +186,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 48,
-      "timestamp": 1780949466204
+      "timestamp": 1780949466204,
+      "task_id": null
     },
     {
       "id": 8268,
@@ -191,7 +197,8 @@
       "tool": "mcp__synapse-bus__start_task",
       "status": "ok",
       "duration_ms": 62,
-      "timestamp": 1780949468531
+      "timestamp": 1780949468531,
+      "task_id": null
     },
     {
       "id": 8269,
@@ -201,7 +208,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 215,
-      "timestamp": 1780949479500
+      "timestamp": 1780949479500,
+      "task_id": null
     },
     {
       "id": 8270,
@@ -211,7 +219,8 @@
       "tool": "mcp__synapse-bus__spawn_agent",
       "status": "ok",
       "duration_ms": 1128,
-      "timestamp": 1780949491134
+      "timestamp": 1780949491134,
+      "task_id": null
     },
     {
       "id": 8276,
@@ -221,7 +230,8 @@
       "tool": "mcp__synapse-bus__delegate_task",
       "status": "ok",
       "duration_ms": 54,
-      "timestamp": 1780949503431
+      "timestamp": 1780949503431,
+      "task_id": null
     },
     {
       "id": 8277,
@@ -231,7 +241,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 53,
-      "timestamp": 1780949505998
+      "timestamp": 1780949505998,
+      "task_id": null
     },
     {
       "id": 8293,
@@ -241,7 +252,8 @@
       "tool": "mcp__synapse-bus__read_messages",
       "status": "ok",
       "duration_ms": 47,
-      "timestamp": 1780949557038
+      "timestamp": 1780949557038,
+      "task_id": null
     },
     {
       "id": 8294,
@@ -251,7 +263,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 87,
-      "timestamp": 1780949569926
+      "timestamp": 1780949569926,
+      "task_id": null
     },
     {
       "id": 8295,
@@ -261,7 +274,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 82,
-      "timestamp": 1780949596724
+      "timestamp": 1780949596724,
+      "task_id": null
     },
     {
       "id": 8296,
@@ -271,7 +285,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 111,
-      "timestamp": 1780949604993
+      "timestamp": 1780949604993,
+      "task_id": null
     },
     {
       "id": 8297,
@@ -281,7 +296,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 1759,
-      "timestamp": 1780949626207
+      "timestamp": 1780949626207,
+      "task_id": null
     },
     {
       "id": 8298,
@@ -291,7 +307,8 @@
       "tool": "mcp__synapse-bus__finish_task",
       "status": "ok",
       "duration_ms": 51,
-      "timestamp": 1780949629312
+      "timestamp": 1780949629312,
+      "task_id": null
     },
     {
       "id": 8299,
@@ -301,7 +318,8 @@
       "tool": "mcp__synapse-bus__send_message",
       "status": "ok",
       "duration_ms": 48,
-      "timestamp": 1780949652536
+      "timestamp": 1780949652536,
+      "task_id": null
     },
     {
       "id": 8300,
@@ -311,7 +329,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 48,
-      "timestamp": 1780949655099
+      "timestamp": 1780949655099,
+      "task_id": null
     },
     {
       "id": 8301,
@@ -321,7 +340,8 @@
       "tool": "mcp__synapse-bus__read_messages",
       "status": "ok",
       "duration_ms": 66,
-      "timestamp": 1781010766406
+      "timestamp": 1781010766406,
+      "task_id": null
     },
     {
       "id": 8302,
@@ -331,7 +351,8 @@
       "tool": "mcp__synapse-bus__list_workers",
       "status": "ok",
       "duration_ms": 56,
-      "timestamp": 1781010769150
+      "timestamp": 1781010769150,
+      "task_id": null
     },
     {
       "id": 8303,
@@ -341,7 +362,8 @@
       "tool": "mcp__synapse-bus__get_history",
       "status": "ok",
       "duration_ms": 59,
-      "timestamp": 1781010778602
+      "timestamp": 1781010778602,
+      "task_id": null
     },
     {
       "id": 8304,
@@ -351,7 +373,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 55,
-      "timestamp": 1781010788108
+      "timestamp": 1781010788108,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -481,7 +504,7 @@
         "content": "Investigate why the S-Deck UI shows no boot task (\"system prompt\" / \"boot prompt\") for the orchestrator agent (slot :0), while it appears to work for workers.\n\nContext:\n- Operator reports: \"Check the boot task for Orch, UI displays none\"\n- The dashboard has an \"agent system prompt modal\" (commit `3657b31`) that exposes `boot_task` storage via `/api/agents/:id/prompt`. Modal is opened via the kebab menu on the agent card.\n- For workers this seems to work; for the orchestrator it shows none/empty.\n\nInvestigation goals:\n1. Locate the code path: where is `boot_task` stored when an agent is created? Check both spawn flows — worker spawn (via `spawn_agent` MCP tool) AND orchestrator boot (the slot-0 bootstrap path).\n2. Compare: does the orchestrator boot path write `boot_task` at all? If not, that's the root cause.\n3. Verify with the live DB: query the agents table for slot :0 and report what `boot_task` (or equivalent column) holds.\n4. Check the API endpoint `/api/agents/:id/prompt` — does it construct the prompt from a stored `boot_task`, or compose it from base+slot+role+boot at request time? If composition, does the orchestrator path return empty?\n5. Check the frontend modal: does it handle empty/missing prompt gracefully, or just show \"none\"?\n\nDeliverable: a short FINDING report (inline if <300 tokens, else .synapse/tasks/113-report.md) with:\n- Root cause: where the orchestrator boot_task is missing or not surfaced\n- Affected files (paths + line numbers)\n- Suggested fix path (one or two sentences) — NOT an implementation; this is investigation only\n\nDo not edit code yet. No worktree needed for read-only investigation. Just report.",
         "priority": 5,
         "created_at": 1780948890587,
-        "read_at": null,
+        "read_at": 1781027305747,
         "needs_approval": 0,
         "approved_at": null,
         "request_options": null,
@@ -589,7 +612,8 @@
         "tool": "mcp__synapse-bus__start_task",
         "status": "ok",
         "duration_ms": 50,
-        "timestamp": 1780948824859
+        "timestamp": 1780948824859,
+        "task_id": null
       },
       {
         "id": 8263,
@@ -599,7 +623,8 @@
         "tool": "mcp__synapse-bus__delegate_task",
         "status": "ok",
         "duration_ms": 62,
-        "timestamp": 1780948890645
+        "timestamp": 1780948890645,
+        "task_id": null
       },
       {
         "id": 8264,
@@ -609,7 +634,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 54,
-        "timestamp": 1780948893169
+        "timestamp": 1780948893169,
+        "task_id": null
       },
       {
         "id": 8265,
@@ -619,7 +645,8 @@
         "tool": "mcp__synapse-bus__read_messages",
         "status": "ok",
         "duration_ms": 55,
-        "timestamp": 1780949453101
+        "timestamp": 1780949453101,
+        "task_id": null
       },
       {
         "id": 8266,
@@ -629,7 +656,8 @@
         "tool": "mcp__synapse-bus__list_workers",
         "status": "ok",
         "duration_ms": 52,
-        "timestamp": 1780949462114
+        "timestamp": 1780949462114,
+        "task_id": null
       },
       {
         "id": 8267,
@@ -639,7 +667,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 48,
-        "timestamp": 1780949466204
+        "timestamp": 1780949466204,
+        "task_id": null
       },
       {
         "id": 8268,
@@ -649,7 +678,8 @@
         "tool": "mcp__synapse-bus__start_task",
         "status": "ok",
         "duration_ms": 62,
-        "timestamp": 1780949468531
+        "timestamp": 1780949468531,
+        "task_id": null
       },
       {
         "id": 8269,
@@ -659,7 +689,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 215,
-        "timestamp": 1780949479500
+        "timestamp": 1780949479500,
+        "task_id": null
       },
       {
         "id": 8270,
@@ -669,7 +700,8 @@
         "tool": "mcp__synapse-bus__spawn_agent",
         "status": "ok",
         "duration_ms": 1128,
-        "timestamp": 1780949491134
+        "timestamp": 1780949491134,
+        "task_id": null
       },
       {
         "id": 8276,
@@ -679,7 +711,8 @@
         "tool": "mcp__synapse-bus__delegate_task",
         "status": "ok",
         "duration_ms": 54,
-        "timestamp": 1780949503431
+        "timestamp": 1780949503431,
+        "task_id": null
       },
       {
         "id": 8277,
@@ -689,7 +722,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 53,
-        "timestamp": 1780949505998
+        "timestamp": 1780949505998,
+        "task_id": null
       },
       {
         "id": 8293,
@@ -699,7 +733,8 @@
         "tool": "mcp__synapse-bus__read_messages",
         "status": "ok",
         "duration_ms": 47,
-        "timestamp": 1780949557038
+        "timestamp": 1780949557038,
+        "task_id": null
       },
       {
         "id": 8294,
@@ -709,7 +744,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 87,
-        "timestamp": 1780949569926
+        "timestamp": 1780949569926,
+        "task_id": null
       },
       {
         "id": 8295,
@@ -719,7 +755,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 82,
-        "timestamp": 1780949596724
+        "timestamp": 1780949596724,
+        "task_id": null
       },
       {
         "id": 8296,
@@ -729,7 +766,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 111,
-        "timestamp": 1780949604993
+        "timestamp": 1780949604993,
+        "task_id": null
       },
       {
         "id": 8297,
@@ -739,7 +777,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 1759,
-        "timestamp": 1780949626207
+        "timestamp": 1780949626207,
+        "task_id": null
       },
       {
         "id": 8298,
@@ -749,7 +788,8 @@
         "tool": "mcp__synapse-bus__finish_task",
         "status": "ok",
         "duration_ms": 51,
-        "timestamp": 1780949629312
+        "timestamp": 1780949629312,
+        "task_id": null
       },
       {
         "id": 8299,
@@ -759,7 +799,8 @@
         "tool": "mcp__synapse-bus__send_message",
         "status": "ok",
         "duration_ms": 48,
-        "timestamp": 1780949652536
+        "timestamp": 1780949652536,
+        "task_id": null
       },
       {
         "id": 8300,
@@ -769,7 +810,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 48,
-        "timestamp": 1780949655099
+        "timestamp": 1780949655099,
+        "task_id": null
       },
       {
         "id": 8301,
@@ -779,7 +821,8 @@
         "tool": "mcp__synapse-bus__read_messages",
         "status": "ok",
         "duration_ms": 66,
-        "timestamp": 1781010766406
+        "timestamp": 1781010766406,
+        "task_id": null
       },
       {
         "id": 8302,
@@ -789,7 +832,8 @@
         "tool": "mcp__synapse-bus__list_workers",
         "status": "ok",
         "duration_ms": 56,
-        "timestamp": 1781010769150
+        "timestamp": 1781010769150,
+        "task_id": null
       },
       {
         "id": 8303,
@@ -799,7 +843,8 @@
         "tool": "mcp__synapse-bus__get_history",
         "status": "ok",
         "duration_ms": 59,
-        "timestamp": 1781010778602
+        "timestamp": 1781010778602,
+        "task_id": null
       },
       {
         "id": 8304,
@@ -809,7 +854,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 55,
-        "timestamp": 1781010788108
+        "timestamp": 1781010788108,
+        "task_id": null
       }
     ]
   }

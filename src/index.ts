@@ -586,6 +586,7 @@ program
       const byRole: Record<string, {
         toolCalls: number[]; durationMs: number[]; activeDurationMs: number[];
         hasCommit: boolean[]; blockedEvents: number[]; errorRates: number[];
+        wallClockMs: number[];
       }> = {};
 
       for (const f of goodFiles) {
@@ -596,7 +597,7 @@ program
         if (c.agents) {
           for (const agent of Object.values(c.agents) as any[]) {
             const role: string = agent.role ?? '_default';
-            if (!byRole[role]) byRole[role] = { toolCalls: [], durationMs: [], activeDurationMs: [], hasCommit: [], blockedEvents: [], errorRates: [] };
+            if (!byRole[role]) byRole[role] = { toolCalls: [], durationMs: [], activeDurationMs: [], hasCommit: [], blockedEvents: [], errorRates: [], wallClockMs: [] };
             const totalCalls: number = Object.values(agent.tools as Record<string, any>).reduce((s: number, t: any) => s + t.calls, 0);
             byRole[role].toolCalls.push(totalCalls);
             byRole[role].activeDurationMs.push(agent.active_duration_ms ?? 0);
@@ -605,13 +606,19 @@ program
               if (ts.calls > 0) byRole[role].errorRates.push(ts.error_rate);
             }
           }
-          byRole[Object.values(c.agents as Record<string, any>)[0]?.role ?? '_default']?.hasCommit.push(!!c.commit_sha);
+          // Wall-clock collected at task level, attributed to primary agent's role
+          const primaryRole = Object.values(c.agents as Record<string, any>)[0]?.role ?? '_default';
+          if (c.total_duration_ms != null) byRole[primaryRole]?.wallClockMs.push(c.total_duration_ms);
+          byRole[primaryRole]?.hasCommit.push(!!c.commit_sha);
         } else {
           // v1 fallback
           const key = '_default';
-          if (!byRole[key]) byRole[key] = { toolCalls: [], durationMs: [], activeDurationMs: [], hasCommit: [], blockedEvents: [], errorRates: [] };
+          if (!byRole[key]) byRole[key] = { toolCalls: [], durationMs: [], activeDurationMs: [], hasCommit: [], blockedEvents: [], errorRates: [], wallClockMs: [] };
           byRole[key].toolCalls.push(c.metrics?.tool_calls ?? 0);
-          if (c.metrics?.duration_ms != null) byRole[key].durationMs.push(c.metrics.duration_ms);
+          if (c.metrics?.duration_ms != null) {
+            byRole[key].durationMs.push(c.metrics.duration_ms);
+            byRole[key].wallClockMs.push(c.metrics.duration_ms);
+          }
           byRole[key].hasCommit.push(!!c.metrics?.has_commit);
           byRole[key].blockedEvents.push(0);
         }
@@ -642,6 +649,10 @@ program
           error_rate_max: Math.min(1, parseFloat((pctile(stats.errorRates, pct) + 0.05).toFixed(2))),
         };
         if (commitRate >= 0.8) t.has_commit = true;
+        // wall_clock_ms_p90: collected for future hard-gate decision; not enforced yet
+        if (stats.wallClockMs.length >= MIN_SAMPLES) {
+          t.wall_clock_ms_p90 = Math.ceil(pctile(stats.wallClockMs, pct));
+        }
         byRoleThresholds[role] = t;
       }
 

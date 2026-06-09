@@ -8,12 +8,13 @@
     "started_at": 1781025699376,
     "finished_at": 1781026054275,
     "trigger_msg_id": 1562,
-    "result_msg_id": null,
+    "result_msg_id": 1577,
     "source_msg_id": null,
     "commit_sha": "89b8241"
   },
   "linked_msg_ids": [
-    1562
+    1562,
+    1577
   ],
   "messages": [
     {
@@ -71,7 +72,8 @@
       "tool": "mcp__synapse-bus__start_task",
       "status": "ok",
       "duration_ms": 54,
-      "timestamp": 1781025699426
+      "timestamp": 1781025699426,
+      "task_id": null
     },
     {
       "id": 8400,
@@ -81,7 +83,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 203,
-      "timestamp": 1781025702106
+      "timestamp": 1781025702106,
+      "task_id": null
     },
     {
       "id": 8401,
@@ -91,7 +94,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 70,
-      "timestamp": 1781025706959
+      "timestamp": 1781025706959,
+      "task_id": null
     },
     {
       "id": 8402,
@@ -101,7 +105,8 @@
       "tool": "Write",
       "status": "ok",
       "duration_ms": 58,
-      "timestamp": 1781025757544
+      "timestamp": 1781025757544,
+      "task_id": null
     },
     {
       "id": 8403,
@@ -111,7 +116,8 @@
       "tool": "mcp__synapse-bus__delegate_task",
       "status": "ok",
       "duration_ms": 70,
-      "timestamp": 1781025767670
+      "timestamp": 1781025767670,
+      "task_id": null
     },
     {
       "id": 8404,
@@ -121,7 +127,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 50,
-      "timestamp": 1781025771217
+      "timestamp": 1781025771217,
+      "task_id": null
     },
     {
       "id": 8423,
@@ -131,7 +138,8 @@
       "tool": "Write",
       "status": "ok",
       "duration_ms": 275,
-      "timestamp": 1781025820303
+      "timestamp": 1781025820303,
+      "task_id": null
     },
     {
       "id": 8425,
@@ -141,7 +149,8 @@
       "tool": "mcp__synapse-bus__send_message",
       "status": "ok",
       "duration_ms": 52,
-      "timestamp": 1781025828016
+      "timestamp": 1781025828016,
+      "task_id": null
     },
     {
       "id": 8426,
@@ -151,7 +160,8 @@
       "tool": "mcp__synapse-bus__send_message",
       "status": "ok",
       "duration_ms": 52,
-      "timestamp": 1781025834569
+      "timestamp": 1781025834569,
+      "task_id": null
     },
     {
       "id": 8427,
@@ -161,13 +171,14 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 52,
-      "timestamp": 1781025837250
+      "timestamp": 1781025837250,
+      "task_id": null
     }
   ],
   "metrics": {
     "tool_calls": 10,
     "duration_ms": 354899,
-    "traceability_score": 2,
+    "traceability_score": 1,
     "has_commit": true
   },
   "schema_version": 2,
@@ -175,7 +186,7 @@
   "title": "Eval-loop v2 phase 1: v2 trajectory schema + extractor + evaluator with per-role thresholds",
   "trigger_msg_id": 1562,
   "source_msg_id": null,
-  "result_msg_id": null,
+  "result_msg_id": 1577,
   "commit_sha": "89b8241",
   "started_at": 1781025699376,
   "finished_at": 1781026054275,
@@ -309,7 +320,8 @@
         "tool": "mcp__synapse-bus__start_task",
         "status": "ok",
         "duration_ms": 54,
-        "timestamp": 1781025699426
+        "timestamp": 1781025699426,
+        "task_id": null
       },
       {
         "id": 8400,
@@ -319,7 +331,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 203,
-        "timestamp": 1781025702106
+        "timestamp": 1781025702106,
+        "task_id": null
       },
       {
         "id": 8401,
@@ -329,7 +342,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 70,
-        "timestamp": 1781025706959
+        "timestamp": 1781025706959,
+        "task_id": null
       },
       {
         "id": 8402,
@@ -339,7 +353,8 @@
         "tool": "Write",
         "status": "ok",
         "duration_ms": 58,
-        "timestamp": 1781025757544
+        "timestamp": 1781025757544,
+        "task_id": null
       },
       {
         "id": 8403,
@@ -349,7 +364,8 @@
         "tool": "mcp__synapse-bus__delegate_task",
         "status": "ok",
         "duration_ms": 70,
-        "timestamp": 1781025767670
+        "timestamp": 1781025767670,
+        "task_id": null
       },
       {
         "id": 8404,
@@ -359,7 +375,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 50,
-        "timestamp": 1781025771217
+        "timestamp": 1781025771217,
+        "task_id": null
       },
       {
         "id": 8423,
@@ -369,7 +386,8 @@
         "tool": "Write",
         "status": "ok",
         "duration_ms": 275,
-        "timestamp": 1781025820303
+        "timestamp": 1781025820303,
+        "task_id": null
       },
       {
         "id": 8425,
@@ -379,7 +397,8 @@
         "tool": "mcp__synapse-bus__send_message",
         "status": "ok",
         "duration_ms": 52,
-        "timestamp": 1781025828016
+        "timestamp": 1781025828016,
+        "task_id": null
       },
       {
         "id": 8426,
@@ -389,7 +408,8 @@
         "tool": "mcp__synapse-bus__send_message",
         "status": "ok",
         "duration_ms": 52,
-        "timestamp": 1781025834569
+        "timestamp": 1781025834569,
+        "task_id": null
       },
       {
         "id": 8427,
@@ -399,7 +419,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 52,
-        "timestamp": 1781025837250
+        "timestamp": 1781025837250,
+        "task_id": null
       }
     ]
   }

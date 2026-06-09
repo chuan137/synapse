@@ -25,7 +25,8 @@
       "tool": "mcp__synapse-bus__start_task",
       "status": "ok",
       "duration_ms": 53,
-      "timestamp": 1780862799563
+      "timestamp": 1780862799563,
+      "task_id": null
     },
     {
       "id": 6692,
@@ -35,7 +36,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 47,
-      "timestamp": 1780862820900
+      "timestamp": 1780862820900,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -93,7 +95,8 @@
         "tool": "mcp__synapse-bus__start_task",
         "status": "ok",
         "duration_ms": 53,
-        "timestamp": 1780862799563
+        "timestamp": 1780862799563,
+        "task_id": null
       },
       {
         "id": 6692,
@@ -103,7 +106,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 47,
-        "timestamp": 1780862820900
+        "timestamp": 1780862820900,
+        "task_id": null
       }
     ]
   }

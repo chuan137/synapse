@@ -54,7 +54,8 @@
       "tool": "mcp__synapse-bus__start_activity",
       "status": "ok",
       "duration_ms": 49,
-      "timestamp": 1780749449334
+      "timestamp": 1780749449334,
+      "task_id": null
     },
     {
       "id": 4676,
@@ -64,7 +65,8 @@
       "tool": "mcp__synapse-bus__send_message",
       "status": "ok",
       "duration_ms": 49,
-      "timestamp": 1780749454356
+      "timestamp": 1780749454356,
+      "task_id": null
     },
     {
       "id": 4679,
@@ -74,7 +76,8 @@
       "tool": "mcp__synapse-bus__send_message",
       "status": "ok",
       "duration_ms": 48,
-      "timestamp": 1780749461764
+      "timestamp": 1780749461764,
+      "task_id": null
     },
     {
       "id": 4680,
@@ -84,7 +87,8 @@
       "tool": "mcp__synapse-bus__read_messages",
       "status": "ok",
       "duration_ms": 47,
-      "timestamp": 1780749463736
+      "timestamp": 1780749463736,
+      "task_id": null
     },
     {
       "id": 4682,
@@ -94,7 +98,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 54,
-      "timestamp": 1780749466429
+      "timestamp": 1780749466429,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -206,7 +211,8 @@
         "tool": "mcp__synapse-bus__start_activity",
         "status": "ok",
         "duration_ms": 49,
-        "timestamp": 1780749449334
+        "timestamp": 1780749449334,
+        "task_id": null
       },
       {
         "id": 4676,
@@ -216,7 +222,8 @@
         "tool": "mcp__synapse-bus__send_message",
         "status": "ok",
         "duration_ms": 49,
-        "timestamp": 1780749454356
+        "timestamp": 1780749454356,
+        "task_id": null
       },
       {
         "id": 4679,
@@ -226,7 +233,8 @@
         "tool": "mcp__synapse-bus__send_message",
         "status": "ok",
         "duration_ms": 48,
-        "timestamp": 1780749461764
+        "timestamp": 1780749461764,
+        "task_id": null
       },
       {
         "id": 4680,
@@ -236,7 +244,8 @@
         "tool": "mcp__synapse-bus__read_messages",
         "status": "ok",
         "duration_ms": 47,
-        "timestamp": 1780749463736
+        "timestamp": 1780749463736,
+        "task_id": null
       },
       {
         "id": 4682,
@@ -246,7 +255,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 54,
-        "timestamp": 1780749466429
+        "timestamp": 1780749466429,
+        "task_id": null
       }
     ]
   }

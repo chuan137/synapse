@@ -57,7 +57,8 @@
       "tool": "mcp__synapse-bus__start_task",
       "status": "ok",
       "duration_ms": 62,
-      "timestamp": 1780949468531
+      "timestamp": 1780949468531,
+      "task_id": null
     },
     {
       "id": 8269,
@@ -67,7 +68,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 215,
-      "timestamp": 1780949479500
+      "timestamp": 1780949479500,
+      "task_id": null
     },
     {
       "id": 8270,
@@ -77,7 +79,8 @@
       "tool": "mcp__synapse-bus__spawn_agent",
       "status": "ok",
       "duration_ms": 1128,
-      "timestamp": 1780949491134
+      "timestamp": 1780949491134,
+      "task_id": null
     },
     {
       "id": 8276,
@@ -87,7 +90,8 @@
       "tool": "mcp__synapse-bus__delegate_task",
       "status": "ok",
       "duration_ms": 54,
-      "timestamp": 1780949503431
+      "timestamp": 1780949503431,
+      "task_id": null
     },
     {
       "id": 8277,
@@ -97,7 +101,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 53,
-      "timestamp": 1780949505998
+      "timestamp": 1780949505998,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -216,7 +221,8 @@
         "tool": "mcp__synapse-bus__start_task",
         "status": "ok",
         "duration_ms": 62,
-        "timestamp": 1780949468531
+        "timestamp": 1780949468531,
+        "task_id": null
       },
       {
         "id": 8269,
@@ -226,7 +232,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 215,
-        "timestamp": 1780949479500
+        "timestamp": 1780949479500,
+        "task_id": null
       },
       {
         "id": 8270,
@@ -236,7 +243,8 @@
         "tool": "mcp__synapse-bus__spawn_agent",
         "status": "ok",
         "duration_ms": 1128,
-        "timestamp": 1780949491134
+        "timestamp": 1780949491134,
+        "task_id": null
       },
       {
         "id": 8276,
@@ -246,7 +254,8 @@
         "tool": "mcp__synapse-bus__delegate_task",
         "status": "ok",
         "duration_ms": 54,
-        "timestamp": 1780949503431
+        "timestamp": 1780949503431,
+        "task_id": null
       },
       {
         "id": 8277,
@@ -256,7 +265,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 53,
-        "timestamp": 1780949505998
+        "timestamp": 1780949505998,
+        "task_id": null
       }
     ]
   }

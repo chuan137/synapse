@@ -1,20 +1,22 @@
 {
-  "calibrated_at": "2026-06-09T17:31:54.604Z",
+  "calibrated_at": "2026-06-09T20:26:52.899Z",
   "sample_size": {
-    "developer": 23,
-    "orchestrator": 21
+    "developer": 114,
+    "orchestrator": 111
   },
   "by_role": {
     "developer": {
-      "tool_calls_p90": 25,
-      "duration_ms_p90": 3894,
+      "tool_calls_p90": 30,
+      "duration_ms_p90": 6263,
       "error_rate_max": 0.05,
-      "has_commit": true
+      "has_commit": true,
+      "wall_clock_ms_p90": 173171
     },
     "orchestrator": {
-      "tool_calls_p90": 15,
-      "duration_ms_p90": 2531,
-      "error_rate_max": 0.05
+      "tool_calls_p90": 10,
+      "duration_ms_p90": 1216,
+      "error_rate_max": 0.05,
+      "wall_clock_ms_p90": 335526
     }
   },
   "task_level": {

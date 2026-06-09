@@ -57,7 +57,8 @@
       "tool": "ExitWorktree",
       "status": "ok",
       "duration_ms": null,
-      "timestamp": 1780755513773
+      "timestamp": 1780755513773,
+      "task_id": null
     },
     {
       "id": 5208,
@@ -67,7 +68,8 @@
       "tool": "EnterWorktree",
       "status": "ok",
       "duration_ms": 77,
-      "timestamp": 1780755516988
+      "timestamp": 1780755516988,
+      "task_id": null
     },
     {
       "id": 5209,
@@ -77,7 +79,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 63,
-      "timestamp": 1780755520768
+      "timestamp": 1780755520768,
+      "task_id": null
     },
     {
       "id": 5210,
@@ -87,7 +90,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 75,
-      "timestamp": 1780755521536
+      "timestamp": 1780755521536,
+      "task_id": null
     },
     {
       "id": 5211,
@@ -97,7 +101,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 25771,
-      "timestamp": 1780755550787
+      "timestamp": 1780755550787,
+      "task_id": null
     },
     {
       "id": 5212,
@@ -107,7 +112,8 @@
       "tool": "Write",
       "status": "ok",
       "duration_ms": 50,
-      "timestamp": 1780755562653
+      "timestamp": 1780755562653,
+      "task_id": null
     },
     {
       "id": 5213,
@@ -117,7 +123,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 74,
-      "timestamp": 1780755566133
+      "timestamp": 1780755566133,
+      "task_id": null
     },
     {
       "id": 5214,
@@ -127,7 +134,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 51,
-      "timestamp": 1780755578445
+      "timestamp": 1780755578445,
+      "task_id": null
     },
     {
       "id": 5215,
@@ -137,7 +145,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 2079,
-      "timestamp": 1780755584244
+      "timestamp": 1780755584244,
+      "task_id": null
     },
     {
       "id": 5216,
@@ -147,7 +156,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 89110,
-      "timestamp": 1780755677085
+      "timestamp": 1780755677085,
+      "task_id": null
     },
     {
       "id": 5217,
@@ -157,7 +167,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 68,
-      "timestamp": 1780755680393
+      "timestamp": 1780755680393,
+      "task_id": null
     },
     {
       "id": 5218,
@@ -167,7 +178,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 130,
-      "timestamp": 1780755686382
+      "timestamp": 1780755686382,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -293,7 +305,8 @@
         "tool": "ExitWorktree",
         "status": "ok",
         "duration_ms": null,
-        "timestamp": 1780755513773
+        "timestamp": 1780755513773,
+        "task_id": null
       },
       {
         "id": 5208,
@@ -303,7 +316,8 @@
         "tool": "EnterWorktree",
         "status": "ok",
         "duration_ms": 77,
-        "timestamp": 1780755516988
+        "timestamp": 1780755516988,
+        "task_id": null
       },
       {
         "id": 5209,
@@ -313,7 +327,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 63,
-        "timestamp": 1780755520768
+        "timestamp": 1780755520768,
+        "task_id": null
       },
       {
         "id": 5210,
@@ -323,7 +338,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 75,
-        "timestamp": 1780755521536
+        "timestamp": 1780755521536,
+        "task_id": null
       },
       {
         "id": 5211,
@@ -333,7 +349,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 25771,
-        "timestamp": 1780755550787
+        "timestamp": 1780755550787,
+        "task_id": null
       },
       {
         "id": 5212,
@@ -343,7 +360,8 @@
         "tool": "Write",
         "status": "ok",
         "duration_ms": 50,
-        "timestamp": 1780755562653
+        "timestamp": 1780755562653,
+        "task_id": null
       },
       {
         "id": 5213,
@@ -353,7 +371,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 74,
-        "timestamp": 1780755566133
+        "timestamp": 1780755566133,
+        "task_id": null
       },
       {
         "id": 5214,
@@ -363,7 +382,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 51,
-        "timestamp": 1780755578445
+        "timestamp": 1780755578445,
+        "task_id": null
       },
       {
         "id": 5215,
@@ -373,7 +393,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 2079,
-        "timestamp": 1780755584244
+        "timestamp": 1780755584244,
+        "task_id": null
       },
       {
         "id": 5216,
@@ -383,7 +404,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 89110,
-        "timestamp": 1780755677085
+        "timestamp": 1780755677085,
+        "task_id": null
       },
       {
         "id": 5217,
@@ -393,7 +415,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 68,
-        "timestamp": 1780755680393
+        "timestamp": 1780755680393,
+        "task_id": null
       },
       {
         "id": 5218,
@@ -403,7 +426,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 130,
-        "timestamp": 1780755686382
+        "timestamp": 1780755686382,
+        "task_id": null
       }
     ]
   }

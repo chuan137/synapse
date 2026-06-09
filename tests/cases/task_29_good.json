@@ -56,7 +56,8 @@
       "tool": "mcp__synapse-bus__read_messages",
       "status": "ok",
       "duration_ms": 275,
-      "timestamp": 1780735020128
+      "timestamp": 1780735020128,
+      "task_id": null
     },
     {
       "id": 4095,
@@ -66,7 +67,8 @@
       "tool": "mcp__synapse-bus__update_status",
       "status": "ok",
       "duration_ms": 218,
-      "timestamp": 1780735022762
+      "timestamp": 1780735022762,
+      "task_id": null
     },
     {
       "id": 4096,
@@ -76,7 +78,8 @@
       "tool": "Read",
       "status": "ok",
       "duration_ms": 200,
-      "timestamp": 1780735026010
+      "timestamp": 1780735026010,
+      "task_id": null
     },
     {
       "id": 4097,
@@ -86,7 +89,8 @@
       "tool": "Edit",
       "status": "ok",
       "duration_ms": 214,
-      "timestamp": 1780735028922
+      "timestamp": 1780735028922,
+      "task_id": null
     },
     {
       "id": 4098,
@@ -96,7 +100,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 3284,
-      "timestamp": 1780735034635
+      "timestamp": 1780735034635,
+      "task_id": null
     },
     {
       "id": 4099,
@@ -106,7 +111,8 @@
       "tool": "Bash",
       "status": "ok",
       "duration_ms": 210,
-      "timestamp": 1780735037984
+      "timestamp": 1780735037984,
+      "task_id": null
     }
   ],
   "metrics": {
@@ -225,7 +231,8 @@
         "tool": "mcp__synapse-bus__read_messages",
         "status": "ok",
         "duration_ms": 275,
-        "timestamp": 1780735020128
+        "timestamp": 1780735020128,
+        "task_id": null
       },
       {
         "id": 4095,
@@ -235,7 +242,8 @@
         "tool": "mcp__synapse-bus__update_status",
         "status": "ok",
         "duration_ms": 218,
-        "timestamp": 1780735022762
+        "timestamp": 1780735022762,
+        "task_id": null
       },
       {
         "id": 4096,
@@ -245,7 +253,8 @@
         "tool": "Read",
         "status": "ok",
         "duration_ms": 200,
-        "timestamp": 1780735026010
+        "timestamp": 1780735026010,
+        "task_id": null
       },
       {
         "id": 4097,
@@ -255,7 +264,8 @@
         "tool": "Edit",
         "status": "ok",
         "duration_ms": 214,
-        "timestamp": 1780735028922
+        "timestamp": 1780735028922,
+        "task_id": null
       },
       {
         "id": 4098,
@@ -265,7 +275,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 3284,
-        "timestamp": 1780735034635
+        "timestamp": 1780735034635,
+        "task_id": null
       },
       {
         "id": 4099,
@@ -275,7 +286,8 @@
         "tool": "Bash",
         "status": "ok",
         "duration_ms": 210,
-        "timestamp": 1780735037984
+        "timestamp": 1780735037984,
+        "task_id": null
       }
     ]
   }
