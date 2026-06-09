@@ -270,3 +270,28 @@ Phase 2 is unblocked once Q1-Q5 above are answered. Estimated Phase 2 size: 1 de
 | `process.env.SYNAPSE_*` pattern | `src/dashboard.ts:39` |
 | CLI subcommand pattern (Commander.js) | `src/index.ts:825-846` |
 | `sendMessage()` DB helper | `src/db.ts:487` |
+
+---
+
+## Phase 2 implementation notes
+
+**Files shipped:**
+- `src/remote/auth.ts` (13 lines) — `parseAllowedChats` + `isAllowedChat`
+- `src/remote/telegram.ts` (222 lines) — `TelegramBridge` class + `parseRoutingPrefix`, `shouldRelay` helpers
+- `src/remote/index.ts` (43 lines) — `startTelegramBridge` entry point
+- `src/index.ts` — `synapse remote --telegram [--port <n>]` subcommand
+- `tests/telegram-bot.test.mjs` — 38/38 passing (no real Telegram/Synapse calls)
+- `.env.example` — token + allowed chats placeholder
+- `README.md` — "Remote access (Telegram)" section
+
+**Deviations from Phase 1 design:**
+
+1. **`polling` constructor option added** — `TelegramBridge` constructor defaults `polling: true` for production; tests pass `polling: false` to prevent real HTTPS calls. Phase 1 didn't anticipate this; minor addendum.
+
+2. **Dependency vulnerabilities** — `node-telegram-bot-api@0.66.0` brings 9 npm audit vulnerabilities (7 moderate, 2 critical) via its transitive `request` dependency (deprecated). The criticals are in `form-data` (boundary randomness) and `tough-cookie` (cookie parsing) inside `request`, which the bot doesn't directly exercise (it sends JSON, not form-data; no cookie jar). Risk is low for a localhost-only outbound-HTTPS process. Recommend upgrading to `node-telegram-bot-api@0.67+` or migrating to `telegraf` in Phase 4 hardening.
+
+3. **`@unknown_thing` parsing** — non-numeric slots like `@unknown_thing` are parsed as NaN, which falls back to slot 0 (per spec "parser doesn't validate; resolution is a separate step"). The resolution step checks `agent_status` and returns "no agent at slot 0" if slot 0 isn't running.
+
+4. **`/api/messages` shape** — confirmed at investigation: accepts `{to_id, content, priority}`. No auth. No slot→agent_id resolution server-side; the bot resolves it client-side via `GET /api/state` statuses array (matches Phase 1 design).
+
+5. **Approve endpoint** — `POST /api/messages/:id/approve` takes no body. `POST /api/messages/:id/select-option` takes `{option_index}`. These are separate endpoints (confirmed at investigation). The design correctly separated `approve:<id>` and `option:<id>:<i>` callback_data patterns.

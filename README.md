@@ -57,6 +57,29 @@ synapse dash -p 4000
 | `send_message` | Send a message to the operator or another agent |
 | `update_status` | Report current state (`idle`, `working`, `blocked`, `error`) |
 
+## Remote access (Telegram)
+
+Control Synapse from your Telegram client. Agents reply via the bot.
+
+**Setup:**
+1. Create a bot via [@BotFather](https://t.me/BotFather) and get your token.
+2. Get your Telegram chat ID via [@userinfobot](https://t.me/userinfobot).
+3. Set env vars:
+   ```bash
+   export SYNAPSE_TELEGRAM_TOKEN=<your-bot-token>
+   export SYNAPSE_TELEGRAM_ALLOWED_CHATS=<your-chat-id>
+   ```
+4. Start the Synapse dashboard, then run the bot bridge in a second terminal:
+   ```bash
+   synapse remote --telegram
+   ```
+
+**Sending messages:** type `@<slot> <text>` to route to an agent by slot number. Bare messages (no `@` prefix) go to the orchestrator (slot 0). Example: `@0 what's the status?`
+
+**Receiving messages:** the bot relays `finding`, `blocked`, and `done` messages, plus any approval requests (with inline keyboard buttons).
+
+See `docs/telegram-bot-plan.md` for architecture details.
+
 ## Development
 
 ```bash

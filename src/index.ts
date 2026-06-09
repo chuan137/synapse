@@ -822,6 +822,21 @@ program
   });
 
 program
+  .command('remote')
+  .description('Start a remote access bridge (Telegram bot)')
+  .option('--telegram', 'Run Telegram bot bridge (requires SYNAPSE_TELEGRAM_TOKEN and SYNAPSE_TELEGRAM_ALLOWED_CHATS)')
+  .option('--port <n>', 'Synapse dashboard port to connect to', String(process.env.SYNAPSE_DECK_PORT ?? '4000'))
+  .action(async (options) => {
+    if (!options.telegram) {
+      process.stderr.write('error: specify a bridge type: --telegram\n');
+      process.exit(1);
+    }
+    const { startTelegramBridge } = await import('./remote/index.js');
+    const port = parseInt(options.port, 10);
+    await startTelegramBridge(port);
+  });
+
+program
   .command('eval-summarize')
   .description('LLM-powered summarizer: reads retros, window reports, and patches → concrete proposals')
   .option('--since <duration>', 'How far back to gather sources (e.g. 2w, 7d)', '2w')
