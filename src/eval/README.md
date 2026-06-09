@@ -146,6 +146,28 @@ Both paths are valid. Empty `agents` maps are valid v2 (orchestrator-only tasks 
 
 ```sh
 node tests/eval-v2.test.mjs
+node tests/eval-window.test.mjs
 ```
 
-Covers: v2 schema shape, calibration output + min-sample guard, evaluator regression (all good cases pass, all bad cases fail).
+`eval-v2`: v2 schema shape, calibration output + min-sample guard, evaluator regression.
+`eval-window`: duration parser, aggregation correctness, empty-window, role filter, idle drift.
+
+---
+
+## Window Report
+
+`synapse eval-window` aggregates per-task eval data across a time window and produces a structured markdown report.
+
+```bash
+synapse eval-window --since 7d        # last 7 days
+synapse eval-window --since 24h       # last 24 hours
+synapse eval-window --from 2026-06-01 --to 2026-06-08
+synapse eval-window --since 7d --role developer
+synapse eval-window --since 7d --output my-report.md
+```
+
+The report is written to `.synapse/reports/<timestamp>-window-<duration>.md` and contains: Summary, Per-role aggregates, Tool usage, Threshold breaches, Blocked events, Idle drift, and Recurring patterns sections.
+
+Use the `/eval-window-report` skill to run the CLI and add a narrative interpretation layer.
+
+Implementation: `src/eval/window.ts` (~270 lines). Uses FK attribution (`tool_metrics.task_id`) where available; falls back to time-window for legacy rows.

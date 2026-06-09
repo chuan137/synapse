@@ -793,6 +793,48 @@ program
   });
 
 program
+  .command('eval-window')
+  .description('Aggregate eval metrics across a time window and produce a markdown report')
+  .option('--since <duration>', 'Time window duration (e.g. 7d, 24h, 2w)', '7d')
+  .option('--from <date>', 'Start date ISO or epoch ms')
+  .option('--to <date>', 'End date ISO or epoch ms (default: now)')
+  .option('--role <role>', 'Filter to one role')
+  .option('--output <path>', 'Output file path (default: auto-named in .synapse/reports/)')
+  .action(async (options) => {
+    const { generateWindowReport } = await import('./eval/window.js');
+    const { mkdirSync, writeFileSync } = await import('fs');
+    const { join } = await import('path');
+
+    const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
+
+    const opts: any = {};
+    if (options.since) opts.since = options.since;
+    if (options.from) opts.from = isNaN(Number(options.from)) ? new Date(options.from).getTime() : Number(options.from);
+    if (options.to)   opts.to   = isNaN(Number(options.to))   ? new Date(options.to).getTime()   : Number(options.to);
+    if (options.role) opts.role = options.role;
+
+    let report: string;
+    try {
+      report = generateWindowReport(dbPath, opts);
+    } catch (err: any) {
+      process.stderr.write(`error: ${err.message}\n`);
+      process.exit(1);
+    }
+
+    process.stdout.write(report);
+
+    const outPath = options.output ?? (() => {
+      const slug = options.since ?? 'custom';
+      const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').slice(0, 15);
+      const reportsDir = join(process.cwd(), '.synapse', 'reports');
+      mkdirSync(reportsDir, { recursive: true });
+      return join(reportsDir, `${ts}-window-${slug}.md`);
+    })();
+    writeFileSync(outPath, report);
+    process.stderr.write(`\nReport written to ${outPath}\n`);
+  });
+
+program
   .command('eval-apply <proposal-file>')
   .description('Apply a gate-approved proposal patch to the target rule file, commit, and reset the failure counter')
   .action((proposalFile: string) => {
