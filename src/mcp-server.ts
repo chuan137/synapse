@@ -388,7 +388,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Auto-advance status idle → working so S-Deck reflects the agent is processing messages.
     // Only fires from idle to avoid overwriting blocked/error/working states.
     if (getAgentState(AGENT_ID) === 'idle') {
-      updateStatus(AGENT_ID, 'working', `reading ${msgs.length} message${msgs.length === 1 ? '' : 's'}`, null, null);
+      const senders = [...new Set(msgs.map(m => m.from_id))];
+      const senderStr = senders.length === 1 ? senders[0] : senders.slice(0, 2).join(', ') + (senders.length > 2 ? ', …' : '');
+      updateStatus(AGENT_ID, 'working', `reading ${msgs.length} message${msgs.length === 1 ? '' : 's'} from ${senderStr}`, null, null);
     }
 
     const array = msgs.map((m) => ({
