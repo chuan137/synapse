@@ -56,7 +56,7 @@ Call `update_status` whenever your state changes, at every phase transition, and
 States: `idle` · `working` · `error` (report these yourself) · `blocked` (set automatically — do not report it yourself)
 
 **Phase transitions that fire `update_status` (orchestrators especially — workers transition less often):**
-- (a) After `read_messages` returns ≥1 message → immediately call `update_status(state="working", current_task="reading <N> message(s) from <sender>")` before handling them
+- (a) After `read_messages` if work is required → `working` + concrete `current_task`
 - (b) Before any `delegate_task` → `working — delegating <task title> to <worker>`
 - (c) After delegating with nothing else to do → `idle — awaiting <worker> on task N`
 - (d) Switching between active tasks (orch only — when finishing one operator request and starting another, or when juggling parallel tasks) → fire a fresh `update_status` reflecting the new task
