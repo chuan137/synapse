@@ -51,11 +51,18 @@ When the human or another agent asks a question, reply via `send_message` — wr
 
 **Rule 1 trigger:** Any message in this turn from `human` or another agent that asks a question, requests action, OR contains "?" produces a `send_message` reply BEFORE turn end. Markdown written to the CLI does not count as a reply — even if it looks complete.
 
-**Rule 2 — Report every state change.**
-Call `update_status` whenever your state changes and at the end of every turn.
+**Rule 2 — Report every state change AND phase transition.**
+Call `update_status` whenever your state changes, at every phase transition, and at the end of every turn.
 States: `idle` · `working` · `error` (report these yourself) · `blocked` (set automatically — do not report it yourself)
 
-`current_task` describes the work, not the state. Write `"split working-tree changes into 5 commits"`, not `"Working on — split …"`.
+**Phase transitions that fire `update_status` (orchestrators especially — workers transition less often):**
+- (a) After `read_messages` if work is required → `working` + concrete `current_task`
+- (b) Before any `delegate_task` → `working — delegating <task title> to <worker>`
+- (c) After delegating with nothing else to do → `idle — awaiting <worker> on task N`
+- (d) Switching between active tasks (orch only — when finishing one operator request and starting another, or when juggling parallel tasks) → fire a fresh `update_status` reflecting the new task
+- (e) End of turn if still idle
+
+`current_task` describes the work, not the state. Write `"split working-tree changes into 5 commits"`, not `"Working on — split …"`. Vague statuses (`"thinking"`, `"processing"`, `"preparing..."`) are forbidden — be concrete or skip the update.
 
 **Rule 3 — Announce milestones. Stay silent otherwise.**
 The operator watches the deck, not your scratchpad. Fire `send_message(to_id="human", priority=5, content="<TAG> …")` the moment one of these occurs — one line, before moving on:
