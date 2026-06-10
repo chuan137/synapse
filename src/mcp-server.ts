@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -383,6 +383,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (msgs.length === 0) {
       return { content: [{ type: 'text', text: `No new messages.${reminder}` }] };
+    }
+
+    // Auto-advance status idle → working so S-Deck reflects the agent is processing messages.
+    // Only fires from idle to avoid overwriting blocked/error/working states.
+    if (getAgentState(AGENT_ID) === 'idle') {
+      updateStatus(AGENT_ID, 'working', `reading ${msgs.length} message${msgs.length === 1 ? '' : 's'}`, null, null);
     }
 
     const array = msgs.map((m) => ({

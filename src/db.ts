@@ -1042,6 +1042,11 @@ export function getRoleByAgentId(agentId: string): string | null {
   return row?.role ?? null;
 }
 
+export function getAgentState(agentId: string): string | null {
+  const row = db.prepare(`SELECT state FROM agent_status WHERE agent_id = ?`).get(agentId) as any;
+  return row?.state ?? null;
+}
+
 /** Set the active task cookie for a worker agent. Called on delegate_task. */
 export function setCurrentTaskId(agentId: string, taskId: number): void {
   db.prepare(`UPDATE agent_status SET current_task_id = ? WHERE agent_id = ?`).run(taskId, agentId);
