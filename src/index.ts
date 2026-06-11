@@ -311,7 +311,14 @@ program
     if (hasOrchestrator) {
       process.stderr.write('[Synapse] Orchestrator (slot :0) already running — starting dashboard only.\n');
     } else {
-      // Spawn the orchestrator in a new tmux pane
+      // Spawn the orchestrator in the operator's current tmux session (not the hidden
+      // synapse-workers session used for workers) so the operator can see it.
+      if (!process.env.TMUX) {
+        process.stderr.write(
+          '[Synapse] error: not inside a tmux session. Run `synapse start` from within tmux so the orchestrator window is visible.\n'
+        );
+        process.exit(1);
+      }
       const dbPath = process.env.SYNAPSE_DB_PATH ?? join(cwd, '.synapse', 'synapse.db');
       const tmpDir = mkdtempSync(join(tmpdir(), 'synapse-'));
       const launchScript = join(tmpDir, 'launch.sh');
@@ -322,8 +329,10 @@ program
       ].join('\n') + '\n', 'utf8');
       chmodSync(launchScript, 0o755);
 
+      // No -t: tmux new-window defaults to the current session, placing the orchestrator
+      // window where the operator can see it (distinct from -t synapse-workers used for workers).
       execSync(`tmux new-window -d -c ${JSON.stringify(cwd)} -n ORCH ${JSON.stringify(launchScript)}`);
-      process.stderr.write('[Synapse] Launched orchestrator in tmux window "orchestrator" (slot :0).\n');
+      process.stderr.write('[Synapse] Launched orchestrator in tmux window "ORCH" (slot :0).\n');
     }
 
     // Start the dashboard
