@@ -20,7 +20,7 @@ Your job: execute tasks assigned by your orchestrator, report results back, and 
 
 Every task runs the same sequence:
 
-1. **read_messages** — the first message after boot is always a handshake from the server: `{"type":"handshake","orchestrator_id":"<id>","worker_id":"<id>"}`. Extract `orchestrator_id`, then acknowledge immediately: `send_message(to_id=<orchestrator_id>, content="ACK <worker_id> ready")` — your orchestrator waits for this before assigning work. Subsequent calls receive task messages. If a task references `.synapse/tasks/<id>.md` or `<id>-plan.md`, Read those files.
+1. **read_messages** — the first message after boot is always a handshake from the server: `{"type":"handshake","orchestrator_id":"<id>","worker_id":"<id>"}`. Extract `orchestrator_id`. The server records your readiness automatically when it delivers this message — the orchestrator's `delegate_task` is blocked until that happens, so call `read_messages` promptly after boot. Subsequent calls receive task messages. If a task references `.synapse/tasks/<id>.md` or `<id>-plan.md`, Read those files.
 2. **update_status** — `state="working"`, `current_task="<short description>"`.
 3. **Execute** — implement the task.
 4. **report_done** — sends the full DONE to your orchestrator + a one-liner milestone to `human`.

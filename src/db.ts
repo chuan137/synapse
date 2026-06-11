@@ -146,6 +146,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE eval_results ADD COLUMN agent_id TEXT`,
     `ALTER TABLE agent_status ADD COLUMN current_task_id INTEGER`,
     `ALTER TABLE tool_metrics ADD COLUMN task_id INTEGER`,
+    `ALTER TABLE agent_status ADD COLUMN ready_at INTEGER`,
   ]) {
     try { database.exec(sql); } catch { /* already applied or not applicable */ }
   }
@@ -210,6 +211,7 @@ export interface AgentStatus {
   ended_at: number | null;
   boot_task: string | null;
   orchestrator_id: string | null;
+  ready_at: number | null;
 }
 
 // An EventRecord as emitted by the inspector hook (inspector/types.ts shape,
@@ -700,6 +702,8 @@ export interface LiveWorker {
   state: AgentStatus['state'];
   current_task: string | null;
   last_seen_ms_ago: number;
+  ready: boolean;
+  ready_age: string;  // "ready 3m ago" or "not ready"
 }
 
 /**
@@ -721,15 +725,24 @@ export function listLiveWorkers(
   const state = filters.state ?? null;
   return stmts.liveWorkers
     .all(role, role, state, state)
-    .map((r) => ({
-      agent_id: r.agent_id,
-      slot: r.slot,
-      role: r.role,
-      name: r.name,
-      state: r.state,
-      current_task: r.current_task,
-      last_seen_ms_ago: now - r.updated_at,
-    }));
+    .map((r) => {
+      const fmtAge = (ms: number) => {
+        const s = Math.round(ms / 1000);
+        return s < 60 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
+      };
+      const ready = r.ready_at != null;
+      return {
+        agent_id: r.agent_id,
+        slot: r.slot,
+        role: r.role,
+        name: r.name,
+        state: r.state,
+        current_task: r.current_task,
+        last_seen_ms_ago: now - r.updated_at,
+        ready,
+        ready_age: ready ? `ready ${fmtAge(now - r.ready_at!)}` : 'not ready',
+      };
+    });
 }
 
 /** Write an agent's role into its agent_status row (set by spawn_agent once the
@@ -1045,6 +1058,17 @@ export function getRoleByAgentId(agentId: string): string | null {
 export function getAgentState(agentId: string): string | null {
   const row = db.prepare(`SELECT state FROM agent_status WHERE agent_id = ?`).get(agentId) as any;
   return row?.state ?? null;
+}
+
+/** Mark a worker as ready (handshake delivered). Idempotent — only sets if not already set. */
+export function setAgentReady(agentId: string): void {
+  db.prepare(`UPDATE agent_status SET ready_at = ? WHERE agent_id = ? AND ready_at IS NULL`).run(Date.now(), agentId);
+}
+
+/** Returns the epoch-ms timestamp when the agent acknowledged the handshake, or null. */
+export function getAgentReady(agentId: string): number | null {
+  const row = db.prepare(`SELECT ready_at FROM agent_status WHERE agent_id = ?`).get(agentId) as any;
+  return row?.ready_at ?? null;
 }
 
 /** Set the active task cookie for a worker agent. Called on delegate_task. */

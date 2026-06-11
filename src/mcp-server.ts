@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState, setAgentReady, getAgentReady } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -393,6 +393,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       updateStatus(AGENT_ID, 'working', `reading ${msgs.length} message${msgs.length === 1 ? '' : 's'} from ${senderStr}`, null, null);
     }
 
+    // Server-side spawn ACK: if any delivered message is a handshake, mark this worker as ready.
+    // This is idempotent — setAgentReady only writes once (when ready_at IS NULL).
+    const hasHandshake = msgs.some(m => {
+      try { return (JSON.parse(m.content as string) as any)?.type === 'handshake'; } catch { return false; }
+    });
+    if (hasHandshake) setAgentReady(AGENT_ID);
+
     const array = msgs.map((m) => ({
       id: m.id,
       from: m.from_id,
@@ -502,7 +509,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: 'text',
           text: `Spawned agent ${worker.agent_id} (slot :${worker.slot}, role: ${workerRole}) in tmux window "${windowName}". ` +
-                `Send it messages using to_id = "${worker.agent_id}".`,
+                `Send it messages using to_id = "${worker.agent_id}". ` +
+                `Worker is not ready until it has read the handshake message — check list_workers before delegating.`,
         },
       ],
     };
@@ -522,9 +530,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
 
     const rows = workers.map((w) =>
-      `:${w.slot}\t${w.agent_id}\t${w.role ?? '-'}\t${w.name || '-'}\t${w.state}\t${w.current_task ?? '-'}\t${fmtAge(w.last_seen_ms_ago)}`
+      `:${w.slot}\t${w.agent_id}\t${w.role ?? '-'}\t${w.name || '-'}\t${w.state}\t${w.current_task ?? '-'}\t${fmtAge(w.last_seen_ms_ago)}\t${w.ready_age}`
     );
-    const header = 'slot\tagent_id\trole\tname\tstate\tcurrent_task\tlast_seen';
+    const header = 'slot\tagent_id\trole\tname\tstate\tcurrent_task\tlast_seen\tready';
     const text = `${workers.length} live worker(s):\n\n${header}\n${rows.join('\n')}`;
 
     return { content: [{ type: 'text', text }] };
@@ -638,6 +646,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       task_id?: number;
       source_msg_id?: number;
     };
+
+    // Spawn ACK gate: reject if the target worker has not yet read its handshake message.
+    if (getAgentReady(to_id) === null) {
+      return { content: [{ type: 'text', text: `Worker ${to_id} has not acknowledged yet — check list_workers and retry once it shows ready.` }], isError: true };
+    }
     let outboundContent = content;
     if (task_file) {
       const fileId = task_id ?? Date.now();

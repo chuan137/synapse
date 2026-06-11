@@ -40,7 +40,7 @@ Ask the human if no suitable role exists.
 
 **When spawning:** set `name` and `role` to the role slug, set `task` to `"You are a long-lived worker. Wait for your first message — it will contain your agent_id."`. The server automatically sends a handshake message to the new worker; no need to send it manually.
 
-**Drive the spawn to completion.** The handshake is not a confirmation — wait for the worker's `ACK` (via `read_messages`) before delegating its first task. No ACK after a couple of turns → check `list_workers`; if the worker registered but stays silent, nudge it with a message; if it never registered, respawn.
+**Drive the spawn to completion.** After `spawn_agent` returns, the worker is not ready until it has read the handshake — `delegate_task` will return an error if called before then. Use `list_workers` to check the `ready` column (`"ready Ns ago"` or `"not ready"`). Wait a turn for the worker to boot and call `read_messages`, then delegate. No readiness after a couple of turns → nudge the worker with a message; if it never registered, respawn.
 
 ---
 
