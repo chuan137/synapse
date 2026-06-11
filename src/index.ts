@@ -8,6 +8,7 @@ import { exec, execFileSync, execSync, spawn } from 'child_process';
 import { openDb, attachCommitToTaskBySlot, resetMetricCount } from './db.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { parseRoleFile } from './roles.js';
+import { resolveModelForRole, resolveAllModels } from './models.js';
 
 /** List all available named roles from templates/roles/, returning their metadata. */
 function listAvailableRoles(templatesDir: string): { role: string; description: string; capabilities: string[] }[] {
@@ -227,7 +228,9 @@ program
     }
 
     const claudeArgs = ['--append-system-prompt', systemPrompt];
-    if (persistedModel)  claudeArgs.push('--model',  persistedModel);
+    // Model resolution: persisted DB value (operator-set) > role default from models.ts
+    const resolvedModel = persistedModel ?? resolveModelForRole(role, cwd);
+    claudeArgs.push('--model', resolvedModel);
     if (persistedEffort) claudeArgs.push('--effort', persistedEffort);
     if (isWorker) {
       claudeArgs.push('--dangerously-skip-permissions');
@@ -1048,6 +1051,28 @@ program
     content = content.replace(/^Status:\s*.+$/im, 'Status: deployed');
     writeFileSync(proposalPath, content, 'utf8');
     process.stdout.write(`Marked proposal as deployed: ${basename(proposalPath)}\n`);
+  });
+
+program
+  .command('models')
+  .description('Show the resolved model per family and per role')
+  .action(() => {
+    const cwd = process.cwd();
+    const { families, roles } = resolveAllModels(cwd);
+
+    process.stdout.write('family→model:\n');
+    const famWidth  = Math.max(...families.map(f => f.family.length));
+    const modWidth  = Math.max(...families.map(f => f.model.length));
+    for (const { family, model, source } of families) {
+      process.stdout.write(`  ${family.padEnd(famWidth)}  ${model.padEnd(modWidth)}  [${source}]\n`);
+    }
+
+    process.stdout.write('\nrole→family→model:\n');
+    const roleWidth = Math.max(...roles.map(r => r.role.length));
+    const famWidth2 = Math.max(...roles.map(r => r.family.length));
+    for (const { role, family, model } of roles) {
+      process.stdout.write(`  ${role.padEnd(roleWidth)}  ${family.padEnd(famWidth2)}  ${model}\n`);
+    }
   });
 
 program.parse(process.argv);
