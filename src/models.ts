@@ -10,7 +10,7 @@ const ROLE_FAMILY: Record<string, Family> = {
   developer:       'sonnet',
   'code-reviewer': 'sonnet',
   planner:         'sonnet',
-  'doc-writer':    'sonnet',
+  'doc-writer':    'haiku',
 };
 
 export const KNOWN_ROLES = Object.keys(ROLE_FAMILY);
