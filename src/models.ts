@@ -53,7 +53,7 @@ export function resolveFamily(family: Family, cwd = process.cwd()): FamilyResolu
   const val = readEnvBlock(join(globalClaudeDir, 'settings.json'))[key];
   if (val) return { model: val, source: '~/.claude/settings.json' };
 
-  return { model: `claude-${family}-latest`, source: 'fallback' };
+  return { model: family, source: 'fallback' };
 }
 
 /** Resolve the model name for a role. */
