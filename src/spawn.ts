@@ -46,7 +46,8 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
   ].join('\n') + '\n', 'utf8');
   chmodSync(launchScript, 0o755);
 
-  execSync(`tmux new-window -d -n ${JSON.stringify(windowName)} ${JSON.stringify(launchScript)}`);
+  execSync('tmux new-session -d -s synapse-workers 2>/dev/null || true');
+  execSync(`tmux new-window -d -t synapse-workers -n ${JSON.stringify(windowName)} ${JSON.stringify(launchScript)}`);
 
   // Poll until the worker claims its slot (max 60s)
   let worker: SpawnedWorker | null = null;
