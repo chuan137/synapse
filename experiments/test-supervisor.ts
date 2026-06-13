@@ -1,7 +1,8 @@
 /**
  * test-supervisor.ts — prototype supervisor for claude -p --input-format=stream-json
  *
- * Spawns a claude process, sends two turns, streams all events, prints a summary.
+ * Spawns a claude process, sends two turns, streams all events with rich tool-call
+ * pretty-printing, prints a summary.
  * Run: npx tsx experiments/test-supervisor.ts
  *
  * No production error handling — this is a probe.
@@ -23,26 +24,77 @@ function elapsed(): string {
   return `+${((Date.now() - START) / 1000).toFixed(2)}s`;
 }
 
-function summarise(line: string): string {
+function trunc(s: string, n = 80): string {
+  const flat = String(s ?? '').replace(/\n/g, '↵');
+  return flat.length > n ? flat.slice(0, n) + '…' : flat;
+}
+
+function formatContentBlock(block: any): string {
+  const t = block?.type ?? '?';
+  if (t === 'text')       return `  text        ${trunc(block.text ?? '')}`;
+  if (t === 'thinking')   return `  thinking    ${trunc(block.thinking ?? '')}`;
+  if (t === 'tool_use')   return `  tool_use    ${block.name ?? '?'}  input=${trunc(JSON.stringify(block.input ?? {}), 60)}`;
+  if (t === 'tool_result') {
+    const content = Array.isArray(block.content) ? block.content : [];
+    const text = content.find((c: any) => c.type === 'text')?.text ?? JSON.stringify(block.content ?? '');
+    const status = block.is_error ? 'err' : 'ok';
+    return `  tool_result [${String(block.tool_use_id ?? '').slice(-8)}] ${status}  ${trunc(text)}`;
+  }
+  return `  ${t}  ${trunc(JSON.stringify(block), 80)}`;
+}
+
+function summarise(line: string): string[] {
   try {
     const ev = JSON.parse(line) as Record<string, unknown>;
     const type = String(ev.type ?? '?');
     const subtype = ev.subtype ? `/${ev.subtype}` : '';
-    let detail = '';
+    const header = `${type}${subtype}`;
+
     if (type === 'assistant') {
       const msg = ev.message as any;
-      const parts = Array.isArray(msg?.content) ? msg.content : [];
-      const textPart = parts.find((p: any) => p.type === 'text');
-      detail = textPart ? String(textPart.text ?? '').slice(0, 80).replace(/\n/g, '↵') : '';
-    } else if (type === 'result') {
-      const res = ev as any;
-      detail = `turns=${res.num_turns ?? '?'} cost=$${(res.cost_usd ?? 0).toFixed(4)}`;
-    } else if (type === 'system') {
-      detail = String((ev as any).session_id ?? (ev as any).hook_type ?? '').slice(0, 40);
+      const blocks: any[] = Array.isArray(msg?.content) ? msg.content : [];
+      const lines = [header];
+      for (const b of blocks) lines.push(formatContentBlock(b));
+      return lines;
     }
-    return `${type}${subtype}${detail ? '  ' + detail : ''}`;
+
+    if (type === 'user') {
+      const msg = ev.message as any;
+      // Echo of user events includes tool_result blocks
+      const blocks: any[] = Array.isArray(msg?.content) ? msg.content : [];
+      if (!blocks.length) return [header];
+      const lines = [header];
+      for (const b of blocks) lines.push(formatContentBlock(b));
+      return lines;
+    }
+
+    if (type === 'result') {
+      const res = ev as any;
+      const usage = res.usage ?? {};
+      const cost = res.total_cost_usd ?? res.cost_usd ?? 0;
+      return [
+        `${header}  turns=${res.num_turns ?? '?'}  cost=$${Number(cost).toFixed(4)}`,
+        `  tokens: in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0} cache_create=${usage.cache_creation_input_tokens ?? 0} cache_read=${usage.cache_read_input_tokens ?? 0}`,
+      ];
+    }
+
+    if (type === 'system') {
+      const s = ev as any;
+      if (subtype === '/init') {
+        const servers = (s.mcp_servers ?? []).map((m: any) => `${m.name}(${m.status})`).join(', ');
+        const toolCount = (s.tools ?? []).length;
+        return [
+          `${header}  session=${String(s.session_id ?? '').slice(-8)}  model=${s.model ?? '?'}`,
+          `  mcp_servers: ${servers || '(none)'}`,
+          `  tools loaded: ${toolCount}`,
+        ];
+      }
+      return [`${header}  ${trunc(String(s.hook_name ?? s.session_id ?? ''), 60)}`];
+    }
+
+    return [header + '  ' + trunc(JSON.stringify(ev), 80)];
   } catch {
-    return line.slice(0, 100);
+    return ['(non-json) ' + line.slice(0, 100)];
   }
 }
 
@@ -59,7 +111,7 @@ async function main() {
   let lastTimestamp = '';
   let resultCount = 0;
   let successCount = 0;
-  let turnsDone = 0;
+  let mcpServers: string[] = [];
 
   // Stream stderr
   child.stderr.on('data', (chunk: Buffer) => {
@@ -79,7 +131,6 @@ async function main() {
       rl.on('line', handler);
     });
 
-  // Collect all lines, emit to console, track counts
   rl.on('line', (line: string) => {
     if (!line.trim()) return;
     try {
@@ -97,30 +148,29 @@ async function main() {
         resultCount++;
         if (ev.subtype === 'success') successCount++;
       }
+      if (type === 'system' && subtype === '/init') {
+        mcpServers = ((ev as any).mcp_servers ?? []).map((m: any) => `${m.name}(${m.status})`);
+      }
 
-      console.log(`[child→] ${ts}  ${summarise(line)}`);
+      const lines = summarise(line);
+      console.log(`[child→] ${ts}  ${lines[0]}`);
+      for (let i = 1; i < lines.length; i++) console.log(`           ${lines[i]}`);
     } catch {
       console.log(`[child→] ${elapsed()}  (non-json) ${line.slice(0, 120)}`);
     }
   });
 
-  // Kick off: send turn 1
   console.log(`[sup]   ${elapsed()}  → turn 1`);
   child.stdin.write(userEvent(TURN1));
 
-  // Wait for result before sending turn 2
   await waitForResult();
-  turnsDone++;
   console.log(`\n[sup]   ${elapsed()}  turn 1 complete — sending turn 2\n`);
   child.stdin.write(userEvent(TURN2));
 
-  // Wait for second result
   await waitForResult();
-  turnsDone++;
   console.log(`\n[sup]   ${elapsed()}  turn 2 complete — closing stdin\n`);
   child.stdin.end();
 
-  // Wait for child exit
   const exitCode = await new Promise<number | null>(resolve =>
     child.on('close', resolve)
   );
@@ -136,6 +186,7 @@ async function main() {
   console.log(`  Result events     : ${resultCount} (${successCount} success)`);
   console.log(`  First event at    : ${firstTimestamp}`);
   console.log(`  Last event at     : ${lastTimestamp}`);
+  console.log(`  MCP servers       : ${mcpServers.join(', ') || '(none)'}`);
   console.log('  Event counts:');
   for (const [k, v] of Object.entries(eventCounts).sort()) {
     console.log(`    ${k.padEnd(28)} ${v}`);
