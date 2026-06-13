@@ -1421,8 +1421,8 @@ Describe the role's responsibilities here.
       }
       return;
     }
-    // Don't linkify inside <a>, <code>, <pre>
-    if (node.tagName === 'A' || node.tagName === 'CODE' || node.tagName === 'PRE') return;
+    // Don't linkify inside <a> or block code (<pre>); inline <code> is allowed
+    if (node.tagName === 'A' || node.tagName === 'PRE') return;
     Array.from(node.childNodes).forEach(walkTextNodes);
   }
 
