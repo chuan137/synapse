@@ -1,0 +1,66 @@
+[sup]   +0.00s  isolated DB: /var/folders/q4/hzw0641962312yxqhg0fjswc0000gn/T/sup-mediation-1781384893324.db
+[sup]   +0.00s  outbound log: /Users/D067954/Documents/Claude/Projects/synapse/.synapse/worktrees/developer-55-supervisor-mediation/experiments/test-supervisor-mediation-outbound.log
+
+[sup]   +0.00s  → turn 1 (inbound via DB queue)
+
+[child→] +0.35s  system/hook_started  {"type":"system","subtype":"hook_started","hook_id":"967edf21-59ae-4ea…
+[child→] +0.35s  system/hook_response  {"type":"system","subtype":"hook_response","hook_id":"967edf21-59ae-4e…
+[child→] +0.51s  system/init  session=114c7e9b  mcp=synapse-bus(connected)  tools=37
+
+[sup]   +1.33s  ⬇ seeded DB: to=225323cd:0 msg: Hello from operator — please reply with the string
+[child→] +2.82s  assistant
+             text        I'll check for messages now.
+[child→] +2.82s  assistant
+             tool_use    mcp__synapse-bus__read_messages  input={}
+[child→] +2.93s  user
+             tool_result [AcrTYAvb] ok  [↵  {↵    "id": 1,↵    "from": "cec50b17:0",↵    "priority": 0,↵    "at": "2026-…
+
+[sup]   +4.00s  ⬆ direct stdin inject: Also call update_status with state='working' and current_tas
+
+[child→] +4.76s  assistant
+             tool_use    mcp__synapse-bus__send_message  input={"to_id":"human","content":"mediation OK","type":"message"}
+[child→] +4.81s  user
+             tool_result [jWUJx1f5] err  
+[child→] +6.59s  assistant
+             tool_use    mcp__synapse-bus__send_message  input={"content":"mediation OK","to_id":"human","type":"message","…
+[child→] +6.71s  user
+             tool_result [ZuQ9Mica] ok  Message sent to human (priority 5).
+[child→] +8.36s  assistant
+             tool_use    mcp__synapse-bus__update_status  input={"state":"working","current_task":"running mediation test"}
+[child→] +8.46s  user
+             tool_result [VMm4qm7d] ok  Status updated: working — running mediation test
+[child→] +10.10s  assistant
+             tool_use    mcp__synapse-bus__update_status  input={"current_task":"task done","state":"idle"}
+[child→] +10.22s  user
+             tool_result [LYZQgWRM] ok  Status updated: idle — task done
+[child→] +11.64s  assistant
+             text        Done. Sent "mediation OK" to human, updated status to working then idle.
+[child→] +11.72s  result/success  turns=6  cost=$0.1309
+             tokens: in=8 out=455 cache_read=229726
+
+[sup]   +11.72s  turn 1 complete (success)
+
+[sup]   +11.75s  outbound messages captured: 1
+[sup]   +11.75s  [outbound] send_message from=225323cd:0 to=human type=undefined content="mediation OK"
+
+════════════════════════════════════════════════════════
+SUMMARY
+════════════════════════════════════════════════════════
+  Total runtime     : 11.88s
+  Child exit code   : 0
+  MCP servers       : synapse-bus(connected)
+  DB isolation      : ✓ NO POLLUTION (0 new messages in real DB)
+  send_message 'mediation OK' captured: ✓ YES
+  update_status 'working' captured    : ✗ NO
+  update_status 'idle' captured       : ✗ NO
+  Event counts:
+    assistant                    7
+    result/success               1
+    system/hook_response         1
+    system/hook_started          1
+    system/init                  1
+    user                         5
+
+  Outbound log:
+    [outbound] send_message from=225323cd:0 to=human type=undefined content="mediation OK"
+════════════════════════════════════════════════════════
