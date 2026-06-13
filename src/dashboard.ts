@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
-import { join, dirname, basename } from 'path';
+import { join, dirname, basename, resolve, sep, extname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync, mkdirSync, realpathSync, openSync, readSync, closeSync } from 'fs';
 import { execSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import { buildSystemPrompt } from './system-prompt.js';
@@ -848,6 +848,77 @@ app.get('/api/commit/:sha/diff', (req: Request, res: Response) => {
     res.json({ sha, subject, diff });
   } catch {
     res.status(404).json({ error: 'commit not found' });
+  }
+});
+
+// File viewer — read-only, scoped to GIT_CWD, 1 MB cap
+const FILE_MIME: Record<string, string> = {
+  '.md': 'text/markdown', '.markdown': 'text/markdown',
+  '.ts': 'text/typescript', '.tsx': 'text/typescript',
+  '.js': 'text/javascript', '.jsx': 'text/javascript', '.mjs': 'text/javascript',
+  '.json': 'application/json',
+  '.css': 'text/css', '.html': 'text/html', '.htm': 'text/html',
+  '.py': 'text/x-python', '.rb': 'text/x-ruby', '.go': 'text/x-go',
+  '.sh': 'text/x-sh', '.bash': 'text/x-sh', '.zsh': 'text/x-sh',
+  '.yaml': 'text/yaml', '.yml': 'text/yaml', '.toml': 'text/toml',
+  '.txt': 'text/plain', '.log': 'text/plain', '.env': 'text/plain',
+};
+const FILE_MAX_BYTES = 1_048_576; // 1 MB
+
+app.get('/api/file', (req: Request, res: Response) => {
+  const rel = String(req.query.path ?? '');
+  if (!rel) { res.status(400).json({ error: 'path required' }); return; }
+
+  const abs = resolve(GIT_CWD, rel);
+  // Lexical path-traversal check
+  if (!abs.startsWith(GIT_CWD + sep) && abs !== GIT_CWD) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+
+  // H1: dereference symlinks and re-validate so in-tree symlinks pointing
+  // outside the project are rejected.
+  let realAbs: string;
+  try { realAbs = realpathSync(abs); } catch { res.status(404).json({ error: 'not found' }); return; }
+  if (!realAbs.startsWith(GIT_CWD + sep) && realAbs !== GIT_CWD) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+
+  let stat: ReturnType<typeof statSync>;
+  try { stat = statSync(realAbs); } catch { res.status(404).json({ error: 'not found' }); return; }
+  if (!stat.isFile()) { res.status(404).json({ error: 'not a file' }); return; }
+
+  const ext = extname(realAbs).toLowerCase();
+  const mime = FILE_MIME[ext] ?? 'text/plain';
+  const sizeBytes = stat.size;
+
+  if (sizeBytes > FILE_MAX_BYTES) {
+    res.json({ path: rel, truncated: true, sizeBytes, mime });
+    return;
+  }
+
+  // M1: detect binary by sampling first 512 bytes for null bytes
+  try {
+    const SAMPLE = 512;
+    const buf = Buffer.allocUnsafe(Math.min(SAMPLE, sizeBytes));
+    const fd = openSync(realAbs, 'r');
+    const bytesRead = readSync(fd, buf, 0, buf.length, 0);
+    closeSync(fd);
+    if (buf.slice(0, bytesRead).includes(0x00)) {
+      res.json({ path: rel, binary: true, sizeBytes, mime });
+      return;
+    }
+  } catch {
+    res.status(500).json({ error: 'read failed' });
+    return;
+  }
+
+  try {
+    const content = readFileSync(realAbs, 'utf8');
+    res.json({ path: rel, absPath: realAbs, content, mime, sizeBytes });
+  } catch {
+    res.status(500).json({ error: 'read failed' });
   }
 });
 

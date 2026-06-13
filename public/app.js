@@ -7,7 +7,7 @@
   let allTasks         = [];
   let planContent      = '';
   let selectedAgentId  = null;
-  let middlePanelTab   = 'messages'; // 'messages' | 'plan'
+  let middlePanelTab   = 'messages'; // 'messages' | 'plan' | 'files'
   // Local tracking of clicked approval buttons — persists across SSE re-renders
   // until approved_at propagates from the server.
   const approvedMsgIds   = new Set();   // msg IDs where simple approve was clicked
@@ -456,18 +456,25 @@
     morphdom(planRendered, `<div id="plan-rendered">${inner}</div>`, { childrenOnly: true });
   }
 
+  const tabFiles      = document.getElementById('tab-files');
+  const filesContent  = document.getElementById('files-content');
+
   function switchMiddleTab(tab) {
     middlePanelTab = tab;
     tabMessages.classList.toggle('active', tab === 'messages');
     tabPlan.classList.toggle('active', tab === 'plan');
+    tabFiles.classList.toggle('active', tab === 'files');
     messagesList.style.display = tab === 'messages' ? '' : 'none';
     planContentEl.style.display = tab === 'plan' ? '' : 'none';
+    filesContent.classList.toggle('visible', tab === 'files');
     composeEl.style.display = tab === 'messages' ? '' : 'none';
     if (tab === 'plan') renderPlan();
+    if (tab === 'files') renderFilesTab();
   }
 
   tabMessages.addEventListener('click', () => switchMiddleTab('messages'));
   tabPlan.addEventListener('click', () => switchMiddleTab('plan'));
+  tabFiles.addEventListener('click', () => switchMiddleTab('files'));
 
   // ── Right panel tab switching ────────────────────────────────────────────
   const tabEvents  = document.getElementById('tab-events');
@@ -955,6 +962,10 @@
       .replace(/"/g, '&quot;');
   }
 
+  // File-path regexes used by linkifyFilePaths (called from renderMarkdown).
+  const FILE_LINK_RE = /(?:^|(?<=[\s(\[{'"`]))((\.synapse\/|src\/|templates\/|public\/|tests\/|dist\/)[\w./\-_]+(?::\d+(?:-\d+)?)?)(?=[\s)\]}'"`.,;]|$)/gm;
+  const MD_LINK_RE = /(?:^|(?<=[\s(\[{'"`]))([A-Z][A-Za-z0-9_-]*\.md(?::\d+(?:-\d+)?)?)(?=[\s)\]}'"`.,;]|$)/gm;
+
   // Open all rendered links in a new tab safely. Runs on every sanitized node.
   DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     if (node.tagName === 'A' && node.hasAttribute('href')) {
@@ -965,9 +976,11 @@
 
   // Render bus message content as GitHub-flavored markdown, then sanitize.
   // marked does NOT sanitize — DOMPurify strips any crafted HTML / javascript: URLs.
+  // After sanitize, linkify file paths so they open in the Files tab.
   function renderMarkdown(content) {
     const html = marked.parse(String(content ?? ''), { gfm: true, breaks: true });
-    return DOMPurify.sanitize(html);
+    const sanitized = DOMPurify.sanitize(html);
+    return linkifyFilePaths(sanitized);
   }
 
   // ── Agent config dialog ────────────────────────────────────────────────────
@@ -1228,7 +1241,248 @@ Describe the role's responsibilities here.
     }
   });
 
-  // ── Diff modal ─────────────────────────────────────────────────────────────
+  // ── Files tab ──────────────────────────────────────────────────────────────
+
+  // State: array of { path, line? } — one entry per open sub-tab
+  // Persisted to localStorage so refresh restores open files.
+  let openFiles = [];      // [{ path, line? }]
+  let activeFilePath = null;
+
+  function loadOpenFilesFromStorage() {
+    try {
+      const raw = localStorage.getItem('sdeck-open-files');
+      openFiles = raw ? JSON.parse(raw) : [];
+    } catch { openFiles = []; }
+    // dedup by path
+    const seen = new Set();
+    openFiles = openFiles.filter(f => {
+      if (seen.has(f.path)) return false;
+      seen.add(f.path);
+      return true;
+    });
+    if (openFiles.length) activeFilePath = openFiles[0].path;
+  }
+  loadOpenFilesFromStorage();
+
+  function saveOpenFilesToStorage() {
+    try { localStorage.setItem('sdeck-open-files', JSON.stringify(openFiles)); } catch {}
+  }
+
+  function openFileInViewer(path, line) {
+    const existing = openFiles.find(f => f.path === path);
+    if (!existing) {
+      // M2: evict oldest entry when cap is reached (keep active file)
+      const MAX_OPEN_FILES = 20;
+      if (openFiles.length >= MAX_OPEN_FILES) {
+        const evictIdx = openFiles.findIndex(f => f.path !== activeFilePath);
+        if (evictIdx !== -1) openFiles.splice(evictIdx, 1);
+        else openFiles.shift();
+      }
+      openFiles.push({ path, line: line ?? null });
+      saveOpenFilesToStorage();
+    } else if (line) {
+      existing.line = line;
+    }
+    activeFilePath = path;
+    switchMiddleTab('files');
+    renderFilesTab();
+    if (line) {
+      requestAnimationFrame(() => scrollToFileLine(line));
+    }
+  }
+
+  function closeFile(path) {
+    openFiles = openFiles.filter(f => f.path !== path);
+    if (activeFilePath === path) {
+      activeFilePath = openFiles.length ? openFiles[0].path : null;
+    }
+    saveOpenFilesToStorage();
+    renderFilesTab();
+  }
+
+  function renderFilesTab() {
+    const subtabsEl = document.getElementById('files-subtabs');
+    const viewerEl  = document.getElementById('files-viewer');
+
+    if (!openFiles.length) {
+      subtabsEl.innerHTML = '';
+      viewerEl.innerHTML  = '<div class="empty-state">Click a file path in messages to open it here.</div>';
+      return;
+    }
+
+    subtabsEl.innerHTML = openFiles.map(f => {
+      const name = f.path.split('/').pop();
+      const active = f.path === activeFilePath ? ' active' : '';
+      return `<div class="file-subtab${active}" data-path="${esc(f.path)}">
+        <span class="file-subtab-name" data-path="${esc(f.path)}">${esc(name)}</span>
+        <button class="file-subtab-close" data-path="${esc(f.path)}" title="Close">✕</button>
+      </div>`;
+    }).join('');
+
+    subtabsEl.querySelectorAll('.file-subtab-name').forEach(el => {
+      el.addEventListener('click', () => {
+        activeFilePath = el.dataset.path;
+        renderFilesTab();
+      });
+    });
+    subtabsEl.querySelectorAll('.file-subtab-close').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeFile(el.dataset.path);
+      });
+    });
+
+    if (!activeFilePath) {
+      viewerEl.innerHTML = '<div class="empty-state">Select a file tab above.</div>';
+      return;
+    }
+
+    viewerEl.innerHTML = '<div class="empty-state" style="color:var(--muted)">Loading…</div>';
+    fetch(`/api/file?path=${encodeURIComponent(activeFilePath)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          viewerEl.innerHTML = `<div class="empty-state" style="color:var(--p0)">${esc(data.error)}</div>`;
+          return;
+        }
+        if (data.truncated || data.binary) {
+          const reason = data.binary ? 'Binary file — cannot preview' : `File too large to preview (${formatBytes(data.sizeBytes)})`;
+          viewerEl.innerHTML = `<div class="file-viewer-header">
+            <span class="file-path-mono">${esc(data.path)}</span>
+            <span class="file-meta">${formatBytes(data.sizeBytes)}</span>
+          </div>
+          <div class="empty-state" style="color:var(--muted)">${esc(reason)}</div>`;
+          return;
+        }
+        const lines = (data.content ?? '').split('\n');
+        const lineCount = lines.length;
+        const absPath = data.absPath ?? data.path;
+        const vsLink = `vscode://file/${encodeURIComponent(absPath)}`;
+        const headerHtml = `<div class="file-viewer-header">
+          <span class="file-path-mono">${esc(data.path)}</span>
+          <span class="file-meta">${lineCount} lines · ${formatBytes(data.sizeBytes)}</span>
+          <a href="${esc(vsLink)}" class="file-open-btn" title="Open in VS Code">↗</a>
+        </div>`;
+
+        let bodyHtml;
+        if (data.mime === 'text/markdown') {
+          bodyHtml = `<div class="file-viewer-body file-md">${renderMarkdown(data.content)}</div>`;
+        } else {
+          const numbered = lines.map((ln, i) => {
+            const n = i + 1;
+            return `<span id="fline-${n}" class="fline"><span class="fline-num">${n}</span><span class="fline-text">${esc(ln)}</span></span>`;
+          }).join('\n');
+          bodyHtml = `<pre class="file-viewer-body file-src"><code>${numbered}</code></pre>`;
+        }
+        viewerEl.innerHTML = headerHtml + bodyHtml;
+
+        const targetLine = openFiles.find(f => f.path === activeFilePath)?.line;
+        if (targetLine) scrollToFileLine(targetLine);
+      })
+      .catch(e => {
+        viewerEl.innerHTML = `<div class="empty-state" style="color:var(--p0)">${esc(String(e))}</div>`;
+      });
+  }
+
+  function scrollToFileLine(line) {
+    const el = document.getElementById(`fline-${line}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('fline-highlight');
+    setTimeout(() => el.classList.remove('fline-highlight'), 1500);
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return `${b} B`;
+    if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
+    return `${(b / 1048576).toFixed(1)} MB`;
+  }
+
+  // ── File-path linkification ─────────────────────────────────────────────────
+  // (Regex constants FILE_LINK_RE and MD_LINK_RE are defined before renderMarkdown above.)
+
+  function linkifyFilePaths(html) {
+    // We operate on the raw text content inside already-sanitized HTML.
+    // Strategy: parse the rendered HTML, walk text nodes, replace matches.
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    walkTextNodes(div);
+    return div.innerHTML;
+  }
+
+  function walkTextNodes(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      const linked = replaceFilePaths(text);
+      if (linked !== text) {
+        const span = document.createElement('span');
+        span.innerHTML = linked;
+        node.parentNode.replaceChild(span, node);
+      }
+      return;
+    }
+    // Don't linkify inside <a>, <code>, <pre>
+    if (node.tagName === 'A' || node.tagName === 'CODE' || node.tagName === 'PRE') return;
+    Array.from(node.childNodes).forEach(walkTextNodes);
+  }
+
+  function replaceFilePaths(text) {
+    let result = text;
+    // We do two passes: prefix-path patterns, then bare .md patterns.
+    // To avoid double-wrapping we replace once and track consumed spans.
+    const matches = [];
+
+    let m;
+    FILE_LINK_RE.lastIndex = 0;
+    while ((m = FILE_LINK_RE.exec(text)) !== null) {
+      matches.push({ start: m.index + (m[0].length - m[1].length), end: m.index + m[0].length, path: m[1] });
+    }
+    MD_LINK_RE.lastIndex = 0;
+    while ((m = MD_LINK_RE.exec(text)) !== null) {
+      const start = m.index + (m[0].length - m[1].length);
+      const end = m.index + m[0].length;
+      // Don't add if overlaps an already-found match
+      if (!matches.some(x => x.start < end && x.end > start)) {
+        matches.push({ start, end, path: m[1] });
+      }
+    }
+
+    if (!matches.length) return text;
+
+    matches.sort((a, b) => a.start - b.start);
+
+    let out = '';
+    let cursor = 0;
+    for (const { start, end, path } of matches) {
+      out += escText(text.slice(cursor, start));
+      const [filePath, lineStr] = path.split(':');
+      const line = lineStr ? parseInt(lineStr, 10) : null;
+      const lineAttr = line ? ` data-line="${line}"` : '';
+      out += `<a href="#" class="file-link" data-file="${escAttr(filePath)}"${lineAttr}>${escText(path)}</a>`;
+      cursor = end;
+    }
+    out += escText(text.slice(cursor));
+    return out;
+  }
+
+  function escText(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function escAttr(s) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
+  // Delegated click handler for file links in messages
+  messagesList.addEventListener('click', (e) => {
+    const a = e.target.closest('.file-link');
+    if (!a) return;
+    e.preventDefault();
+    const path = a.dataset.file;
+    const line  = a.dataset.line ? parseInt(a.dataset.line, 10) : null;
+    if (path) openFileInViewer(path, line);
+  });
+
+  // ── End of Files tab ────────────────────────────────────────────────────────
   const diffBackdrop = document.getElementById('diff-backdrop');
   const diffTitle    = document.getElementById('diff-modal-title');
   const diffPre      = document.getElementById('diff-modal-pre');

@@ -47,6 +47,7 @@
       <div class="panel-tabs">
         <button id="tab-messages" class="panel-tab active">Messages</button>
         <button id="tab-plan" class="panel-tab">Plan</button>
+        <button id="tab-files" class="panel-tab">Files</button>
       </div>
       <span class="header-status-group"><span id="activity-latest-flash"></span><button id="activity-expand" class="activity-toggle" title="Show activity panel" aria-label="Show activity panel"></button></span>
     </div>
@@ -63,6 +64,10 @@
     </div>
     <div id="plan-content" style="display:none;">
       <div id="plan-rendered"></div>
+    </div>
+    <div id="files-content" style="display:none;">
+      <div id="files-subtabs" class="files-subtabs"></div>
+      <div id="files-viewer" class="files-viewer"></div>
     </div>
     <div id="compose">
       <textarea id="msg-input" rows="4" placeholder="Select an agent… ↵ send · ⇧↵ newline · ⌥↵ urgent" disabled></textarea>
