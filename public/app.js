@@ -466,7 +466,7 @@
     tabFiles.classList.toggle('active', tab === 'files');
     messagesList.style.display = tab === 'messages' ? '' : 'none';
     planContentEl.style.display = tab === 'plan' ? '' : 'none';
-    filesContent.classList.toggle('visible', tab === 'files');
+    filesContent.style.display = tab === 'files' ? 'flex' : 'none';
     composeEl.style.display = tab === 'messages' ? '' : 'none';
     if (tab === 'plan') renderPlan();
     if (tab === 'files') renderFilesTab();
