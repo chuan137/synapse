@@ -47,7 +47,8 @@
       <div class="panel-tabs">
         <button id="tab-messages" class="panel-tab active">Messages</button>
         <button id="tab-plan" class="panel-tab">Plan</button>
-        <button id="tab-files" class="panel-tab">Files</button>
+        <span class="tabs-divider" id="tabs-divider" style="display:none;"></span>
+        <div class="file-tabs" id="file-tabs"></div>
       </div>
       <span class="header-status-group"><span id="activity-latest-flash"></span><button id="activity-expand" class="activity-toggle" title="Show activity panel" aria-label="Show activity panel"></button></span>
     </div>
@@ -66,7 +67,6 @@
       <div id="plan-rendered"></div>
     </div>
     <div id="files-content" style="display:none;">
-      <div id="files-subtabs" class="files-subtabs"></div>
       <div id="files-viewer" class="files-viewer"></div>
     </div>
     <div id="compose">

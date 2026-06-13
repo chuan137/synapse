@@ -7,7 +7,7 @@
   let allTasks         = [];
   let planContent      = '';
   let selectedAgentId  = null;
-  let middlePanelTab   = 'messages'; // 'messages' | 'plan' | 'files'
+  let middlePanelTab   = 'messages'; // 'messages' | 'plan' | 'file:<path>'
   // Local tracking of clicked approval buttons — persists across SSE re-renders
   // until approved_at propagates from the server.
   const approvedMsgIds   = new Set();   // msg IDs where simple approve was clicked
@@ -441,7 +441,7 @@
     morphdom(activityList, `<div id="activity-list">${activityInnerHtml}</div>`, { childrenOnly: true });
   }
 
-  // ── Middle panel tab switching (Messages / Plan) ─────────────────────────
+  // ── Middle panel tab switching (Messages / Plan / File:<path>) ─────────────
   const tabMessages   = document.getElementById('tab-messages');
   const tabPlan       = document.getElementById('tab-plan');
   const messagesList  = document.getElementById('messages-list');
@@ -456,25 +456,24 @@
     morphdom(planRendered, `<div id="plan-rendered">${inner}</div>`, { childrenOnly: true });
   }
 
-  const tabFiles      = document.getElementById('tab-files');
   const filesContent  = document.getElementById('files-content');
 
+  // middlePanelTab: 'messages' | 'plan' | 'file:<path>'
   function switchMiddleTab(tab) {
     middlePanelTab = tab;
+    const isFile = tab.startsWith('file:');
     tabMessages.classList.toggle('active', tab === 'messages');
     tabPlan.classList.toggle('active', tab === 'plan');
-    tabFiles.classList.toggle('active', tab === 'files');
     messagesList.style.display = tab === 'messages' ? '' : 'none';
     planContentEl.style.display = tab === 'plan' ? '' : 'none';
-    filesContent.style.display = tab === 'files' ? 'flex' : 'none';
+    filesContent.style.display = isFile ? 'flex' : 'none';
     composeEl.style.display = tab === 'messages' ? '' : 'none';
     if (tab === 'plan') renderPlan();
-    if (tab === 'files') renderFilesTab();
+    if (isFile) renderFileViewer(tab.slice(5));
   }
 
   tabMessages.addEventListener('click', () => switchMiddleTab('messages'));
   tabPlan.addEventListener('click', () => switchMiddleTab('plan'));
-  tabFiles.addEventListener('click', () => switchMiddleTab('files'));
 
   // ── Right panel tab switching ────────────────────────────────────────────
   const tabEvents  = document.getElementById('tab-events');
@@ -1242,36 +1241,69 @@ Describe the role's responsibilities here.
   });
 
   // ── Files tab ──────────────────────────────────────────────────────────────
+  // File tabs are rendered inline in #file-tabs container (top tab bar).
+  // Each file gets a .file-tab button with a close button.
+  // No separate "Files" umbrella tab — files are siblings of Messages/Plan.
 
-  // State: array of { path, line? } — one entry per open sub-tab
-  // Persisted to localStorage so refresh restores open files.
   let openFiles = [];      // [{ path, line? }]
   let activeFilePath = null;
 
   function loadOpenFilesFromStorage() {
     try {
       const raw = localStorage.getItem('sdeck-open-files');
-      openFiles = raw ? JSON.parse(raw) : [];
-    } catch { openFiles = []; }
-    // dedup by path
+      const saved = raw ? JSON.parse(raw) : {};
+      openFiles = Array.isArray(saved.files) ? saved.files : (Array.isArray(saved) ? saved : []);
+      activeFilePath = saved.active ?? null;
+    } catch { openFiles = []; activeFilePath = null; }
+    // dedup
     const seen = new Set();
     openFiles = openFiles.filter(f => {
       if (seen.has(f.path)) return false;
       seen.add(f.path);
       return true;
     });
-    if (openFiles.length) activeFilePath = openFiles[0].path;
+    if (activeFilePath && !openFiles.find(f => f.path === activeFilePath)) {
+      activeFilePath = openFiles.length ? openFiles[0].path : null;
+    }
   }
   loadOpenFilesFromStorage();
 
   function saveOpenFilesToStorage() {
-    try { localStorage.setItem('sdeck-open-files', JSON.stringify(openFiles)); } catch {}
+    try { localStorage.setItem('sdeck-open-files', JSON.stringify({ files: openFiles, active: activeFilePath })); } catch {}
+  }
+
+  const fileTabsEl  = document.getElementById('file-tabs');
+  const tabsDivider = document.getElementById('tabs-divider');
+
+  function renderFileTabBar() {
+    tabsDivider.style.display = openFiles.length ? '' : 'none';
+    fileTabsEl.innerHTML = openFiles.map(f => {
+      const name = f.path.split('/').pop();
+      const isActive = f.path === activeFilePath && middlePanelTab === `file:${f.path}`;
+      return `<div class="file-tab${isActive ? ' active' : ''}" data-path="${esc(f.path)}">
+        <span class="file-tab-name" data-path="${esc(f.path)}" title="${esc(f.path)}">${esc(name)}</span>
+        <button class="file-tab-close" data-path="${esc(f.path)}" title="Close">✕</button>
+      </div>`;
+    }).join('');
+
+    fileTabsEl.querySelectorAll('.file-tab-name').forEach(el => {
+      el.addEventListener('click', () => {
+        activeFilePath = el.dataset.path;
+        saveOpenFilesToStorage();
+        switchMiddleTab(`file:${activeFilePath}`);
+      });
+    });
+    fileTabsEl.querySelectorAll('.file-tab-close').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeFile(el.dataset.path);
+      });
+    });
   }
 
   function openFileInViewer(path, line) {
     const existing = openFiles.find(f => f.path === path);
     if (!existing) {
-      // M2: evict oldest entry when cap is reached (keep active file)
       const MAX_OPEN_FILES = 20;
       if (openFiles.length >= MAX_OPEN_FILES) {
         const evictIdx = openFiles.findIndex(f => f.path !== activeFilePath);
@@ -1279,66 +1311,45 @@ Describe the role's responsibilities here.
         else openFiles.shift();
       }
       openFiles.push({ path, line: line ?? null });
-      saveOpenFilesToStorage();
     } else if (line) {
       existing.line = line;
     }
     activeFilePath = path;
-    switchMiddleTab('files');
-    renderFilesTab();
+    saveOpenFilesToStorage();
+    renderFileTabBar();
+    switchMiddleTab(`file:${path}`);
     if (line) {
       requestAnimationFrame(() => scrollToFileLine(line));
     }
   }
 
   function closeFile(path) {
+    const idx = openFiles.findIndex(f => f.path === path);
     openFiles = openFiles.filter(f => f.path !== path);
     if (activeFilePath === path) {
-      activeFilePath = openFiles.length ? openFiles[0].path : null;
+      // Fall back to adjacent file, or Messages
+      const next = openFiles[Math.min(idx, openFiles.length - 1)];
+      if (next) {
+        activeFilePath = next.path;
+        saveOpenFilesToStorage();
+        renderFileTabBar();
+        switchMiddleTab(`file:${activeFilePath}`);
+      } else {
+        activeFilePath = null;
+        saveOpenFilesToStorage();
+        renderFileTabBar();
+        switchMiddleTab('messages');
+      }
+    } else {
+      saveOpenFilesToStorage();
+      renderFileTabBar();
     }
-    saveOpenFilesToStorage();
-    renderFilesTab();
   }
 
-  function renderFilesTab() {
-    const subtabsEl = document.getElementById('files-subtabs');
-    const viewerEl  = document.getElementById('files-viewer');
-
-    if (!openFiles.length) {
-      subtabsEl.innerHTML = '';
-      viewerEl.innerHTML  = '<div class="empty-state">Click a file path in messages to open it here.</div>';
-      return;
-    }
-
-    subtabsEl.innerHTML = openFiles.map(f => {
-      const name = f.path.split('/').pop();
-      const active = f.path === activeFilePath ? ' active' : '';
-      return `<div class="file-subtab${active}" data-path="${esc(f.path)}">
-        <span class="file-subtab-name" data-path="${esc(f.path)}">${esc(name)}</span>
-        <button class="file-subtab-close" data-path="${esc(f.path)}" title="Close">✕</button>
-      </div>`;
-    }).join('');
-
-    subtabsEl.querySelectorAll('.file-subtab-name').forEach(el => {
-      el.addEventListener('click', () => {
-        activeFilePath = el.dataset.path;
-        renderFilesTab();
-      });
-    });
-    subtabsEl.querySelectorAll('.file-subtab-close').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeFile(el.dataset.path);
-      });
-    });
-
-    if (!activeFilePath) {
-      viewerEl.innerHTML = '<div class="empty-state">Select a file tab above.</div>';
-      return;
-    }
-
+  function renderFileViewer(path) {
+    const viewerEl = document.getElementById('files-viewer');
     viewerEl.innerHTML = '<div class="empty-state" style="color:var(--muted)">Loading…</div>';
-    fetch(`/api/file?path=${encodeURIComponent(activeFilePath)}`)
+    fetch(`/api/file?path=${encodeURIComponent(path)}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) {
@@ -1376,12 +1387,18 @@ Describe the role's responsibilities here.
         }
         viewerEl.innerHTML = headerHtml + bodyHtml;
 
-        const targetLine = openFiles.find(f => f.path === activeFilePath)?.line;
-        if (targetLine) scrollToFileLine(targetLine);
+        const entry = openFiles.find(f => f.path === path);
+        if (entry?.line) scrollToFileLine(entry.line);
       })
       .catch(e => {
         viewerEl.innerHTML = `<div class="empty-state" style="color:var(--p0)">${esc(String(e))}</div>`;
       });
+  }
+
+  // Restore file tabs from localStorage on page load
+  renderFileTabBar();
+  if (activeFilePath && middlePanelTab === 'messages') {
+    // Don't auto-switch to file on load — stay on messages
   }
 
   function scrollToFileLine(line) {
