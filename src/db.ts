@@ -162,7 +162,7 @@ export function openDb(dbPath: string): Database.Database {
 }
 
 // Default instance: $SYNAPSE_DB_PATH or <cwd>/.synapse/synapse.db
-const DB_PATH = process.env.SYNAPSE_DB_PATH
+export const DB_PATH = process.env.SYNAPSE_DB_PATH
   ?? join(process.cwd(), '.synapse', 'synapse.db');
 
 export const db = openDb(DB_PATH);

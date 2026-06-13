@@ -7,6 +7,7 @@ import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles
 import { buildSystemPrompt } from './system-prompt.js';
 import {
   db,
+  DB_PATH,
   getAllStatuses,
   getRecentMessages,
   sendMessage,
@@ -39,6 +40,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
 const PROJECT_NAME = basename(process.cwd());
 const ROLES_DIR = join(__dirname, '..', 'templates', 'roles');
+// Derive the git root from the DB path so git commands work even when the
+// dashboard was launched from a different directory (e.g. via SYNAPSE_DB_PATH).
+// Using git rev-parse handles non-standard DB_PATH locations correctly.
+let GIT_CWD: string;
+try {
+  GIT_CWD = execSync('git rev-parse --show-toplevel', { cwd: dirname(DB_PATH), encoding: 'utf8' }).trim();
+} catch (err) {
+  // Fallback for non-git environments; diff endpoint will fail gracefully
+  GIT_CWD = dirname(dirname(DB_PATH));
+  console.warn('[dashboard] could not resolve git root from DB_PATH dir, falling back:', err);
+}
 
 function readProjectId(): string | null {
   const p = join(process.cwd(), '.synapse', 'settings.json');
@@ -827,8 +839,8 @@ app.get('/api/commit/:sha/diff', (req: Request, res: Response) => {
     return;
   }
   try {
-    const diff = execSync(`git show --stat -p ${sha}`, { encoding: 'utf8' });
-    const subject = execSync(`git log -1 --format=%s ${sha}`, { encoding: 'utf8' }).trim();
+    const diff = execSync(`git show --stat -p ${sha}`, { encoding: 'utf8', cwd: GIT_CWD });
+    const subject = execSync(`git log -1 --format=%s ${sha}`, { encoding: 'utf8', cwd: GIT_CWD }).trim();
     res.json({ sha, subject, diff });
   } catch {
     res.status(404).json({ error: 'commit not found' });
