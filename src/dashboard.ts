@@ -46,10 +46,14 @@ const ROLES_DIR = join(__dirname, '..', 'templates', 'roles');
 let GIT_CWD: string;
 try {
   GIT_CWD = execSync('git rev-parse --show-toplevel', { cwd: dirname(DB_PATH), encoding: 'utf8' }).trim();
-} catch (err) {
-  // Fallback for non-git environments; diff endpoint will fail gracefully
+} catch (err: any) {
   GIT_CWD = dirname(dirname(DB_PATH));
-  console.warn('[dashboard] could not resolve git root from DB_PATH dir, falling back:', err);
+  const isNonGit = err?.status === 128 || String(err?.stderr ?? '').toLowerCase().includes('not a git repository');
+  if (isNonGit) {
+    console.info('[dashboard] DB_PATH outside a git repo; commit-hash features disabled');
+  } else {
+    console.warn('[dashboard] could not resolve git root from DB_PATH dir, falling back:', err?.message ?? err);
+  }
 }
 
 function readProjectId(): string | null {
