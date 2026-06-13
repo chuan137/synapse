@@ -1,0 +1,57 @@
+[sup]   +0.00s  → turn 1
+[child→] +0.40s  system/hook_started  00449fb3-633d-4dd6-9102-dacf6228c7f9
+[child→] +0.40s  system/hook_response  00449fb3-633d-4dd6-9102-dacf6228c7f9
+[child→] +1.07s  system/init  00449fb3-633d-4dd6-9102-dacf6228c7f9
+[child→] +3.29s  assistant
+[child→] +3.40s  user
+[child→] +5.04s  assistant
+[child→] +5.15s  user
+[child→] +6.92s  assistant
+[child→] +7.43s  user
+[child→] +7.43s  assistant
+[child→] +7.52s  user
+[child→] +9.56s  assistant
+[child→] +10.05s  user
+[child→] +12.56s  assistant
+[child→] +12.68s  user
+[child→] +14.28s  assistant
+[child→] +14.51s  user
+[child→] +14.57s  assistant
+[child→] +14.70s  user
+[child→] +16.86s  assistant
+[child→] +17.15s  user
+[child→] +18.77s  assistant  两个协议文件已读完。
+[child→] +18.88s  result/success  turns=10 cost=$0.0000
+
+[sup]   +18.88s  turn 1 complete — sending turn 2
+
+[child→] +18.94s  system/init  00449fb3-633d-4dd6-9102-dacf6228c7f9
+[child→] +20.23s  assistant
+[child→] +20.34s  user
+[child→] +22.09s  assistant
+[child→] +22.19s  user
+[child→] +30.03s  assistant  根据协议文件，worktree 的使用规则如下：↵↵**何时使用**↵- 任务涉及多于一个文件，或修改超过 3 行 → 必须在 worktree 中进行↵- 单
+[child→] +30.48s  assistant
+[child→] +30.77s  user
+[child→] +32.11s  result/success  turns=4 cost=$0.0000
+
+[sup]   +32.11s  turn 2 complete — closing stdin
+
+
+════════════════════════════════════════════════════════
+SUMMARY
+════════════════════════════════════════════════════════
+  Total runtime     : 32.23s
+  Child exit code   : 0
+  Turns sent        : 2
+  Result events     : 2 (2 success)
+  First event at    : +0.40s
+  Last event at     : +32.11s
+  Event counts:
+    assistant                    14
+    result/success               2
+    system/hook_response         1
+    system/hook_started          1
+    system/init                  2
+    user                         12
+════════════════════════════════════════════════════════
