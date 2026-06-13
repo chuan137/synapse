@@ -1,0 +1,50 @@
+[sup]   +0.00s  mcp-config: /var/folders/q4/hzw0641962312yxqhg0fjswc0000gn/T/stub-mcp-1781383859770.json
+[sup]   +0.00s  stub server: /Users/D067954/Documents/Claude/Projects/synapse/.synapse/worktrees/developer-55-supervisor-isolated/experiments/stub-mcp-server.ts
+
+[sup]   +0.01s  → turn 1
+
+[child→] +2.58s  system/hook_started  SessionStart:startup
+[child→] +2.58s  system/hook_response  SessionStart:startup
+[child→] +4.64s  system/init  session=89beb495  model=claude-sonnet-latest
+             mcp_servers: synapse-bus(pending)
+             tools loaded: 27
+[child→] +6.57s  assistant
+             text        I'll read the SYNAPSE protocol now.
+[child→] +7.03s  assistant
+             tool_use    Read  input={"file_path":"/Users/D067954/Documents/Claude/Projects/synap…
+[child→] +7.14s  user
+             tool_result [ozAKrvvP] ok  "1\t# Synapse Agent Protocol\n2\t\n3\tSynapse is a multi-agent orchestration lay…
+[child→] +8.76s  assistant
+             text        已读取 SYNAPSE 协议文件，确认收到。
+[child→] +8.86s  result/success  turns=2  cost=$0.0554
+             tokens: in=4 out=108 cache_create=2796 cache_read=70476
+
+[sup]   +8.86s  turn 1 complete — sending turn 2
+
+[child→] +8.90s  system/init  session=89beb495  model=claude-sonnet-latest
+             mcp_servers: synapse-bus(pending)
+             tools loaded: 27
+[child→] +14.07s  assistant
+             text        Based on the SYNAPSE protocol, worktrees are managed by the **orchestrator**, no…
+[child→] +14.17s  result/success  turns=1  cost=$0.0807
+             tokens: in=3 out=240 cache_create=35 cache_read=38034
+
+[sup]   +14.17s  turn 2 complete — closing stdin
+
+
+════════════════════════════════════════════════════════
+SUMMARY
+════════════════════════════════════════════════════════
+  Total runtime     : 14.26s
+  Child exit code   : 0
+  Result events     : 2 (2 success)
+  MCP servers       : synapse-bus(pending)
+  DB isolation      : ✓ NO POLLUTION: message count unchanged (0 recent msgs, expected ~0)
+  Event counts:
+    assistant                    4
+    result/success               2
+    system/hook_response         1
+    system/hook_started          1
+    system/init                  2
+    user                         1
+════════════════════════════════════════════════════════
