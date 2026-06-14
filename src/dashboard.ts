@@ -773,7 +773,7 @@ app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
         execFileSync('tmux', ['send-keys', '-t', pane, `/model ${fields.model}`, 'Enter']);
         // Brief pause for the confirmation prompt to appear, then confirm option 1.
         setTimeout(() => {
-          try { execSync(`tmux send-keys -t ${pane} '1' Enter`); } catch { /* best-effort */ }
+          try { execFileSync('tmux', ['send-keys', '-t', pane, '1', 'Enter']); } catch { /* best-effort */ }
         }, 800);
         process.stderr.write(`[Synapse] sent /model ${fields.model} to pane ${pane}\n`);
       } catch { /* best-effort — agent may not be at a prompt */ }
