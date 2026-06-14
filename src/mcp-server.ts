@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState, setAgentReady, getAgentReady, DB_PATH } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState, setAgentReady, getAgentReady, DB_PATH, logDecision } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -322,6 +322,40 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['task_id', 'status'],
+      },
+    },
+    {
+      name: 'log_decision',
+      description:
+        'Record an orchestrator routing/process decision for eval and retro. ' +
+        'Use for non-trivial decisions like whether to invoke code-review/test, which worker to route to, ' +
+        'whether to delegate or self-handle, whether to spawn a new worker, whether to split a task. ' +
+        'Skip for trivial flow (every message); only log decisions worth a recap entry.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          kind: {
+            type: 'string',
+            description: 'Decision category. Common values: "route", "review", "test", "worktree", "spawn", "split", "escalate", "self_handle". Free-form string allowed.',
+          },
+          value: {
+            type: 'string',
+            description: 'Decision outcome. For boolean decisions: "yes" | "no" | "skipped:<reason>". For routing: worker agent_id or literal "self". For spawn: role name. Free-form string.',
+          },
+          why: {
+            type: 'string',
+            description: 'One-line rationale for the decision. Optional but strongly encouraged.',
+          },
+          related_task_id: {
+            type: 'number',
+            description: 'Task id this decision relates to (from start_task). Optional.',
+          },
+          related_msg_id: {
+            type: 'number',
+            description: 'Message id that triggered this decision (from read_messages). Optional.',
+          },
+        },
+        required: ['kind', 'value'],
       },
     },
     {
@@ -665,6 +699,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
     return { content: [{ type: 'text', text: ok ? `Task ${task_id} marked ${status}.` : `Task ${task_id} not found or already finished.` }] };
+  }
+
+  if (name === 'log_decision') {
+    const { kind, value, why, related_task_id, related_msg_id } = args as {
+      kind: string;
+      value: string;
+      why?: string;
+      related_task_id?: number;
+      related_msg_id?: number;
+    };
+    const id = logDecision(AGENT_ID, kind, value, why ?? null, related_task_id ?? null, related_msg_id ?? null);
+    return { content: [{ type: 'text', text: `Decision logged (id: ${id}).` }] };
   }
 
   if (name === 'delegate_task') {

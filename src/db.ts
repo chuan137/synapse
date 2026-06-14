@@ -114,6 +114,22 @@ export function openDb(dbPath: string): Database.Database {
       count         INTEGER NOT NULL DEFAULT 0,
       last_reset_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS orch_decisions (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id        TEXT    NOT NULL,
+      kind            TEXT    NOT NULL,
+      value           TEXT    NOT NULL,
+      why             TEXT,
+      related_task_id INTEGER,
+      related_msg_id  INTEGER,
+      created_at      INTEGER NOT NULL,
+      FOREIGN KEY (agent_id)        REFERENCES agent_status(agent_id),
+      FOREIGN KEY (related_task_id) REFERENCES tasks(id),
+      FOREIGN KEY (related_msg_id)  REFERENCES messages(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_decisions_task  ON orch_decisions(related_task_id);
+    CREATE INDEX IF NOT EXISTS idx_decisions_agent ON orch_decisions(agent_id);
   `);
 
   // Migrate existing tables — ignore errors if columns already exist
@@ -606,6 +622,21 @@ export function finishTask(
      WHERE id = ? AND status != 'aborted'
   `).run(status, Date.now(), resultMsgId, commitSha, taskId);
   return r.changes > 0;
+}
+
+export function logDecision(
+  agentId: string,
+  kind: string,
+  value: string,
+  why: string | null,
+  relatedTaskId: number | null,
+  relatedMsgId: number | null,
+): number {
+  const result = db.prepare(`
+    INSERT INTO orch_decisions (agent_id, kind, value, why, related_task_id, related_msg_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(agentId, kind, value, why, relatedTaskId, relatedMsgId, Date.now());
+  return Number(result.lastInsertRowid);
 }
 
 export function getMostRecentInProgressTask(agentId: string): { id: number } | null {
