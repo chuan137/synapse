@@ -278,7 +278,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           trigger_msg_id: {
             type: 'number',
-            description: 'Message id of the task assignment that triggered this task (optional).',
+            description: 'Required. Message id of the task assignment that triggered this task. Pass null if the orchestrator self-initiated this task. Omitting this field is an error.',
           },
           agent_id: {
             type: 'string',
@@ -292,7 +292,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'finish_task',
       description:
         'Mark a task as done. Pass the task_id from start_task, status=\'completed\' or \'aborted\', ' +
-        'and optionally result_msg_id (the message id of your DONE/result message — links the task to its ' +
+        'and result_msg_id (required — the message id of your DONE/result message — links the task to its ' +
         'resolution in the UI).',
       inputSchema: {
         type: 'object',
@@ -308,7 +308,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           result_msg_id: {
             type: 'number',
-            description: 'Message id of the DONE/result message you sent (optional).',
+            description: 'Required. Message id of your DONE/result message — links the task to its resolution in the UI. Pass null if no closing message exists (rare — task was a single no-op). Omitting this field is an error.',
           },
           commit_sha: {
             type: 'string',
@@ -591,6 +591,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'start_task') {
     const { title, trigger_msg_id, agent_id } = args as { title: string; trigger_msg_id?: number; agent_id?: string };
+    if (!('trigger_msg_id' in (args as object))) {
+      return { content: [{ type: 'text', text: 'trigger_msg_id is required on start_task. Pass trigger_msg_id: <message_id> if a specific message triggered this task (get the ID from read_messages), or trigger_msg_id: null if the orchestrator self-initiated this task. This field is required for task traceability.' }], isError: true };
+    }
     const taskId = startTask(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null);
     return { content: [{ type: 'text', text: `Task started (id: ${taskId}).` }] };
   }
@@ -602,6 +605,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result_msg_id?: number;
       commit_sha?: string;
     };
+    if (!('result_msg_id' in (args as object))) {
+      return { content: [{ type: 'text', text: 'result_msg_id is required on finish_task. Pass result_msg_id: <message_id> if a specific message (worker DONE, your own done broadcast, blocked report) closed this task (get the ID from read_messages or your own send_message return), or result_msg_id: null if no closing message exists (rare — task was a single no-op). This field is required for task traceability.' }], isError: true };
+    }
     const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
     // Safety net: clear cookie from any worker still attributed to this task
     clearCurrentTaskIdForTask(task_id);
