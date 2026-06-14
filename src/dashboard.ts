@@ -305,7 +305,7 @@ function pingAgent(agentId: string): boolean {
   const pane = getTmuxPane(agentId);
   if (!pane) return false;
   try {
-    execSync(`tmux send-keys -t ${pane} '[synapse] you have unread messages, call read_messages' Enter`);
+    execFileSync('tmux', ['send-keys', '-t', pane, '[synapse] you have unread messages, call read_messages', 'Enter']);
     return true;
   } catch { return false; }
 }
