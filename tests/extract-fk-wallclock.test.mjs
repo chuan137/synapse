@@ -10,9 +10,9 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-// Prefer raw corpus (.synapse/cases/); fall back to curated if raw dir absent
-const CASES_DIR = existsSync(join(ROOT, '.synapse', 'cases'))
-  ? join(ROOT, '.synapse', 'cases')
+// Prefer raw corpus (.synapse/evaluations/); fall back to curated if raw dir absent
+const CASES_DIR = existsSync(join(ROOT, '.synapse', 'evaluations'))
+  ? join(ROOT, '.synapse', 'evaluations')
   : join(ROOT, 'tests', 'cases');
 
 let passed = 0;

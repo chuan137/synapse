@@ -667,8 +667,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     setImmediate(async () => {
       try {
         const { extractCases } = await import('./eval/extract.js');
-        const casesDir = join(dirname(DB_PATH), 'cases');
-        extractCases(DB_PATH, casesDir, 1, task_id);
+        const evalDir = join(dirname(DB_PATH), 'evaluations');
+        extractCases(DB_PATH, evalDir, 1, task_id);
       } catch (err: any) {
         console.warn(`[finish_task] auto-extract failed for task ${task_id}:`, err?.message ?? err);
       }

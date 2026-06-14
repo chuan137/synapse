@@ -563,7 +563,7 @@ program
   .option('--critic', 'Run critic agent on failed trajectories to propose rule patches')
   .option('--gate', 'Run validation gate on all critic patches')
   .option('--calibrate', 'Compute per-role p90 thresholds from good cases and write src/eval/thresholds.json')
-  .option('--from-curated', 'Calibrate from tests/cases/ (pinned baseline) instead of .synapse/cases/ (full raw corpus)')
+  .option('--from-curated', 'Calibrate from tests/cases/ (pinned baseline) instead of .synapse/evaluations/ (full raw corpus)')
   .option('--percentile <n>', 'Percentile for --calibrate threshold computation', '90')
   .option('--regenerate-all', 'Re-extract every task that has an existing raw case file (upgrades v1 to v2)')
   .option('--limit <n>', 'Number of most recent completed tasks to evaluate', '20')
@@ -576,7 +576,7 @@ program
     const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
     // Raw cases: auto-extracted, gitignored, full corpus for calibration.
     // Curated cases: hand-selected via `eval select`, committed, regression baseline.
-    const rawCasesDir     = join(process.cwd(), '.synapse', 'cases');
+    const rawCasesDir     = join(process.cwd(), '.synapse', 'evaluations');
     const curatedCasesDir = join(process.cwd(), 'tests', 'cases');
     const casesDir = rawCasesDir;   // eval reads raw by default
     const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
@@ -589,7 +589,7 @@ program
       const pct = Math.min(100, Math.max(1, parseInt(options.percentile ?? '90', 10))) / 100;
       const MIN_SAMPLES = 3;
 
-      // Default: read from raw corpus (.synapse/cases/) for broader calibration.
+      // Default: read from raw corpus (.synapse/evaluations/) for broader calibration.
       // --from-curated: read from tests/cases/ for pinned regression-stable thresholds.
       const calibrateDir = options.fromCurated ? curatedCasesDir : rawCasesDir;
       const calibrateLabel = options.fromCurated ? 'curated (tests/cases/)' : 'raw (.synapse/cases/)';
@@ -882,7 +882,7 @@ program
     const { copyFileSync, readdirSync: readDir, rmSync, existsSync: checkExists, readFileSync: readF, mkdirSync: mkDir } = await import('fs');
     const { join } = await import('path');
 
-    const rawDir     = join(process.cwd(), '.synapse', 'cases');
+    const rawDir     = join(process.cwd(), '.synapse', 'evaluations');
     const curatedDir = join(process.cwd(), 'tests', 'cases');
 
     if (options.list) {

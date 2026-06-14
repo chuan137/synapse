@@ -103,7 +103,7 @@ Roles with fewer than 3 good-case samples are excluded from calibration to avoid
 
 | Path | Purpose | In git |
 |---|---|---|
-| `.synapse/cases/` | Raw extracted trajectories — auto-populated, full corpus, unlimited volume | No (gitignored) |
+| `.synapse/evaluations/` | Raw extracted trajectories — auto-populated, full corpus, unlimited volume | No (gitignored) |
 | `tests/cases/` | Curated regression baseline — small, intentional set chosen by the operator | Yes |
 
 **Adding a case to the curated set:**
@@ -114,7 +114,7 @@ synapse eval-select --list              # show curated set
 ```
 
 **Calibration source:**
-- `synapse eval --calibrate` reads from raw (`.synapse/cases/`) by default — broader sample, more representative thresholds.
+- `synapse eval --calibrate` reads from raw (`.synapse/evaluations/`) by default — broader sample, more representative thresholds.
 - `synapse eval --calibrate --from-curated` reads from `tests/cases/` — pinned to the regression baseline, more stable but narrower.
 
 **When to use each:**

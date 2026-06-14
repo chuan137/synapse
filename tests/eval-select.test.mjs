@@ -95,12 +95,12 @@ const output = synapse('eval-select', '--list');
 assert(output.includes('empty') || output.includes('Curated'), `--list on empty dir returns descriptive message`);
 assert(!output.includes('Error') && !output.includes('error:'), `no error on empty --list`);
 
-// ── Test 4: calibrate default reads .synapse/cases/ ──────────────────────────
+// ── Test 4: calibrate default reads .synapse/evaluations/ ──────────────────────────
 
-console.log('\n[Test 4] calibrate default reads raw (.synapse/cases/)');
+console.log('\n[Test 4] calibrate default reads raw (.synapse/evaluations/)');
 
 // Confirm raw dir has cases
-const rawDir = join(ROOT, '.synapse', 'cases');
+const rawDir = join(ROOT, '.synapse', 'evaluations');
 assert(existsSync(rawDir), `raw cases dir exists`);
 const rawCount = readdirSync(rawDir).filter(f => f.endsWith('_good.json')).length;
 assert(rawCount > 0, `raw dir has good cases (${rawCount})`);

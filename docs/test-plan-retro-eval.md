@@ -15,7 +15,7 @@ tasks + tool_metrics (DB)
          │
          ▼
   [extract.ts / synapse eval]
-  TrajectoryV2 cases → .synapse/cases/<task_id>_{good,bad}.json   ← raw corpus
+  TrajectoryV2 cases → .synapse/evaluations/<task_id>_{good,bad}.json   ← raw corpus
   Curated subset      → tests/cases/<task_id>_{good,bad}.json     ← selected via eval-select
          │
          ├──▶ [evaluator.ts / synapse eval]
@@ -145,10 +145,10 @@ tasks + tool_metrics (DB)
 | [Test 1] eval-select copies file | Raw → curated copy preserves content |
 | [Test 2] select --remove | Removes from curated, raw intact |
 | [Test 3] --list on empty curated | Graceful, no error |
-| [Test 4] calibrate reads raw by default | `--calibrate` sources `.synapse/cases/`, not `tests/cases/` |
+| [Test 4] calibrate reads raw by default | `--calibrate` sources `.synapse/evaluations/`, not `tests/cases/` |
 | [Test 5] calibrate --from-curated on empty | Warning logged, not crash |
 
-**Integration gap:** Tests use temp dirs, not the live `.synapse/cases/` corpus. Cases that exist in the corpus but were written before the split convention could have an inconsistent label pattern — not validated.
+**Integration gap:** Tests use temp dirs, not the live `.synapse/evaluations/` corpus. Cases that exist in the corpus but were written before the split convention could have an inconsistent label pattern — not validated.
 
 **End-to-end check:**
 1. Run: `node tests/eval-select.test.mjs`
@@ -289,7 +289,7 @@ Skills are prompt-driven; their correctness can't be fully auto-tested. Run thes
 
 | Gap | Detail | Path to closure |
 |---|---|---|
-| Thin calibration roles | Only `developer` and `orchestrator` have ≥3 sample buckets. `code-reviewer` and `doc-writer` thresholds fall to defaults. | Run more tasks with those roles to populate `.synapse/cases/`; re-calibrate. |
+| Thin calibration roles | Only `developer` and `orchestrator` have ≥3 sample buckets. `code-reviewer` and `doc-writer` thresholds fall to defaults. | Run more tasks with those roles to populate `.synapse/evaluations/`; re-calibrate. |
 | `idle_drift` false positives | Fires on ~109/120 corpus cases because legacy rows have `active_duration_ms ≈ 0`. The signal is correct logic-wise; the corpus is stale. | Refresh corpus from fresh task data; the ratio will normalize. |
 | DB migration not in tests | `eval_results` schema change (`role`, `agent_id` columns) has no automated migration test. | Add a migration test that drops and rebuilds the DB, checks column existence. |
 | v1 case compat not tested | No v1-shaped fixture in `tests/cases/`; critic/gate path on v1 input is untested. | Synthesize one v1 fixture and add a critic/gate test against it. |
