@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState, setAgentReady, getAgentReady } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState, setAgentReady, getAgentReady, DB_PATH } from './db.js';
 import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
@@ -605,6 +605,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
     // Safety net: clear cookie from any worker still attributed to this task
     clearCurrentTaskIdForTask(task_id);
+    // Fire-and-forget: extract C3 case file for this task
+    setImmediate(async () => {
+      try {
+        const { extractCases } = await import('./eval/extract.js');
+        const casesDir = join(dirname(DB_PATH), 'cases');
+        extractCases(DB_PATH, casesDir, 1, task_id);
+      } catch (err: any) {
+        console.warn(`[finish_task] auto-extract failed for task ${task_id}:`, err?.message ?? err);
+      }
+    });
     if (ok && status === 'completed') {
       const indexJs = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
       const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(task_id)], {
