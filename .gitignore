@@ -3,3 +3,4 @@ dist/
 .synapse/
 *.js.map
 tests/
+sandbox/.sandbox-auth/
