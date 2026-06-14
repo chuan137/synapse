@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { join, dirname, basename, resolve, sep, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSync, readdirSync, mkdirSync, realpathSync, openSync, readSync, closeSync } from 'fs';
-import { execSync, spawnSync, spawn } from 'child_process';
+import { execSync, execFileSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import {
@@ -38,7 +38,6 @@ import { spawnWorker } from './spawn.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
-const PROJECT_NAME = basename(process.cwd());
 const ROLES_DIR = join(__dirname, '..', 'templates', 'roles');
 // Derive the git root from the DB path so git commands work even when the
 // dashboard was launched from a different directory (e.g. via SYNAPSE_DB_PATH).
@@ -55,16 +54,17 @@ try {
     console.warn('[dashboard] could not resolve git root from DB_PATH dir, falling back:', err?.message ?? err);
   }
 }
+const PROJECT_NAME = basename(GIT_CWD);
 
 function readProjectId(): string | null {
-  const p = join(process.cwd(), '.synapse', 'settings.json');
+  const p = join(GIT_CWD, '.synapse', 'settings.json');
   if (!existsSync(p)) return null;
   try { return JSON.parse(readFileSync(p, 'utf8')).projectId ?? null; } catch { return null; }
 }
 
 // ── PLAN.md file-watch ────────────────────────────────────────────────────
 
-const PLAN_PATH = join(process.cwd(), '.synapse', 'PLAN.md');
+const PLAN_PATH = join(GIT_CWD, '.synapse', 'PLAN.md');
 
 function readPlan(): { content: string; updated_at: number } {
   try {
@@ -191,7 +191,7 @@ app.get('/api/info', (_req: Request, res: Response) => {
 
 // ── Settings (theme, etc.) ────────────────────────────────────────────────────
 
-const SETTINGS_PATH = join(process.cwd(), '.synapse', 'settings.json');
+const SETTINGS_PATH = join(GIT_CWD, '.synapse', 'settings.json');
 
 function readSettings(): Record<string, unknown> {
   try {
@@ -438,13 +438,13 @@ app.post('/api/agents/purge', (_req: Request, res: Response) => {
 // ── Eval pipeline endpoints ────────────────────────────────────────────────────
 
 app.get('/api/eval/report', (_req: Request, res: Response) => {
-  const reportPath = join(process.cwd(), 'tests', 'eval_report.json');
+  const reportPath = join(GIT_CWD, 'tests', 'eval_report.json');
   if (!existsSync(reportPath)) { res.json([]); return; }
   res.json(JSON.parse(readFileSync(reportPath, 'utf8')));
 });
 
 app.get('/api/eval/gate', (_req: Request, res: Response) => {
-  const gateDir = join(process.cwd(), 'tests', 'gate_results');
+  const gateDir = join(GIT_CWD, 'tests', 'gate_results');
   if (!existsSync(gateDir)) { res.json([]); return; }
   const results = readdirSync(gateDir)
     .filter(f => f.endsWith('.json'))
@@ -479,7 +479,7 @@ app.get('/api/eval/live', (_req: Request, res: Response) => {
 
 // ── Proposals endpoints ────────────────────────────────────────────────────
 
-const PROPOSALS_DIR = join(process.cwd(), '.synapse', 'proposals');
+const PROPOSALS_DIR = join(GIT_CWD, '.synapse', 'proposals');
 
 function parseProposalFile(filename: string, content: string): Record<string, unknown> {
   const get = (label: string) => {
@@ -584,7 +584,7 @@ Do not modify any other files.
   const child = spawn('claude', ['--print', '--dangerously-skip-permissions', handoverPath], {
     detached: true,
     stdio: 'ignore',
-    cwd: process.cwd(),
+    cwd: GIT_CWD,
     env: { ...process.env },
   });
   child.unref();
@@ -619,7 +619,7 @@ app.post('/api/proposals/:filename/deploy', (req: Request, res: Response) => {
   const metricMatch = filename.match(/^\d+-(\w+)\.md$/);
 
   if (!targetMatch) { res.status(400).json({ error: 'No Target-file in proposal' }); return; }
-  const targetFile = join(process.cwd(), targetMatch[1].trim());
+  const targetFile = join(GIT_CWD, targetMatch[1].trim());
   const proposedChange = changeMatch ? changeMatch[1].trim() : '';
 
   if (proposedChange && existsSync(targetFile)) {
@@ -628,13 +628,12 @@ app.post('/api/proposals/:filename/deploy', (req: Request, res: Response) => {
   }
 
   try {
-    execSync('synapse update .', { cwd: process.cwd(), stdio: 'pipe' });
+    execSync('synapse update .', { cwd: GIT_CWD, stdio: 'pipe' });
   } catch { /* best-effort */ }
 
   try {
-    execSync(`git add "${targetFile}" && git commit -m "deploy proposal: ${filename}"`, {
-      cwd: process.cwd(), stdio: 'pipe',
-    });
+    execFileSync('git', ['add', targetFile], { cwd: GIT_CWD, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-m', `deploy proposal: ${filename}`], { cwd: GIT_CWD, stdio: 'pipe' });
   } catch { /* best-effort if nothing staged */ }
 
   if (metricMatch) {
@@ -673,7 +672,7 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
   const purged = purgeStaleAgents();
   process.stderr.write(`[Synapse] restart reap: ${reaped} marked ended, ${purged} purged\n`);
 
-  const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
+  const dbPath = process.env.SYNAPSE_DB_PATH ?? join(GIT_CWD, '.synapse', 'synapse.db');
   const workerRole = role ?? 'worker';
   const settings = readSettings();
   const AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number' ? settings.autoRestartTasks : 5;
@@ -687,8 +686,8 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
     ? `\nLast completed task context:\n${lastDone.content.slice(0, 500)}`
     : '';
 
-  const bootPath = existsSync(join(process.cwd(), '.synapse', 'boot-worker-restart.md'))
-    ? join(process.cwd(), '.synapse', 'boot-worker-restart.md')
+  const bootPath = existsSync(join(GIT_CWD, '.synapse', 'boot-worker-restart.md'))
+    ? join(GIT_CWD, '.synapse', 'boot-worker-restart.md')
     : join(__dirname, '..', 'templates', 'boot-worker-restart.md');
   const restartTemplate = readFileSync(bootPath, 'utf8').trim();
   const orchestratorId = agent.orchestrator_id ?? `${agentId.split(':')[0]}:0`;
@@ -703,7 +702,7 @@ app.post('/api/agents/:agentId/restart', (req: Request, res: Response) => {
     role: workerRole,
     name: name ?? undefined,
     task: restartTask,
-    projectDir: process.cwd(),
+    projectDir: GIT_CWD,
     dbPath,
     slot,
   });
@@ -771,7 +770,7 @@ app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
     const pane = getTmuxPane(agentId);
     if (pane) {
       try {
-        execSync(`tmux send-keys -t ${pane} '/model ${fields.model}' Enter`);
+        execFileSync('tmux', ['send-keys', '-t', pane, `/model ${fields.model}`, 'Enter']);
         // Brief pause for the confirmation prompt to appear, then confirm option 1.
         setTimeout(() => {
           try { execSync(`tmux send-keys -t ${pane} '1' Enter`); } catch { /* best-effort */ }
@@ -793,7 +792,7 @@ app.post('/api/upload', (req: Request, res: Response) => {
     return;
   }
   const boundary = boundaryMatch[1];
-  const uploadsDir = join(process.cwd(), '.synapse', 'uploads');
+  const uploadsDir = join(GIT_CWD, '.synapse', 'uploads');
   mkdirSync(uploadsDir, { recursive: true });
 
   const chunks: Buffer[] = [];
@@ -843,8 +842,8 @@ app.get('/api/commit/:sha/diff', (req: Request, res: Response) => {
     return;
   }
   try {
-    const diff = execSync(`git show --stat -p ${sha}`, { encoding: 'utf8', cwd: GIT_CWD });
-    const subject = execSync(`git log -1 --format=%s ${sha}`, { encoding: 'utf8', cwd: GIT_CWD }).trim();
+    const diff = execFileSync('git', ['show', '--stat', '-p', sha], { encoding: 'utf8', cwd: GIT_CWD });
+    const subject = execFileSync('git', ['log', '-1', '--format=%s', sha], { encoding: 'utf8', cwd: GIT_CWD }).trim();
     res.json({ sha, subject, diff });
   } catch {
     res.status(404).json({ error: 'commit not found' });
