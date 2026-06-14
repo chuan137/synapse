@@ -99,7 +99,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         'Returns unread messages addressed to you, ordered by priority (0 = urgent). ' +
         'When there are messages, the first content block is a JSON array where each element has: ' +
         '{ id: number, from: string, priority: 0|5, at: string (ISO timestamp), content: string }. ' +
-        'Use the `id` field as `source_msg_id` when calling `delegate_task`.',
+        'Use the `id` field as `source_msg_id` when calling `start_task`.',
       inputSchema: { type: 'object', properties: {}, required: [] },
     },
     {
@@ -283,8 +283,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: 'Short description of the task (e.g. "Implement worktree CLI subcommands").',
           },
           trigger_msg_id: {
-            type: 'number',
-            description: 'Required. Message id of the task assignment that triggered this task. Pass null if the orchestrator self-initiated this task. Omitting this field is an error.',
+            oneOf: [{ type: 'number' }, { type: 'null' }],
+            description: 'Required. Message id of the task assignment that triggered this task (the immediate trigger this turn). Pass null if the orchestrator self-initiated this task. Omitting this field is an error.',
+          },
+          source_msg_id: {
+            oneOf: [{ type: 'number' }, { type: 'null' }],
+            description: 'Required. The ID of the human→orchestrator message that is the root cause of this work chain — often several tasks back (e.g. the original operator request that set everything in motion). Distinct from trigger_msg_id which is the immediate trigger this turn. Get the ID from the `[id=N]` tag in `read_messages` or `get_history` output. Pass null if the orchestrator self-initiated this work. Omitting this field is an error.',
           },
           agent_id: {
             type: 'string',
@@ -378,10 +382,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           task_id: {
             type: 'number',
             description: 'The task_id returned by start_task. Required when task_file is true (used as the filename).',
-          },
-          source_msg_id: {
-            type: 'number',
-            description: 'Optional: the ID of the human→orchestrator message that originated this task — links the task back to its root cause in the message history. Get the ID from the `[id=N]` tag in the `read_messages` output.',
           },
         },
         required: ['to_id', 'title', 'content'],
@@ -639,11 +639,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'start_task') {
-    const { title, trigger_msg_id, agent_id } = args as { title: string; trigger_msg_id?: number; agent_id?: string };
+    const { title, trigger_msg_id, source_msg_id, agent_id } = args as { title: string; trigger_msg_id?: number; source_msg_id?: number; agent_id?: string };
     if (!('trigger_msg_id' in (args as object))) {
       return { content: [{ type: 'text', text: 'trigger_msg_id is required on start_task. Pass trigger_msg_id: <message_id> if a specific message triggered this task (get the ID from read_messages), or trigger_msg_id: null if the orchestrator self-initiated this task. This field is required for task traceability.' }], isError: true };
     }
-    const taskId = startTask(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null);
+    if (!('source_msg_id' in (args as object))) {
+      return { content: [{ type: 'text', text: 'source_msg_id is required on start_task. Pass source_msg_id: <message_id> if a specific operator message originated this task chain (often several tasks back — find the root cause msg via read_messages or get_history), or source_msg_id: null if the orchestrator self-initiated this work. This field is required for task traceability.' }], isError: true };
+    }
+    const taskId = startTask(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null, source_msg_id ?? null);
     return { content: [{ type: 'text', text: `Task started (id: ${taskId}).` }] };
   }
 
@@ -714,18 +717,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'delegate_task') {
-    const { to_id, title, content, priority = 5, task_file = false, task_id, source_msg_id } = args as {
+    const { to_id, title, content, priority = 5, task_file = false, task_id } = args as {
       to_id: string;
       title: string;
       content: string;
       priority?: number;
       task_file?: boolean;
       task_id?: number;
-      source_msg_id?: number;
     };
 
-    if (!('source_msg_id' in (args as object))) {
-      return { content: [{ type: 'text', text: 'source_msg_id is required on delegate_task. Pass source_msg_id: <message_id> if this task was triggered by a human message (get the ID from read_messages), or source_msg_id: null if self-initiated. This field is required for task traceability.' }], isError: true };
+    if ('source_msg_id' in (args as object)) {
+      return { content: [{ type: 'text', text: 'source_msg_id has moved to start_task. Pass it there instead. Calling delegate_task with source_msg_id is no longer supported.' }], isError: true };
     }
 
     // Spawn ACK gate: reject if the target worker has not yet read its handshake message.
