@@ -1,0 +1,51 @@
+{
+  "schema_version": 3,
+  "id": 102,
+  "label": "good",
+  "task": { "id": 102, "agent_id": "testproj:1", "title": "Test task", "commit_sha": "abc123", "source_msg_id": 10, "trigger_msg_id": 11, "result_msg_id": 12, "started_at": 1700000000000, "finished_at": 1700000060000 },
+  "linked_msg_ids": [10, 11, 12],
+  "tool_metric_ids": [1, 2, 3],
+  "message_snippets": [
+    { "from": "testproj:0", "to": "testproj:1", "content_200": "Do the task." },
+    { "from": "testproj:1", "to": "testproj:0", "content_200": "DONE." }
+  ],
+  "metrics": { "tool_calls": 3, "duration_ms": 60000, "traceability_score": 0, "has_commit": true },
+  "title": "Test task",
+  "started_at": 1700000000000,
+  "finished_at": 1700000060000,
+  "total_duration_ms": 60000,
+  "agents": {
+    "developer:1": {
+      "agent_id": "testproj:1",
+      "role": "developer",
+      "tools": {
+        "Read": { "calls": 2, "avg_ms": 50, "p90_ms": 80, "errors": 0, "error_rate": 0 },
+        "Edit": { "calls": 1, "avg_ms": 100, "p90_ms": 100, "errors": 0, "error_rate": 0 }
+      },
+      "blocked_events": [],
+      "messages_in": 1,
+      "messages_out": 1,
+      "active_duration_ms": 200
+    }
+  },
+  "blocked_events": [],
+  "tool_metrics": {
+    "summary": {
+      "total_calls": 3,
+      "by_tool": {
+        "Read": { "count": 2, "ok": 2, "err": 0, "avg_ms": 50, "max_ms": 80, "p95_ms": 78 },
+        "Edit": { "count": 1, "ok": 1, "err": 0, "avg_ms": 100, "max_ms": 100, "p95_ms": 100 }
+      },
+      "duration_total_ms": 200,
+      "error_rate": 0,
+      "anti_patterns": {
+        "repeat_reads": {},
+        "read_no_edit": ["src/other.ts"],
+        "bash_repeats": {},
+        "edit_retries": {},
+        "read_per_turn_max": 2
+      }
+    },
+    "ids": [1, 2, 3]
+  }
+}

@@ -110,8 +110,12 @@ export function evaluateCases(casesDir: string): EvalResult[] {
   const thresholds = loadThresholds();
   const files = readdirSync(casesDir).filter(f => f.endsWith('.json'));
 
-  return files.map(f => {
-    const c: TrajectoryCase & Partial<TrajectoryV2> = JSON.parse(readFileSync(join(casesDir, f), 'utf8'));
+  return files.flatMap(f => {
+    const c: any = JSON.parse(readFileSync(join(casesDir, f), 'utf8'));
+    if (c.schema_version !== 3) {
+      console.warn(`Skipping case ${c.task?.id ?? c.id ?? '<unknown>'}: schema_version=${c.schema_version}, expected 3`);
+      return [];
+    }
     const metrics = c.metrics;
     const failures: AgentFailure[] = [];
 
@@ -128,7 +132,8 @@ export function evaluateCases(casesDir: string): EvalResult[] {
 
     // Per-agent checks (v2 path)
     if (c.agents) {
-      for (const [key, agent] of Object.entries(c.agents)) {
+      for (const [key, agentRaw] of Object.entries(c.agents)) {
+        const agent = agentRaw as AgentTrajectory;
         const t = getThresholds(agent.role, thresholds);
         const totalCalls = Object.values(agent.tools).reduce((s, ts) => s + ts.calls, 0);
 
@@ -161,13 +166,14 @@ export function evaluateCases(casesDir: string): EvalResult[] {
     let primaryRole: string | null = null;
     if (c.agents) {
       const primaryId = (c.task as any).agent_id;
-      const entry = primaryId ? Object.values(c.agents).find(a => a.agent_id === primaryId) : null;
-      primaryRole = entry?.role ?? Object.values(c.agents)[0]?.role ?? null;
+      const agentValues = Object.values(c.agents) as AgentTrajectory[];
+      const entry = primaryId ? agentValues.find((a: AgentTrajectory) => a.agent_id === primaryId) : null;
+      primaryRole = entry?.role ?? agentValues[0]?.role ?? null;
     }
 
     const pass = failures.length === 0;
 
-    return {
+    return [{
       id: c.id,
       label: (pass ? 'good' : 'bad') as 'good' | 'bad',
       title: (c.task as any).title ?? '',
@@ -176,6 +182,6 @@ export function evaluateCases(casesDir: string): EvalResult[] {
       soft_failures: softSignals(c.agents, (c as any).total_duration_ms ?? null),
       role: primaryRole,
       metrics,
-    };
+    }];
   }).sort((a, b) => a.id - b.id);
 }

@@ -32,14 +32,18 @@ export async function runCritic(
   // Build agent summaries
   const agentSummaries = Object.entries(agents).map(([k, a]) => summarizeAgent(k, a as AgentTrajectory)).join('\n') || '  (no per-agent data — v1 case)';
 
-  // Last 5 messages (from raw for context)
-  const recentMessages = (traj.messages ?? traj.raw?.messages ?? [])
+  // Last 5 message snippets (C3: message_snippets[]; v2 fallback: raw.messages or messages)
+  const rawSnippets: any[] = traj.message_snippets
+    ?? (traj.messages ?? traj.raw?.messages ?? []).slice(-5).map((m: any) => ({
+        from: m.from_id, to: m.to_id, content_200: String(m.content ?? '').slice(0, 200),
+      }));
+  const recentMessages = rawSnippets
     .slice(-5)
-    .map((m: any) => `  [${m.from_id} → ${m.to_id}] ${String(m.content).slice(0, 200)}`)
+    .map((m: any) => `  [${m.from ?? m.from_id} → ${m.to ?? m.to_id}] ${String(m.content_200 ?? m.content ?? '').slice(0, 200)}`)
     .join('\n') || '  (no messages)';
 
   // Failure summary from metrics (v1 fallback) or agents
-  const metrics = traj.raw?.metrics ?? traj.metrics;
+  const metrics = traj.metrics ?? traj.raw?.metrics;
   const failureBullets = [
     metrics.traceability_score > 1 && `traceability: score=${metrics.traceability_score}/3 (missing ${['source_msg_id','trigger_msg_id','result_msg_id'].filter(f => !task[f]).join(', ')})`,
     !metrics.has_commit && `has_commit: false (no commit recorded for this task)`,

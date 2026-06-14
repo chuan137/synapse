@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Eval v2 unit tests.
+ * Eval v2/v3 unit tests.
  * Run: node tests/eval-v2.test.mjs
  *
  * Tests:
- *   1. Extractor v2 output shape (schema_version, agents, blocked_events, raw)
+ *   1. Extractor C3 output shape (schema_version: 3, message_snippets, tool_metrics.summary, anti_patterns)
  *   2. Calibrate: thresholds.json generated; roles with <3 samples are skipped
  *   3. Evaluator regression: all good cases pass, all bad cases fail
  */
@@ -34,9 +34,9 @@ function assert(condition, message) {
   }
 }
 
-// ── Test 1: v2 extractor output shape ────────────────────────────────────────
+// ── Test 1: C3 extractor output shape ────────────────────────────────────────
 
-console.log('\n[Test 1] Extractor v2 output shape');
+console.log('\n[Test 1] Extractor C3 output shape');
 
 const caseFiles = readdirSync(CASES_DIR).filter(f => f.endsWith('.json'));
 assert(caseFiles.length > 0, `Cases directory has at least 1 file (found ${caseFiles.length})`);
@@ -46,42 +46,55 @@ const multiAgentFile = join(CASES_DIR, 'task_102_good.json');
 if (existsSync(multiAgentFile)) {
   const c = JSON.parse(readFileSync(multiAgentFile, 'utf8'));
 
-  assert(c.schema_version === 2, `task_102: schema_version === 2`);
-  assert(typeof c.task_id === 'number', `task_102: task_id is a number`);
+  assert(c.schema_version === 3, `task_102: schema_version === 3`);
+  assert(c.raw === undefined, `task_102: raw field absent (dropped in C3)`);
+  assert(Array.isArray(c.messages) === false || c.messages === undefined, `task_102: top-level messages array absent`);
+
+  // message_snippets shape
+  assert(Array.isArray(c.message_snippets), `task_102: message_snippets is array`);
+  assert(c.message_snippets.length <= 5, `task_102: message_snippets.length <= 5`);
+  if (c.message_snippets.length > 0) {
+    const s = c.message_snippets[0];
+    assert(typeof s.from === 'string', `task_102: snippet.from is string`);
+    assert(typeof s.to === 'string',   `task_102: snippet.to is string`);
+    assert(typeof s.content_200 === 'string', `task_102: snippet.content_200 is string`);
+    assert(s.content_200.length <= 200, `task_102: snippet.content_200 <= 200 chars`);
+  }
+
+  // tool_metric_ids
+  assert(Array.isArray(c.tool_metric_ids), `task_102: tool_metric_ids is array`);
+
+  // tool_metrics.summary shape
+  assert(c.tool_metrics !== undefined, `task_102: tool_metrics present`);
+  assert(typeof c.tool_metrics.summary === 'object', `task_102: tool_metrics.summary is object`);
+  assert(typeof c.tool_metrics.summary.total_calls === 'number', `task_102: summary.total_calls is number`);
+  assert(typeof c.tool_metrics.summary.by_tool === 'object', `task_102: summary.by_tool is object`);
+  assert(typeof c.tool_metrics.summary.duration_total_ms === 'number', `task_102: summary.duration_total_ms is number`);
+  assert(typeof c.tool_metrics.summary.error_rate === 'number', `task_102: summary.error_rate is number`);
+  assert(Array.isArray(c.tool_metrics.ids), `task_102: tool_metrics.ids is array`);
+
+  // anti_patterns shape
+  const ap = c.tool_metrics.summary.anti_patterns;
+  assert(ap !== undefined, `task_102: anti_patterns present`);
+  assert(typeof ap.repeat_reads === 'object' && !Array.isArray(ap.repeat_reads), `task_102: anti_patterns.repeat_reads is object`);
+  assert(Array.isArray(ap.read_no_edit), `task_102: anti_patterns.read_no_edit is array`);
+  assert(typeof ap.bash_repeats === 'object' && !Array.isArray(ap.bash_repeats), `task_102: anti_patterns.bash_repeats is object`);
+  assert(typeof ap.edit_retries === 'object' && !Array.isArray(ap.edit_retries), `task_102: anti_patterns.edit_retries is object`);
+  assert(typeof ap.read_per_turn_max === 'number', `task_102: anti_patterns.read_per_turn_max is number`);
+
+  // agents still present
   assert(c.agents !== undefined, `task_102: agents map present`);
   assert(Object.keys(c.agents).length >= 1, `task_102: at least one agent entry`);
-
-  // Check AgentTrajectory shape on first agent
   const firstAgent = Object.values(c.agents)[0];
   assert(typeof firstAgent.agent_id === 'string', `task_102: agent.agent_id is string`);
   assert(typeof firstAgent.role === 'string', `task_102: agent.role is string`);
-  assert(typeof firstAgent.tools === 'object', `task_102: agent.tools is object`);
   assert(typeof firstAgent.messages_in === 'number', `task_102: agent.messages_in is number`);
   assert(typeof firstAgent.messages_out === 'number', `task_102: agent.messages_out is number`);
-  assert(typeof firstAgent.active_duration_ms === 'number', `task_102: agent.active_duration_ms is number`);
   assert(Array.isArray(firstAgent.blocked_events), `task_102: agent.blocked_events is array`);
 
-  // Check ToolStats shape on any tool entry
-  const toolEntries = Object.values(firstAgent.tools);
-  if (toolEntries.length > 0) {
-    const ts = toolEntries[0];
-    assert(typeof ts.calls === 'number', `task_102: tool.calls is number`);
-    assert(typeof ts.avg_ms === 'number', `task_102: tool.avg_ms is number`);
-    assert(typeof ts.p90_ms === 'number', `task_102: tool.p90_ms is number`);
-    assert(typeof ts.errors === 'number', `task_102: tool.errors is number`);
-    assert(typeof ts.error_rate === 'number', `task_102: tool.error_rate is number`);
-    assert(ts.error_rate >= 0 && ts.error_rate <= 1, `task_102: tool.error_rate in [0,1]`);
-  }
-
-  // Check blocked_events array (task-level)
   assert(Array.isArray(c.blocked_events), `task_102: top-level blocked_events is array`);
+  assert(Array.isArray(c.linked_msg_ids), `task_102: linked_msg_ids is array`);
 
-  // Check raw backwards-compat
-  assert(c.raw !== undefined, `task_102: raw field present`);
-  assert(Array.isArray(c.raw.messages), `task_102: raw.messages is array`);
-  assert(Array.isArray(c.raw.tool_metrics), `task_102: raw.tool_metrics is array`);
-
-  // Check that agents key format is "<role>:<slot>"
   for (const key of Object.keys(c.agents)) {
     assert(key.includes(':'), `task_102: agent key '${key}' contains ':'`);
   }
@@ -90,11 +103,11 @@ if (existsSync(multiAgentFile)) {
   failed++;
 }
 
-// Spot-check a few more cases have schema_version: 2
+// Spot-check a few more cases have schema_version: 3
 const sample = caseFiles.slice(0, 5);
 for (const f of sample) {
   const c = JSON.parse(readFileSync(join(CASES_DIR, f), 'utf8'));
-  assert(c.schema_version === 2, `${f}: schema_version === 2`);
+  assert(c.schema_version === 3, `${f}: schema_version === 3`);
 }
 
 // ── Test 2: Calibrate output ──────────────────────────────────────────────────

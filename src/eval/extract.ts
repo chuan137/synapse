@@ -1,27 +1,63 @@
 import { openDb } from '../db.js';
 import { mkdirSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
-import type { AgentTrajectory, BlockedEvent, ToolStats, TrajectoryV2 } from './schema-v2.js';
+import type { AgentTrajectory, BlockedEvent, ToolStats } from './schema-v2.js';
 
-// v1 interface kept for backwards compatibility with existing tests/cases files
+// ── C3 interfaces ─────────────────────────────────────────────────────────────
+
+export interface ToolByTool {
+  count: number;
+  ok: number;
+  err: number;
+  avg_ms: number;
+  max_ms: number;
+  p95_ms: number;
+}
+
+export interface AntiPatterns {
+  repeat_reads:      Record<string, number>;  // path → count (count > 1 within task)
+  read_no_edit:      string[];                // paths read but never written/edited
+  bash_repeats:      Record<string, number>;  // cmd prefix → count (count > 1)
+  edit_retries:      Record<string, number>;  // path → count (Edit/Write ≥ 2×)
+  read_per_turn_max: number;                  // max Reads in any single turn-window
+}
+
+export interface ToolMetricsSummary {
+  total_calls:       number;
+  by_tool:           Record<string, ToolByTool>;
+  duration_total_ms: number;
+  error_rate:        number;
+  anti_patterns:     AntiPatterns;
+}
+
+export interface MessageSnippet {
+  from: string;
+  to:   string;
+  content_200: string;
+}
+
+// C3 case interface (schema_version: 3)
 export interface TrajectoryCase {
+  schema_version: 3;
   id: number;
   label: 'good' | 'bad';
   task: Record<string, unknown>;
   linked_msg_ids: number[];
-  messages: Record<string, unknown>[];
-  tool_metrics: Record<string, unknown>[];
+  tool_metric_ids: number[];
+  message_snippets: MessageSnippet[];
   metrics: {
     tool_calls: number;
     duration_ms: number | null;
     traceability_score: number;
     has_commit: boolean;
   };
-  // v2 fields merged in
-  schema_version?: 2;
-  agents?: Record<string, AgentTrajectory>;
-  blocked_events?: BlockedEvent[];
-  raw?: { messages: Record<string, unknown>[]; tool_metrics: Record<string, unknown>[] };
+  title: string;
+  started_at: number;
+  finished_at: number | null;
+  total_duration_ms: number | null;
+  agents: Record<string, AgentTrajectory>;
+  blocked_events: BlockedEvent[];
+  tool_metrics: { summary: ToolMetricsSummary; ids: number[] };
 }
 
 const BLOCKED_PATTERNS: { pattern: RegExp | string; category: BlockedEvent['category'] }[] = [
@@ -46,10 +82,10 @@ function slotFromAgentId(agentId: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-function p90(values: number[]): number {
+function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(0.9 * sorted.length)];
+  return sorted[Math.floor(p * sorted.length)];
 }
 
 function aggregateByAgent(
@@ -57,7 +93,6 @@ function aggregateByAgent(
   agentRoleMap: Map<string, string>,
   messages: any[],
 ): Record<string, AgentTrajectory> {
-  // Collect all tool calls per agent
   const agentData: Map<string, {
     durations: number[];
     toolDurations: Map<string, number[]>;
@@ -67,15 +102,10 @@ function aggregateByAgent(
   for (const m of toolMetrics) {
     const agentId: string = m.synapse_agent_id;
     if (!agentData.has(agentId)) {
-      agentData.set(agentId, {
-        durations: [],
-        toolDurations: new Map(),
-        toolErrors: new Map(),
-      });
+      agentData.set(agentId, { durations: [], toolDurations: new Map(), toolErrors: new Map() });
     }
     const data = agentData.get(agentId)!;
     if (m.duration_ms != null) data.durations.push(m.duration_ms);
-
     const tool: string = m.tool;
     if (!data.toolDurations.has(tool)) data.toolDurations.set(tool, []);
     if (m.duration_ms != null) data.toolDurations.get(tool)!.push(m.duration_ms);
@@ -84,7 +114,6 @@ function aggregateByAgent(
     }
   }
 
-  // Count messages per agent
   const messagesIn: Map<string, number>  = new Map();
   const messagesOut: Map<string, number> = new Map();
   for (const msg of messages) {
@@ -94,7 +123,6 @@ function aggregateByAgent(
     if (to   !== 'human') messagesIn.set(to,   (messagesIn.get(to)    ?? 0) + 1);
   }
 
-  // Classify blocked events per agent
   const blockedByAgent: Map<string, BlockedEvent[]> = new Map();
   for (const msg of messages) {
     const content: string = typeof msg.content === 'string' ? msg.content : '';
@@ -111,7 +139,6 @@ function aggregateByAgent(
   }
 
   const result: Record<string, AgentTrajectory> = {};
-
   const allAgentIds = new Set([
     ...agentData.keys(),
     ...Array.from(messagesIn.keys()),
@@ -123,10 +150,8 @@ function aggregateByAgent(
     const role = agentRoleMap.get(agentId) ?? 'unknown';
     const slot = slotFromAgentId(agentId);
     const key = `${role}:${slot ?? agentId}`;
-
     const data = agentData.get(agentId);
     const tools: Record<string, ToolStats> = {};
-
     if (data) {
       for (const [tool, durations] of data.toolDurations.entries()) {
         const calls = durations.length;
@@ -135,13 +160,12 @@ function aggregateByAgent(
         tools[tool] = {
           calls,
           avg_ms: avg,
-          p90_ms: p90(durations),
+          p90_ms: percentile(durations, 0.9),
           errors,
           error_rate: calls > 0 ? errors / calls : 0,
         };
       }
     }
-
     result[key] = {
       agent_id: agentId,
       role,
@@ -155,6 +179,146 @@ function aggregateByAgent(
 
   return result;
 }
+
+// ── Tool metrics summary + anti-pattern computation ────────────────────────────
+
+function extractFingerprint(tool: string, inputJson: string | null): string | null {
+  if (!inputJson) return null;
+  try {
+    const input = JSON.parse(inputJson);
+    if (tool === 'Read' || tool === 'Edit' || tool === 'Write' || tool === 'NotebookEdit') {
+      return typeof input.file_path === 'string' ? input.file_path : null;
+    }
+    if (tool === 'Bash') {
+      return typeof input.command === 'string' ? input.command.slice(0, 60) : null;
+    }
+    if (tool === 'Glob' || tool === 'Grep') {
+      return typeof input.pattern === 'string' ? input.pattern : null;
+    }
+  } catch {}
+  return null;
+}
+
+// TURN_GAP_MS: consecutive tool calls more than 30s apart → different "turn"
+const TURN_GAP_MS = 30_000;
+
+function buildToolMetricsSummary(toolMetricsWithInput: any[]): { summary: ToolMetricsSummary; ids: number[] } {
+  const ids: number[]                          = [];
+  const byTool: Record<string, { counts: number[]; oks: number; errs: number }> = {};
+  let durationTotal = 0;
+  let errTotal = 0;
+
+  // Track fingerprints for anti-patterns
+  const readPaths: string[]   = [];
+  const editPaths: string[]   = [];
+  const bashPrefixes: string[] = [];
+
+  // Per-turn Read tracking: sort by timestamp, bucket by TURN_GAP_MS
+  const sortedWithInput = [...toolMetricsWithInput].sort((a, b) => a.timestamp - b.timestamp);
+
+  for (const row of sortedWithInput) {
+    ids.push(row.id);
+    const tool: string   = row.tool;
+    const durMs: number  = row.duration_ms ?? 0;
+    const ok             = row.status !== 'error';
+
+    if (!byTool[tool]) byTool[tool] = { counts: [], oks: 0, errs: 0 };
+    byTool[tool].counts.push(durMs);
+    if (ok) byTool[tool].oks++; else byTool[tool].errs++;
+
+    durationTotal += durMs;
+    if (!ok) errTotal++;
+
+    const fp = extractFingerprint(tool, row.input_json ?? null);
+    if (fp) {
+      if (tool === 'Read') readPaths.push(fp);
+      else if (tool === 'Edit' || tool === 'Write') editPaths.push(fp);
+      else if (tool === 'Bash') bashPrefixes.push(fp);
+    }
+  }
+
+  // by_tool aggregation
+  const by_tool: Record<string, ToolByTool> = {};
+  for (const [tool, data] of Object.entries(byTool)) {
+    const counts = data.counts;
+    const total = counts.length;
+    const sum = counts.reduce((a, b) => a + b, 0);
+    by_tool[tool] = {
+      count: total,
+      ok:    data.oks,
+      err:   data.errs,
+      avg_ms: total > 0 ? Math.round(sum / total) : 0,
+      max_ms: total > 0 ? Math.max(...counts) : 0,
+      p95_ms: percentile(counts, 0.95),
+    };
+  }
+
+  // Anti-patterns
+  const totalCalls = sortedWithInput.length;
+
+  // repeat_reads: file read ≥ 2× in this task
+  const readCounts: Record<string, number> = {};
+  for (const p of readPaths) readCounts[p] = (readCounts[p] ?? 0) + 1;
+  const repeat_reads: Record<string, number> = Object.fromEntries(
+    Object.entries(readCounts).filter(([, c]) => c > 1)
+  );
+
+  // read_no_edit: read but never edited/written
+  const editSet = new Set(editPaths);
+  const read_no_edit = [...new Set(readPaths)].filter(p => !editSet.has(p));
+
+  // bash_repeats: same prefix ≥ 2×
+  const bashCounts: Record<string, number> = {};
+  for (const p of bashPrefixes) bashCounts[p] = (bashCounts[p] ?? 0) + 1;
+  const bash_repeats: Record<string, number> = Object.fromEntries(
+    Object.entries(bashCounts).filter(([, c]) => c > 1)
+  );
+
+  // edit_retries: Edit/Write retried after a prior error on the same path.
+  // A clean multi-step refactor (Edit → Edit, both ok) is NOT a retry.
+  // Rule: count an Edit as a retry only if the previous Edit on the same path had status='error'.
+  const editLastStatus: Record<string, string> = {};
+  const editRetryRaw: Record<string, number> = {};
+  for (const row of sortedWithInput) {
+    if (row.tool !== 'Edit' && row.tool !== 'Write') continue;
+    const fp = extractFingerprint(row.tool, row.input_json ?? null);
+    if (!fp) continue;
+    if (editLastStatus[fp] === 'error') {
+      editRetryRaw[fp] = (editRetryRaw[fp] ?? 0) + 1;
+    }
+    editLastStatus[fp] = row.status;
+  }
+  const edit_retries: Record<string, number> = editRetryRaw;
+
+  // read_per_turn_max: max Reads within a single turn-window
+  let read_per_turn_max = 0;
+  let turnReadCount = 0;
+  let prevTimestamp = 0;
+  for (const row of sortedWithInput) {
+    if (row.tool !== 'Read') continue;
+    const ts: number = row.timestamp ?? 0;
+    if (prevTimestamp > 0 && ts - prevTimestamp > TURN_GAP_MS) {
+      read_per_turn_max = Math.max(read_per_turn_max, turnReadCount);
+      turnReadCount = 0;
+    }
+    turnReadCount++;
+    prevTimestamp = ts;
+  }
+  read_per_turn_max = Math.max(read_per_turn_max, turnReadCount);
+
+  return {
+    ids,
+    summary: {
+      total_calls: totalCalls,
+      by_tool,
+      duration_total_ms: durationTotal,
+      error_rate: totalCalls > 0 ? errTotal / totalCalls : 0,
+      anti_patterns: { repeat_reads, read_no_edit, bash_repeats, edit_retries, read_per_turn_max },
+    },
+  };
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────────
 
 export function extractCases(dbPath: string, outDir: string, limit = 20, taskId?: number): TrajectoryCase[] {
   const db = openDb(dbPath);
@@ -175,11 +339,8 @@ export function extractCases(dbPath: string, outDir: string, limit = 20, taskId?
 
 export function regenerateAllCases(dbPath: string, casesDir: string): number {
   const db = openDb(dbPath);
-
-  // Find all task IDs that have a case file
   const files = readdirSync(casesDir).filter(f => f.match(/^task_\d+_(?:good|bad)\.json$/));
   const taskIds = files.map(f => parseInt(f.match(/^task_(\d+)_/)![1], 10));
-
   let count = 0;
   for (const taskId of taskIds) {
     const row = db.prepare(`SELECT * FROM tasks WHERE id = ? AND finished_at IS NOT NULL`).get(taskId) as any;
@@ -188,52 +349,63 @@ export function regenerateAllCases(dbPath: string, casesDir: string): number {
     writeFileSync(join(casesDir, `task_${c.id}_${c.label}.json`), JSON.stringify(c, null, 2));
     count++;
   }
-
   db.close();
   return count;
 }
 
 function buildCase(db: any, task: any): TrajectoryCase {
-  const linkedIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean);
+  const linkedIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean) as number[];
 
-  const messages: Record<string, unknown>[] = (db.prepare(`
-    SELECT * FROM messages
+  // Fetch messages for agent-role mapping and blocked-event detection only (no content in output)
+  const messages: any[] = db.prepare(`
+    SELECT id, from_id, to_id, content, type, created_at FROM messages
     WHERE created_at >= ?
       AND created_at <= COALESCE(?, 9999999999999)
       AND (from_id = ? OR to_id = ?)
     ORDER BY created_at
-  `).all(task.started_at, task.finished_at, task.agent_id, task.agent_id) as Record<string, unknown>[]);
+  `).all(task.started_at, task.finished_at, task.agent_id, task.agent_id) as any[];
 
-  // Prefer direct FK attribution (populated by 12f3c41 worker cookie).
-  // Fall back to time-window for legacy rows (task_id IS NULL, pre-migration) and
-  // orchestrator-delegated tasks where workers report DONE before FK rows exist.
-  // Heuristic: try FK first; if 0 rows, fall back to time-window regardless of age.
-  // Both paths are equivalent for orchestrator-only tasks (neither returns worker rows).
-  let tool_metrics = db.prepare(`
-    SELECT * FROM tool_metrics
-    WHERE task_id = ?
-    ORDER BY timestamp
+  // FK attribution, time-window fallback
+  let toolMetricsBase: any[] = db.prepare(`
+    SELECT tm.*, e.payload AS _event_payload
+    FROM tool_metrics tm
+    LEFT JOIN events e ON e.event_id = tm.event_id
+    WHERE tm.task_id = ?
+    ORDER BY tm.timestamp
   `).all(task.id) as any[];
 
-  if (tool_metrics.length === 0) {
-    // Time-window fallback: covers pre-migration rows and orch-only tasks
-    tool_metrics = db.prepare(`
-      SELECT * FROM tool_metrics
-      WHERE synapse_agent_id = ?
-        AND timestamp >= ?
-        AND timestamp <= COALESCE(?, 9999999999999)
-      ORDER BY timestamp
+  if (toolMetricsBase.length === 0) {
+    toolMetricsBase = db.prepare(`
+      SELECT tm.*, e.payload AS _event_payload
+      FROM tool_metrics tm
+      LEFT JOIN events e ON e.event_id = tm.event_id
+      WHERE tm.synapse_agent_id = ?
+        AND tm.timestamp >= ?
+        AND tm.timestamp <= COALESCE(?, 9999999999999)
+      ORDER BY tm.timestamp
     `).all(task.agent_id, task.started_at, task.finished_at) as any[];
   }
+
+  // Parse input_json from event payload for each tool metric row
+  const toolMetricsWithInput = toolMetricsBase.map((row: any) => {
+    let input_json: string | null = null;
+    if (row._event_payload) {
+      try {
+        const p = JSON.parse(row._event_payload);
+        if (typeof p.input === 'string') input_json = p.input;
+      } catch {}
+    }
+    return { ...row, input_json };
+  });
 
   const missingLinks =
     (task.source_msg_id  ? 0 : 1) +
     (task.trigger_msg_id ? 0 : 1) +
     (task.result_msg_id  ? 0 : 1);
 
-  // Build agent role map: resolve all agent IDs seen in this task window
+  // Agent role map
   const agentIds = new Set<string>([task.agent_id]);
-  for (const m of tool_metrics) agentIds.add(m.synapse_agent_id);
+  for (const m of toolMetricsBase) agentIds.add(m.synapse_agent_id);
   for (const msg of messages) {
     if (msg.from_id !== 'human') agentIds.add(msg.from_id as string);
     if (msg.to_id   !== 'human') agentIds.add(msg.to_id   as string);
@@ -251,9 +423,8 @@ function buildCase(db: any, task: any): TrajectoryCase {
     }
   }
 
-  const agents = aggregateByAgent(tool_metrics, agentRoleMap, messages);
+  const agents = aggregateByAgent(toolMetricsBase, agentRoleMap, messages);
 
-  // Task-level blocked events (all agents)
   const blockedEvents: BlockedEvent[] = (messages as any[])
     .filter(m => {
       const content: string = typeof m.content === 'string' ? m.content : '';
@@ -266,35 +437,37 @@ function buildCase(db: any, task: any): TrajectoryCase {
       category: categorizeBlockedText(m.content as string),
     }));
 
-  const v2: TrajectoryV2 = {
-    schema_version: 2,
-    task_id: task.id,
-    title: task.title ?? '',
-    trigger_msg_id: task.trigger_msg_id ?? null,
-    source_msg_id: task.source_msg_id ?? null,
-    result_msg_id: task.result_msg_id ?? null,
-    commit_sha: task.commit_sha ?? null,
-    started_at: task.started_at,
-    finished_at: task.finished_at ?? null,
-    total_duration_ms: (task.started_at && task.finished_at) ? task.finished_at - task.started_at : null,
-    agents,
-    blocked_events: blockedEvents,
-    label: 'good' as const,
-    raw: { messages, tool_metrics },
-  };
+  // Message snippets: last 5 messages (most recent), content truncated to 200 chars.
+  // Critic needs the DONE report and final exchange, not the task assignment header.
+  const message_snippets: MessageSnippet[] = messages.slice(-5).map(m => ({
+    from: String(m.from_id ?? ''),
+    to:   String(m.to_id ?? ''),
+    content_200: String(m.content ?? '').slice(0, 200),
+  }));
+
+  const toolMetricsSummary = buildToolMetricsSummary(toolMetricsWithInput);
+  const totalDurationMs = (task.started_at && task.finished_at) ? task.finished_at - task.started_at : null;
 
   return {
+    schema_version: 3,
     id: task.id,
+    label: 'good',
     task,
     linked_msg_ids: linkedIds,
-    messages,
-    tool_metrics,
+    tool_metric_ids: toolMetricsSummary.ids,
+    message_snippets,
     metrics: {
-      tool_calls: tool_metrics.length,
-      duration_ms: v2.total_duration_ms,
+      tool_calls: toolMetricsBase.length,
+      duration_ms: totalDurationMs,
       traceability_score: missingLinks,
       has_commit: !!task.commit_sha,
     },
-    ...v2,
+    title: task.title ?? '',
+    started_at: task.started_at,
+    finished_at: task.finished_at ?? null,
+    total_duration_ms: totalDurationMs,
+    agents,
+    blocked_events: blockedEvents,
+    tool_metrics: toolMetricsSummary,
   };
 }

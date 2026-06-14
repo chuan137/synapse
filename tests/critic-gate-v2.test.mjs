@@ -42,21 +42,22 @@ mkdirSync(gateDir, { recursive: true });
 mkdirSync(casesDir, { recursive: true });
 writeFileSync(rulesFile, '# Worker rules\n\nAlways call report_done when finished.\n');
 
-// Synthetic v2 case that fails (developer with too many tool calls)
+// Synthetic C3 case that fails (developer with too many tool calls)
 const failCase = {
-  schema_version: 2,
+  schema_version: 3,
   id: 77777,
   label: 'good',
   task: { id: 77777, agent_id: 'proj:1', title: 'Fix auth bug', commit_sha: 'abc123', source_msg_id: 1, trigger_msg_id: 2, result_msg_id: null },
   linked_msg_ids: [1, 2],
-  messages: [
-    { from_id: 'proj:0', to_id: 'proj:1', content: 'Fix the auth bug.', created_at: 1000, type: 'message' },
-    { from_id: 'proj:1', to_id: 'proj:0', content: 'DONE — fixed.', created_at: 2000, type: 'done' },
+  tool_metric_ids: [],
+  message_snippets: [
+    { from: 'proj:0', to: 'proj:1', content_200: 'Fix the auth bug.' },
+    { from: 'proj:1', to: 'proj:0', content_200: 'DONE — fixed.' },
   ],
-  tool_metrics: [],
   metrics: { tool_calls: 200, duration_ms: 120000, traceability_score: 1, has_commit: true },
-  task_id: 77777,
   title: 'Fix auth bug',
+  started_at: 1000,
+  finished_at: 2000,
   total_duration_ms: 120000,
   agents: {
     'developer:1': {
@@ -74,13 +75,25 @@ const failCase = {
     },
   },
   blocked_events: [],
-  soft_signals: { error_rate_per_tool: { 'developer:1:Bash': 0.07 }, redundant_reads: {}, confused_blocked_events: [], over_delegation: 0, under_delegation: 0 },
-  raw: {
-    messages: [
-      { from_id: 'proj:0', to_id: 'proj:1', content: 'Fix the auth bug.', created_at: 1000, type: 'message' },
-      { from_id: 'proj:1', to_id: 'proj:0', content: 'DONE — fixed.', created_at: 2000, type: 'done' },
-    ],
-    tool_metrics: [],
+  tool_metrics: {
+    summary: {
+      total_calls: 200,
+      by_tool: {
+        'Read': { count: 80, ok: 80, err: 0, avg_ms: 90, max_ms: 200, p95_ms: 180 },
+        'Bash': { count: 70, ok: 65, err: 5, avg_ms: 800, max_ms: 2000, p95_ms: 1800 },
+        'Edit': { count: 50, ok: 50, err: 0, avg_ms: 200, max_ms: 400, p95_ms: 380 },
+      },
+      duration_total_ms: 90000,
+      error_rate: 0.025,
+      anti_patterns: {
+        repeat_reads: { 'src/auth.ts': 3 },
+        read_no_edit: ['README.md'],
+        bash_repeats: {},
+        edit_retries: {},
+        read_per_turn_max: 12,
+      },
+    },
+    ids: [],
   },
 };
 writeFileSync(join(casesDir, 'task_77777_good.json'), JSON.stringify(failCase, null, 2));
@@ -91,7 +104,6 @@ const passCase = {
   id: 77778,
   label: 'good',
   task: { ...failCase.task, id: 77778 },
-  task_id: 77778,
   metrics: { tool_calls: 15, duration_ms: 30000, traceability_score: 0, has_commit: true },
   agents: {
     'developer:1': {
@@ -99,6 +111,19 @@ const passCase = {
       tools: { 'Read': { calls: 5, avg_ms: 90, p90_ms: 120, errors: 0, error_rate: 0 }, 'Edit': { calls: 10, avg_ms: 200, p90_ms: 300, errors: 0, error_rate: 0 } },
       active_duration_ms: 3000,
     },
+  },
+  tool_metrics: {
+    summary: {
+      total_calls: 15,
+      by_tool: {
+        'Read': { count: 5, ok: 5, err: 0, avg_ms: 90, max_ms: 150, p95_ms: 140 },
+        'Edit': { count: 10, ok: 10, err: 0, avg_ms: 200, max_ms: 350, p95_ms: 320 },
+      },
+      duration_total_ms: 2450,
+      error_rate: 0,
+      anti_patterns: { repeat_reads: {}, read_no_edit: [], bash_repeats: {}, edit_retries: {}, read_per_turn_max: 2 },
+    },
+    ids: [],
   },
 };
 writeFileSync(join(casesDir, 'task_77778_good.json'), JSON.stringify(passCase, null, 2));
