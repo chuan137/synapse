@@ -60,7 +60,11 @@ Track every non-trivial task on S-Deck via `start_task` / `finish_task` — skip
 1. **Plan** — moderate/complex only: assign to a planner worker (or the implementing developer, for warm context). Output → `.synapse/tasks/<taskId>-plan.md`.
 2. **Worktree** — required for any non-trivial change (Rule 4): `synapse worktree create <slug>`, include the path in the task message.
 3. **Implement** — assign to a developer worker. Reference the plan doc path if it exists. ≤300 tokens: inline; >300 tokens: `task_file: true` → `<taskId>.md`.
-4. **Review** — moderate/complex only: assign to a code-reviewer worker; output → `<taskId>-review.md`. If issues found, open a follow-up implement task.
+4. **Review** — moderate/complex only: assign to a code-reviewer worker; output → `<taskId>-review.md`.
+4.5. **Review-Decision** — after every code-review DONE (read the full review file/message, not just the verdict), before dispatching any follow-up task or merging:
+   - Send a `DECISION` milestone to `human` titled e.g. `DECISION — review of task N` with one bullet per finding. Each bullet: the reviewer's verbatim fix recommendation (exact words, no paraphrase) + your decision: `→ fix-now (task N)` / `→ defer (PLAN: <one line>)` / `→ accept (reviewer: not blocking)` / `→ override (escalate: <reason>)`.
+   - Skip when verdict is `merge as-is` AND zero findings — post `DECISION — review of task N: merge as-is, 0 findings` and proceed. If all findings are accepted, post `DECISION — review of task N: N findings, all accepted` instead of per-bullet list.
+   - For each `fix-now` decision, the follow-up implement task message MUST quote the review's recommended fix verbatim — no paraphrase, no selective excerpt.
 5. **Merge commit** — `synapse worktree merge <slug>`; no worktree: commit the worker's changes yourself. Never commit before the worker reports DONE.
 
 **Execute, for other work** (research, analysis, documentation): usually a single delegation to the right role, results returned via `<taskId>-report.md`. No worktree or merge unless files changed.
