@@ -14,6 +14,12 @@ import { spawnWorker } from './spawn.js';
 
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
 
+// Checks if a message body looks like a numbered or bulleted option list.
+// Used to enforce request_options when send_message targets 'human' with needs_approval.
+function looksLikeOptionList(content: string): boolean {
+  return /^\s*\d+[.)]/m.test(content) || /^[-•]\s/m.test(content);
+}
+
 function listAvailableRoles(): string {
   const rolesDir = join(TEMPLATES_DIR, 'roles');
   if (!existsSync(rolesDir)) return 'No roles defined yet.';
@@ -428,6 +434,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       type?: string | null;
     };
 
+    if (to_id === 'human' && !('needs_approval' in (args as object))) {
+      return { content: [{ type: 'text', text: 'needs_approval is required when messaging human. Set needs_approval: true if this message requires operator action, or needs_approval: false for informational messages.' }], isError: true };
+    }
+    // If needs_approval and content looks like an option list, require request_options
+    const hasOptions = Array.isArray(request_options) && request_options.length > 0;
+    if (to_id === 'human' && needs_approval && !hasOptions && looksLikeOptionList(content)) {
+      return { content: [{ type: 'text', text: 'This message presents options to the human but request_options is not set. Pass request_options: ["option 1 text", "option 2 text"] so the operator sees clickable buttons.' }], isError: true };
+    }
+
     if (report_file && to_id === 'human') {
       const reportsDir = join(process.cwd(), '.synapse', 'reports');
       mkdirSync(reportsDir, { recursive: true });
@@ -662,6 +677,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       task_id?: number;
       source_msg_id?: number;
     };
+
+    if (!('source_msg_id' in (args as object))) {
+      return { content: [{ type: 'text', text: 'source_msg_id is required on delegate_task. Pass source_msg_id: <message_id> if this task was triggered by a human message (get the ID from read_messages), or source_msg_id: null if self-initiated. This field is required for task traceability.' }], isError: true };
+    }
 
     // Spawn ACK gate: reject if the target worker has not yet read its handshake message.
     if (getAgentReady(to_id) === null) {

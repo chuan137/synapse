@@ -1,10 +1,13 @@
 /**
  * Synapse Guard Hook (PreToolUse) — `synapse hook guard` — DESIGN.md §3.4
  *
- * The enforcement counterpart to the voluntary `request_approval` MCP tool.
- * Intercepts guarded tool calls BEFORE they run and routes them to the human
- * operator on S-Deck. The agent's turn blocks (block-and-poll) until the
- * operator approves/rejects on the dashboard, or it times out.
+ * Interactive operator-approval blocking only. Protocol-level field lints
+ * (delegate_task.source_msg_id, send_message.needs_approval, request_options
+ * consistency) live in `src/mcp-server.ts` handlers.
+ *
+ * Intercepts destructive tool calls BEFORE they run and routes them to the
+ * human operator on S-Deck. The agent's turn blocks (block-and-poll) until
+ * the operator approves/rejects on the dashboard, or it times out.
  *
  *   approved  → permissionDecision: "allow"  (tool proceeds)
  *   rejected  → permissionDecision: "deny"   (with operator's comment)
@@ -62,43 +65,6 @@ async function guard(payload: any): Promise<void> {
   const input     = payload.tool_input ?? {};
   const sessionId = payload.session_id ?? null;
 
-  // Lint check: delegate_task must declare source_msg_id (null is valid; absent is not)
-  if (tool === 'mcp__synapse-bus__delegate_task') {
-    if (!('source_msg_id' in input)) {
-      return deny(
-        'source_msg_id is required on delegate_task. ' +
-        'Pass source_msg_id: <message_id> if this task was triggered by a human message ' +
-        '(get the ID from read_messages), or source_msg_id: null if self-initiated. ' +
-        'This field is required for task traceability.'
-      );
-    }
-    return allow();
-  }
-
-  // Lint check: send_message to human must explicitly declare needs_approval
-  if (tool === 'mcp__synapse-bus__send_message') {
-    const toId = String(input.to_id ?? '');
-    if (toId === 'human' && !('needs_approval' in input)) {
-      return deny(
-        'needs_approval is required when messaging human. ' +
-        'Set needs_approval: true if this message requires operator action, or needs_approval: false for informational messages.'
-      );
-    }
-
-    // If needs_approval and content looks like an option list, require request_options
-    const needsApproval = input.needs_approval === true;
-    const content = String(input.content ?? '');
-    const hasOptions = Array.isArray(input.request_options) && input.request_options.length > 0;
-    if (toId === 'human' && needsApproval && !hasOptions && looksLikeOptionList(content)) {
-      return deny(
-        'This message presents options to the human but request_options is not set. ' +
-        'Pass request_options: ["option 1 text", "option 2 text"] so the operator sees clickable buttons.'
-      );
-    }
-
-    return allow();
-  }
-
   const reason = guardReason(tool, input);
   if (!reason) return allow();
 
@@ -128,10 +94,6 @@ async function guard(payload: any): Promise<void> {
     }
   }
   return deny('No operator response within 10 minutes — blocked by Synapse guard (fail-safe).');
-}
-
-function looksLikeOptionList(content: string): boolean {
-  return /^\s*\d+[.)]/m.test(content) || /^[-•]\s/m.test(content);
 }
 
 function guardReason(tool: string, input: any): string | null {
