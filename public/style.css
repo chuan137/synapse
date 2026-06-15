@@ -1015,23 +1015,26 @@
       gap: 3px;
     }
 
-    #plan-content {
+    #progress-content {
       flex: 1;
       overflow-y: auto;
+      min-height: 0;
+    }
+    #progress-rendered {
       padding: 16px 18px;
       line-height: 1.6;
       font-size: 13px;
     }
-    #plan-content h1 { font-size: 16px; font-weight: 700; margin: 0 0 10px; }
-    #plan-content h2 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: var(--accent); }
-    #plan-content h3 { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
-    #plan-content p  { margin: 0 0 8px; }
-    #plan-content ul, #plan-content ol { margin: 0 0 8px; padding-left: 18px; }
-    #plan-content li { margin-bottom: 3px; }
-    #plan-content code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
-    #plan-content pre { background: var(--bg); padding: 10px 12px; border-radius: 5px; overflow-x: auto; margin: 0 0 10px; }
-    #plan-content a { color: var(--accent); }
-    #plan-content hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    #progress-rendered h1 { font-size: 16px; font-weight: 700; margin: 0 0 10px; }
+    #progress-rendered h2 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: var(--accent); }
+    #progress-rendered h3 { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+    #progress-rendered p  { margin: 0 0 8px; }
+    #progress-rendered ul, #progress-rendered ol { margin: 0 0 8px; padding-left: 18px; }
+    #progress-rendered li { margin-bottom: 3px; }
+    #progress-rendered code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    #progress-rendered pre { background: var(--bg); padding: 10px 12px; border-radius: 5px; overflow-x: auto; margin: 0 0 10px; }
+    #progress-rendered a { color: var(--accent); }
+    #progress-rendered hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
 
     /* ── Compose (inside messages panel) ── */
     #compose {
