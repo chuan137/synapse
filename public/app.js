@@ -7,7 +7,7 @@
   let allTasks         = [];
   let planContent      = '';
   let selectedAgentId  = null;
-  let middlePanelTab   = 'messages'; // 'messages' | 'plan' | 'file:<path>'
+  let middlePanelTab   = 'messages'; // 'messages' | 'progress' | 'file:<path>'
   // Local tracking of clicked approval buttons — persists across SSE re-renders
   // until approved_at propagates from the server.
   const approvedMsgIds   = new Set();   // msg IDs where simple approve was clicked
@@ -98,7 +98,7 @@
       renderApprovals();
       renderActivity();
       if (rightPanelTab === 'tasks') renderTasks();
-      if (middlePanelTab === 'plan') renderPlan();
+      if (middlePanelTab === 'progress') renderProgress();
     };
 
     es.onerror = () => {
@@ -441,39 +441,39 @@
     morphdom(activityList, `<div id="activity-list">${activityInnerHtml}</div>`, { childrenOnly: true });
   }
 
-  // ── Middle panel tab switching (Messages / Plan / File:<path>) ─────────────
-  const tabMessages   = document.getElementById('tab-messages');
-  const tabPlan       = document.getElementById('tab-plan');
-  const messagesList  = document.getElementById('messages-list');
-  const planContentEl = document.getElementById('plan-content');
-  const planRendered  = document.getElementById('plan-rendered');
-  const composeEl     = document.getElementById('compose');
+  // ── Middle panel tab switching (Messages / Progress / File:<path>) ─────────────
+  const tabMessages      = document.getElementById('tab-messages');
+  const tabProgress      = document.getElementById('tab-progress');
+  const messagesList     = document.getElementById('messages-list');
+  const progressContentEl = document.getElementById('progress-content');
+  const progressRendered  = document.getElementById('progress-rendered');
+  const composeEl        = document.getElementById('compose');
 
-  function renderPlan() {
+  function renderProgress() {
     const inner = planContent.trim()
       ? renderMarkdown(planContent)
-      : '<div class="empty-state">No PLAN.md found at project root.</div>';
-    morphdom(planRendered, `<div id="plan-rendered">${inner}</div>`, { childrenOnly: true });
+      : '<div class="empty-state">No progress.md found at project root.</div>';
+    morphdom(progressRendered, `<div id="progress-rendered">${inner}</div>`, { childrenOnly: true });
   }
 
   const filesContent  = document.getElementById('files-content');
 
-  // middlePanelTab: 'messages' | 'plan' | 'file:<path>'
+  // middlePanelTab: 'messages' | 'progress' | 'file:<path>'
   function switchMiddleTab(tab) {
     middlePanelTab = tab;
     const isFile = tab.startsWith('file:');
     tabMessages.classList.toggle('active', tab === 'messages');
-    tabPlan.classList.toggle('active', tab === 'plan');
+    tabProgress.classList.toggle('active', tab === 'progress');
     messagesList.style.display = tab === 'messages' ? '' : 'none';
-    planContentEl.style.display = tab === 'plan' ? '' : 'none';
+    progressContentEl.style.display = tab === 'progress' ? '' : 'none';
     filesContent.style.display = isFile ? 'flex' : 'none';
     composeEl.style.display = tab === 'messages' ? '' : 'none';
-    if (tab === 'plan') renderPlan();
+    if (tab === 'progress') renderProgress();
     if (isFile) renderFileViewer(tab.slice(5));
   }
 
   tabMessages.addEventListener('click', () => switchMiddleTab('messages'));
-  tabPlan.addEventListener('click', () => switchMiddleTab('plan'));
+  tabProgress.addEventListener('click', () => switchMiddleTab('progress'));
 
   // ── Right panel tab switching ────────────────────────────────────────────
   const tabEvents  = document.getElementById('tab-events');
@@ -1243,7 +1243,7 @@ Describe the role's responsibilities here.
   // ── Files tab ──────────────────────────────────────────────────────────────
   // File tabs are rendered inline in #file-tabs container (top tab bar).
   // Each file gets a .file-tab button with a close button.
-  // No separate "Files" umbrella tab — files are siblings of Messages/Plan.
+  // No separate "Files" umbrella tab — files are siblings of Messages/Progress.
 
   let openFiles = [];      // [{ path, line? }]
   let activeFilePath = null;

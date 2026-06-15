@@ -62,25 +62,25 @@ function readProjectId(): string | null {
   try { return JSON.parse(readFileSync(p, 'utf8')).projectId ?? null; } catch { return null; }
 }
 
-// ── PLAN.md file-watch ────────────────────────────────────────────────────
+// ── progress.md file-watch ────────────────────────────────────────────────────
 
-const PLAN_PATH = join(GIT_CWD, '.synapse', 'PLAN.md');
+const PROGRESS_PATH = join(GIT_CWD, '.synapse', 'progress.md');
 
-function readPlan(): { content: string; updated_at: number } {
+function readProgress(): { content: string; updated_at: number } {
   try {
-    const content = readFileSync(PLAN_PATH, 'utf8');
-    const updated_at = statSync(PLAN_PATH).mtimeMs;
+    const content = readFileSync(PROGRESS_PATH, 'utf8');
+    const updated_at = statSync(PROGRESS_PATH).mtimeMs;
     return { content, updated_at };
   } catch {
     return { content: '', updated_at: 0 };
   }
 }
 
-let currentPlan = readPlan();
+let currentPlan = readProgress();
 
 // Use watchFile (stat-poll) — more reliable than fs.watch across editors/NFS.
-watchFile(PLAN_PATH, { interval: 1500 }, () => {
-  const next = readPlan();
+watchFile(PROGRESS_PATH, { interval: 1500 }, () => {
+  const next = readProgress();
   if (next.content !== currentPlan.content || next.updated_at !== currentPlan.updated_at) {
     currentPlan = next;
     broadcastPlan();
