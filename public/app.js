@@ -452,7 +452,7 @@
   function renderProgress() {
     const inner = planContent.trim()
       ? renderMarkdown(planContent)
-      : '<div class="empty-state">No progress.md found at project root.</div>';
+      : '<div class="empty-state">No progress.md found.</div>';
     morphdom(progressRendered, `<div id="progress-rendered">${inner}</div>`, { childrenOnly: true });
   }
 
