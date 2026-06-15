@@ -35,9 +35,9 @@ import {
   Message,
   ApprovalRequest,
 } from './db.js';
+import { spawnWorker } from './spawn.js';
 
 type AugmentedStatus = AgentStatus & { over_threshold: boolean };
-import { spawnWorker } from './spawn.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
