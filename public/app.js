@@ -213,6 +213,7 @@
             </div>
             <div class="agent-state-row">
               <span class="agent-state-dot" data-state="${esc(a.state)}" style="background:${stateColor};"></span>
+              ${a.over_threshold ? '<span class="agent-health-dot" title="Tool call threshold exceeded"></span>' : ''}
               <span class="agent-state-task">${esc(stateText)}</span>
             </div>
           </div>
@@ -220,6 +221,14 @@
         </div>
       `;
     }).join('');
+
+    // Update health warning badge in Agents panel header
+    const badge = document.getElementById('agents-warning-badge');
+    if (badge) {
+      const warnCount = (agentStatuses ?? []).filter(a => a.over_threshold).length;
+      badge.textContent = String(warnCount);
+      badge.style.display = warnCount > 0 ? '' : 'none';
+    }
 
     // Restore menu that was open before the re-render
     if (openMenuId) {

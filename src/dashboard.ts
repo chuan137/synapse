@@ -35,6 +35,8 @@ import {
   Message,
   ApprovalRequest,
 } from './db.js';
+
+type AugmentedStatus = AgentStatus & { over_threshold: boolean };
 import { spawnWorker } from './spawn.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -128,6 +130,7 @@ let lastApprovals  = '';
 let lastEvents     = '';
 let lastTasks      = '';
 let lastPlan       = '';
+let lastWarnings   = '';
 
 const nudger = new Nudger();
 nudger.start(500);
@@ -143,12 +146,19 @@ setInterval(() => {
   const metrics    = getAllToolMetrics();
   const tasks      = listAllTasks(200);
 
+  const warnings = healthMonitor.currentWarnings;
+  const augmentedStatuses: AugmentedStatus[] = statuses.map((s) => ({
+    ...s,
+    over_threshold: warnings.has(s.agent_id),
+  }));
+
   const statusStr     = JSON.stringify(statuses);
   const msgStr        = JSON.stringify(messages.map((m) => m.id));
   const approvalStr   = JSON.stringify(approvals.map((a) => a.id));
   const eventStr      = JSON.stringify(events.map((e) => e.id));
   const taskStr       = JSON.stringify(tasks.map((a) => `${a.id}:${a.status}:${a.commit_sha}`));
   const planStr       = `${currentPlan.updated_at}`;
+  const warningStr    = JSON.stringify([...warnings].sort());
 
   if (
     statusStr !== lastStatuses ||
@@ -156,7 +166,8 @@ setInterval(() => {
     approvalStr !== lastApprovals ||
     eventStr !== lastEvents ||
     taskStr !== lastTasks ||
-    planStr !== lastPlan
+    planStr !== lastPlan ||
+    warningStr !== lastWarnings
   ) {
     lastStatuses   = statusStr;
     lastMessages   = msgStr;
@@ -164,7 +175,8 @@ setInterval(() => {
     lastEvents     = eventStr;
     lastTasks      = taskStr;
     lastPlan       = planStr;
-    broadcast({ statuses, messages, approvals, events, metrics, tasks, plan: currentPlan });
+    lastWarnings   = warningStr;
+    broadcast({ statuses: augmentedStatuses, messages, approvals, events, metrics, tasks, plan: currentPlan });
   }
 }, 500);
 

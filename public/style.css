@@ -326,6 +326,18 @@
       background: var(--surface);
     }
 
+    .panel-warning-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: color-mix(in srgb, var(--error) 20%, transparent);
+      color: var(--error);
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
     #agents-list {
       flex: 1;
       overflow-y: auto;
@@ -429,6 +441,14 @@
     }
     .agent-state-dot[data-state="working"] { animation: status-pulse 1.4s ease-in-out infinite; }
     .agent-state-dot[data-state="blocked"] { animation: status-flash 1.8s step-end infinite; }
+
+    .agent-health-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--error);
+    }
 
     .agent-state-task {
       font-size: 10px;

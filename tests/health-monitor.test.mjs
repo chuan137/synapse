@@ -30,165 +30,131 @@ function assert(condition, message) {
 function makeDeps(overrides = {}) {
   return {
     queryAgents: (_threshold) => [],
-    sendMessage: () => 1,
     readSynapseSettings: () => ({}),
     ...overrides,
   };
 }
 
-// ── Test 1: below threshold → no message ─────────────────────────────────────
+// ── Test 1: below threshold → currentWarnings empty ──────────────────────────
 
-console.log('\n[Test 1] Below threshold — no message sent');
+console.log('\n[Test 1] Below threshold — currentWarnings empty');
 
 {
-  let sent = 0;
   const hm = new HealthMonitor({
     thresholdToolCalls: 300,
     deps: makeDeps({
-      // Query returns nothing (agent count 299 < 300, so HAVING filters it out)
       queryAgents: (_t) => [],
-      sendMessage: () => { sent++; return 1; },
     }),
   });
   hm['_poll']();
-  assert(sent === 0, `no message when no agents cross threshold`);
+  assert(hm.currentWarnings.size === 0, `currentWarnings empty when no agents cross threshold`);
 }
 
-// ── Test 2: at threshold → message sent, agent in warnedAgents ───────────────
+// ── Test 2: currentWarnings populated on crossing ─────────────────────────────
 
-console.log('\n[Test 2] At threshold — message sent, agent tracked');
+console.log('\n[Test 2] currentWarnings populated on crossing');
 
 {
-  let sentContent = null;
   const hm = new HealthMonitor({
     thresholdToolCalls: 300,
     deps: makeDeps({
       queryAgents: (_t) => [{
-        agent_id: 'proj:1', orchestrator_id: 'proj:0',
-        role: 'developer', tool_call_count: 300, session_id: 'sess-a',
+        agent_id: 'proj:1', role: 'developer', tool_call_count: 300, session_id: 'sess-a',
       }],
-      sendMessage: (_from, _to, content) => { sentContent = content; return 1; },
     }),
   });
   hm['_poll']();
-  assert(sentContent !== null, `message sent at threshold`);
-  assert(sentContent.includes('proj:1'), `content includes agent_id`);
-  assert(sentContent.includes('300'), `content includes count`);
-  assert(sentContent.includes('threshold: 300'), `content includes threshold`);
-  assert(hm['warnedAgents'].has('proj:1'), `agent added to warnedAgents`);
+  assert(hm.currentWarnings.has('proj:1'), `currentWarnings contains crossing agent`);
+  assert(hm.currentWarnings.size === 1, `exactly one warning`);
 }
 
-// ── Test 3: above threshold → message sent ───────────────────────────────────
+// ── Test 3: currentWarnings cleared when agent drops below threshold ──────────
 
-console.log('\n[Test 3] Above threshold — message sent');
-
-{
-  let sent = 0;
-  const hm = new HealthMonitor({
-    thresholdToolCalls: 300,
-    deps: makeDeps({
-      queryAgents: (_t) => [{
-        agent_id: 'proj:2', orchestrator_id: 'proj:0',
-        role: 'developer', tool_call_count: 450, session_id: 'sess-b',
-      }],
-      sendMessage: () => { sent++; return 1; },
-    }),
-  });
-  hm['_poll']();
-  assert(sent === 1, `message sent above threshold`);
-}
-
-// ── Test 4: de-dupe — second tick same session does NOT re-send ───────────────
-
-console.log('\n[Test 4] De-dupe — second _poll for same session does not re-send');
+console.log('\n[Test 3] currentWarnings cleared when agent drops below threshold');
 
 {
-  let sent = 0;
-  const rows = [{
-    agent_id: 'proj:3', orchestrator_id: 'proj:0',
-    role: 'developer', tool_call_count: 350, session_id: 'sess-c',
+  let rows = [{
+    agent_id: 'proj:2', role: 'developer', tool_call_count: 350, session_id: 'sess-b',
   }];
   const hm = new HealthMonitor({
     thresholdToolCalls: 300,
     deps: makeDeps({
       queryAgents: (_t) => rows,
-      sendMessage: () => { sent++; return 1; },
     }),
   });
+
   hm['_poll']();
+  assert(hm.currentWarnings.has('proj:2'), `agent in warnings after first poll`);
+
+  rows = []; // agent dropped below threshold, no longer returned by query
   hm['_poll']();
-  assert(sent === 1, `second poll with same session does not re-send (got ${sent})`);
+  assert(!hm.currentWarnings.has('proj:2'), `agent removed from warnings after dropping below`);
+  assert(hm.currentWarnings.size === 0, `warnings empty`);
 }
 
-// ── Test 5: orchestrator_id null → skip silently ─────────────────────────────
+// ── Test 4: currentWarnings cleared on session change then re-added ───────────
 
-console.log('\n[Test 5] Null orchestrator_id — skipped silently');
-
-{
-  let sent = 0;
-  const hm = new HealthMonitor({
-    thresholdToolCalls: 300,
-    deps: makeDeps({
-      queryAgents: (_t) => [{
-        agent_id: 'proj:4', orchestrator_id: null,
-        role: 'developer', tool_call_count: 400, session_id: 'sess-d',
-      }],
-      sendMessage: () => { sent++; return 1; },
-    }),
-  });
-  hm['_poll']();
-  assert(sent === 0, `no message when orchestrator_id is null`);
-}
-
-// ── Test 6: reset on respawn (session_id changed) → fires again ───────────────
-
-console.log('\n[Test 6] Reset on respawn — new session_id clears warnedAgents, fires again');
+console.log('\n[Test 4] currentWarnings: cleared on session change, re-added if still crossing');
 
 {
-  let sent = 0;
   let sessionId = 'sess-old';
   const hm = new HealthMonitor({
     thresholdToolCalls: 300,
     deps: makeDeps({
       queryAgents: (_t) => [{
-        agent_id: 'proj:5', orchestrator_id: 'proj:0',
-        role: 'developer', tool_call_count: 320, session_id: sessionId,
+        agent_id: 'proj:3', role: 'developer', tool_call_count: 320, session_id: sessionId,
       }],
-      sendMessage: () => { sent++; return 1; },
     }),
   });
 
   hm['_poll']();
-  assert(sent === 1, `first poll fires`);
+  assert(hm.currentWarnings.has('proj:3'), `in warnings before restart`);
 
-  // Simulate restart — new session_id, count resets above threshold again
+  // Simulate restart with new session — agent immediately above threshold again
   sessionId = 'sess-new';
+  hm['deps'].queryAgents = () => [{ agent_id: 'proj:3', role: 'developer', tool_call_count: 320, session_id: sessionId }];
   hm['_poll']();
-  assert(sent === 2, `after session change, fires again (got ${sent})`);
+  assert(hm.currentWarnings.has('proj:3'), `re-added in same tick after session reset`);
 }
 
-// ── Test 7: slot 0 excluded (handled by query) ───────────────────────────────
+// ── Test 5: currentWarnings reflects multiple agents ─────────────────────────
 
-console.log('\n[Test 7] Slot 0 (orchestrator) excluded by SQL query');
+console.log('\n[Test 5] currentWarnings reflects multiple crossing agents');
 
 {
-  let sent = 0;
-  // The SQL already has slot > 0 guard — simulate by having queryAgents return nothing
-  // (what the DB would return for an orchestrator that crosses threshold)
   const hm = new HealthMonitor({
     thresholdToolCalls: 300,
     deps: makeDeps({
-      queryAgents: (_t) => [],  // slot=0 filtered by HAVING slot > 0
-      sendMessage: () => { sent++; return 1; },
+      queryAgents: (_t) => [
+        { agent_id: 'proj:10', role: 'developer', tool_call_count: 310, session_id: 'sess-1' },
+        { agent_id: 'proj:11', role: 'developer', tool_call_count: 450, session_id: 'sess-2' },
+      ],
     }),
   });
   hm['_poll']();
-  assert(sent === 0, `orchestrator (slot=0) excluded — no hint sent`);
+  assert(hm.currentWarnings.has('proj:10'), `first agent in warnings`);
+  assert(hm.currentWarnings.has('proj:11'), `second agent in warnings`);
+  assert(hm.currentWarnings.size === 2, `exactly two warnings`);
 }
 
-// ── Test 8: start()/stop() lifecycle ─────────────────────────────────────────
+// ── Test 6: slot 0 excluded (handled by SQL query) ───────────────────────────
 
-console.log('\n[Test 8] start/stop lifecycle — no further DB queries after stop');
+console.log('\n[Test 6] Slot 0 (orchestrator) excluded by SQL query');
+
+{
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 300,
+    deps: makeDeps({
+      queryAgents: (_t) => [], // slot=0 filtered by slot > 0 in SQL
+    }),
+  });
+  hm['_poll']();
+  assert(hm.currentWarnings.size === 0, `orchestrator (slot=0) excluded — no warning`);
+}
+
+// ── Test 7: start()/stop() lifecycle ─────────────────────────────────────────
+
+console.log('\n[Test 7] start/stop lifecycle — no further DB queries after stop');
 
 {
   let pollCount = 0;
@@ -208,9 +174,9 @@ console.log('\n[Test 8] start/stop lifecycle — no further DB queries after sto
   assert(pollCount === countAfterStop, `no new polls after stop() (${pollCount} === ${countAfterStop})`);
 }
 
-// ── Test 9: start() idempotency — second call does not add a second interval ──
+// ── Test 8: start() idempotency ───────────────────────────────────────────────
 
-console.log('\n[Test 9] start() idempotency: calling start() twice does not double the fire rate');
+console.log('\n[Test 8] start() idempotency: calling start() twice does not double the fire rate');
 
 {
   let pollCount = 0;
@@ -225,7 +191,6 @@ console.log('\n[Test 9] start() idempotency: calling start() twice does not doub
   hm.start(); // second call — must be a no-op
   await new Promise(r => setTimeout(r, 55));
   hm.stop();
-  // If both intervals fired, pollCount would be ~10 not ~5
   assert(pollCount < 8, `calling start() twice does not double the fire rate (got ${pollCount})`);
 }
 

@@ -1,10 +1,9 @@
-import { db, sendMessage, readSynapseSettings } from './db.js';
+import { db, readSynapseSettings } from './db.js';
 
 const COUNTED_TOOLS = ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash', 'WebFetch'];
 
 interface AgentToolRow {
   agent_id: string;
-  orchestrator_id: string | null;
   role: string | null;
   tool_call_count: number;
   session_id: string;
@@ -12,7 +11,6 @@ interface AgentToolRow {
 
 interface HealthMonitorDeps {
   queryAgents: (threshold: number) => AgentToolRow[];
-  sendMessage: typeof sendMessage;
   readSynapseSettings: typeof readSynapseSettings;
 }
 
@@ -24,7 +22,6 @@ interface HealthMonitorOptions {
 
 const QUERY_SQL = `
   SELECT a.agent_id,
-         a.orchestrator_id,
          a.role,
          a.session_id,
          COUNT(tm.id) AS tool_call_count
@@ -48,15 +45,14 @@ export class HealthMonitor {
   private readonly intervalMs: number;
   private readonly deps: HealthMonitorDeps;
   private timer: ReturnType<typeof setInterval> | null = null;
-  private warnedAgents = new Set<string>();
   private lastSeenSession = new Map<string, string>();
+  currentWarnings = new Set<string>();
 
   constructor(opts: HealthMonitorOptions = {}) {
     this.defaultThreshold = opts.thresholdToolCalls ?? 300;
     this.intervalMs = opts.intervalMs ?? 15_000;
     this.deps = {
       queryAgents: defaultQueryAgents,
-      sendMessage,
       readSynapseSettings,
       ...opts.deps,
     };
@@ -81,21 +77,21 @@ export class HealthMonitor {
 
     const rows = this.deps.queryAgents(threshold);
 
+    // Session-change cleanup — remove restarted agents from warnings
     for (const row of rows) {
-      const { agent_id, orchestrator_id, role, tool_call_count, session_id } = row;
-
-      // Reset de-dupe state if agent was restarted (new session)
-      if (this.lastSeenSession.get(agent_id) !== session_id) {
-        this.warnedAgents.delete(agent_id);
-        this.lastSeenSession.set(agent_id, session_id);
+      if (this.lastSeenSession.get(row.agent_id) !== row.session_id) {
+        this.currentWarnings.delete(row.agent_id);
+        this.lastSeenSession.set(row.agent_id, row.session_id);
       }
+    }
 
-      if (!orchestrator_id) continue;
-      if (this.warnedAgents.has(agent_id)) continue;
-
-      const content = `[health] worker ${agent_id} (${role ?? 'unknown'}) has made ${tool_call_count} tool calls this session (threshold: ${threshold}); consider restart`;
-      this.deps.sendMessage('system', orchestrator_id, content, 5);
-      this.warnedAgents.add(agent_id);
+    // Rebuild currentWarnings from current query results
+    const crossingIds = new Set(rows.map((r) => r.agent_id));
+    for (const id of this.currentWarnings) {
+      if (!crossingIds.has(id)) this.currentWarnings.delete(id);
+    }
+    for (const id of crossingIds) {
+      this.currentWarnings.add(id);
     }
   }
 }
