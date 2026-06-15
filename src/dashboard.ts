@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync, watchFile, writeFileSync, unlinkSyn
 import { execSync, execFileSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import { buildSystemPrompt } from './system-prompt.js';
+import { Nudger } from './nudge.js';
 import {
   db,
   DB_PATH,
@@ -16,7 +17,6 @@ import {
   getTmuxPane,
   getPendingApprovals,
   resolveApproval,
-  getIdleAgentsWithUnreadSignature,
   getRecentEvents,
   getAllToolMetrics,
   listAllTasks,
@@ -128,8 +128,8 @@ let lastEvents     = '';
 let lastTasks      = '';
 let lastPlan       = '';
 
-// agent_id → newest unread message id we've already nudged about (de-dupe).
-const nudgedMsgId = new Map<string, number>();
+const nudger = new Nudger();
+nudger.start(500);
 
 setInterval(() => {
   const statuses   = getAllStatuses();
@@ -161,25 +161,6 @@ setInterval(() => {
     lastTasks      = taskStr;
     lastPlan       = planStr;
     broadcast({ statuses, messages, approvals, events, metrics, tasks, plan: currentPlan });
-  }
-
-  // Nudge is decoupled from the broadcast: it must NOT re-fire on every event/
-  // status delta. Fire once per agent each time its newest unread message id
-  // advances; reset the memory once the agent has no unread messages (so a
-  // future message nudges again).
-  for (const row of getIdleAgentsWithUnreadSignature()) {
-    const lastNudged = nudgedMsgId.get(row.agent_id) ?? 0;
-    if (row.max_msg_id > lastNudged) {
-      if (pingAgent(row.agent_id)) {
-        nudgedMsgId.set(row.agent_id, row.max_msg_id);
-      }
-    }
-  }
-  // Forget agents that now have zero unread (they dropped out of the query),
-  // so the next message they receive nudges cleanly.
-  const stillUnread = new Set(getIdleAgentsWithUnreadSignature().map((r) => r.agent_id));
-  for (const id of nudgedMsgId.keys()) {
-    if (!stillUnread.has(id)) nudgedMsgId.delete(id);
   }
 }, 500);
 
@@ -301,18 +282,9 @@ app.delete('/api/roles/:name', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-function pingAgent(agentId: string): boolean {
-  const pane = getTmuxPane(agentId);
-  if (!pane) return false;
-  try {
-    execFileSync('tmux', ['send-keys', '-t', pane, '[synapse] you have unread messages, call read_messages', 'Enter']);
-    return true;
-  } catch { return false; }
-}
-
 app.post('/api/ping/:agentId', (req: Request, res: Response) => {
   const agentId = String(req.params.agentId);
-  const ok = pingAgent(agentId);
+  const ok = nudger.pingAgent(agentId);
   if (!ok) { res.status(404).json({ error: 'No tmux pane for this agent' }); return; }
   res.json({ ok: true });
 });
@@ -399,7 +371,7 @@ app.post('/api/messages', (req: Request, res: Response) => {
 
   const p = priority ?? 5;
   sendMessage('human', to_id, content, p);
-  if (p === 0) pingAgent(to_id);
+  if (p === 0) nudger.pingAgent(to_id);
   res.json({ ok: true });
 });
 
