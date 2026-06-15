@@ -22,7 +22,6 @@ interface HealthMonitorOptions {
   deps?: Partial<HealthMonitorDeps>;
 }
 
-const toolList = COUNTED_TOOLS.map(() => '?').join(',');
 const QUERY_SQL = `
   SELECT a.agent_id,
          a.orchestrator_id,

@@ -208,6 +208,27 @@ console.log('\n[Test 8] start/stop lifecycle — no further DB queries after sto
   assert(pollCount === countAfterStop, `no new polls after stop() (${pollCount} === ${countAfterStop})`);
 }
 
+// ── Test 9: start() idempotency — second call does not add a second interval ──
+
+console.log('\n[Test 9] start() idempotency: calling start() twice does not double the fire rate');
+
+{
+  let pollCount = 0;
+  const hm = new HealthMonitor({
+    intervalMs: 10,
+    deps: makeDeps({
+      queryAgents: (_t) => { pollCount++; return []; },
+    }),
+  });
+
+  hm.start();
+  hm.start(); // second call — must be a no-op
+  await new Promise(r => setTimeout(r, 55));
+  hm.stop();
+  // If both intervals fired, pollCount would be ~10 not ~5
+  assert(pollCount < 8, `calling start() twice does not double the fire rate (got ${pollCount})`);
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n=== TEST SUMMARY ===`);
