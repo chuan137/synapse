@@ -6,6 +6,7 @@ import { execSync, execFileSync, spawnSync, spawn } from 'child_process';
 import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { Nudger } from './nudge.js';
+import { HealthMonitor } from './health-monitor.js';
 import {
   db,
   DB_PATH,
@@ -130,6 +131,9 @@ let lastPlan       = '';
 
 const nudger = new Nudger();
 nudger.start(500);
+
+const healthMonitor = new HealthMonitor();
+healthMonitor.start();
 
 setInterval(() => {
   const statuses   = getAllStatuses();
