@@ -61,8 +61,8 @@ if (existsSync(multiAgentFile)) {
     assert(s.content_200.length <= 200, `task_102: snippet.content_200 <= 200 chars`);
   }
 
-  // tool_metric_ids
-  assert(Array.isArray(c.tool_metric_ids), `task_102: tool_metric_ids is array`);
+  // tool_metric_ids removed from top level; IDs live in tool_metrics.ids
+  assert(Array.isArray(c.tool_metrics.ids), `task_102: tool_metrics.ids is array`);
 
   // tool_metrics.summary shape
   assert(c.tool_metrics !== undefined, `task_102: tool_metrics present`);

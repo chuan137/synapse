@@ -43,7 +43,6 @@ export interface TrajectoryCase {
   label: 'good' | 'bad';
   task: Record<string, unknown>;
   linked_msg_ids: number[];
-  tool_metric_ids: number[];
   message_snippets: MessageSnippet[];
   metrics: {
     tool_calls: number;
@@ -454,7 +453,6 @@ function buildCase(db: any, task: any): TrajectoryCase {
     label: 'good',
     task,
     linked_msg_ids: linkedIds,
-    tool_metric_ids: toolMetricsSummary.ids,
     message_snippets,
     metrics: {
       tool_calls: toolMetricsBase.length,

@@ -4,7 +4,6 @@
   "label": "good",
   "task": { "id": 102, "agent_id": "testproj:1", "title": "Test task", "commit_sha": "abc123", "source_msg_id": 10, "trigger_msg_id": 11, "result_msg_id": 12, "started_at": 1700000000000, "finished_at": 1700000060000 },
   "linked_msg_ids": [10, 11, 12],
-  "tool_metric_ids": [1, 2, 3],
   "message_snippets": [
     { "from": "testproj:0", "to": "testproj:1", "content_200": "Do the task." },
     { "from": "testproj:1", "to": "testproj:0", "content_200": "DONE." }
