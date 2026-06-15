@@ -77,7 +77,6 @@ const syntheticCase = {
   id: 99999,
   label: 'good',
   task: { id: 99999, agent_id: 'test:1', title: 'Synthetic idle-drift test', commit_sha: 'abc123' },
-  linked_msg_ids: [],
   messages: [],
   tool_metrics: [],
   metrics: { tool_calls: 5, duration_ms: 1_800_000, traceability_score: 0, has_commit: true },

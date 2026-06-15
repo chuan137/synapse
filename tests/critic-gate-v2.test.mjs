@@ -48,7 +48,6 @@ const failCase = {
   id: 77777,
   label: 'good',
   task: { id: 77777, agent_id: 'proj:1', title: 'Fix auth bug', commit_sha: 'abc123', source_msg_id: 1, trigger_msg_id: 2, result_msg_id: null },
-  linked_msg_ids: [1, 2],
   message_snippets: [
     { from: 'proj:0', to: 'proj:1', content_200: 'Fix the auth bug.' },
     { from: 'proj:1', to: 'proj:0', content_200: 'DONE — fixed.' },

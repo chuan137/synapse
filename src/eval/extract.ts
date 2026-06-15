@@ -42,7 +42,6 @@ export interface TrajectoryCase {
   id: number;
   label: 'good' | 'bad';
   task: Record<string, unknown>;
-  linked_msg_ids: number[];
   message_snippets: MessageSnippet[];
   metrics: {
     tool_calls: number;
@@ -353,8 +352,6 @@ export function regenerateAllCases(dbPath: string, casesDir: string): number {
 }
 
 function buildCase(db: any, task: any): TrajectoryCase {
-  const linkedIds = [task.source_msg_id, task.trigger_msg_id, task.result_msg_id].filter(Boolean) as number[];
-
   // Fetch messages for agent-role mapping and blocked-event detection only (no content in output)
   const messages: any[] = db.prepare(`
     SELECT id, from_id, to_id, content, type, created_at FROM messages
@@ -452,7 +449,6 @@ function buildCase(db: any, task: any): TrajectoryCase {
     id: task.id,
     label: 'good',
     task,
-    linked_msg_ids: linkedIds,
     message_snippets,
     metrics: {
       tool_calls: toolMetricsBase.length,

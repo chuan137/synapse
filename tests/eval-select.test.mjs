@@ -48,7 +48,6 @@ const syntheticCase = {
   id: 88888,
   label: 'good',
   task: { id: 88888, agent_id: 'test:1', title: 'Synthetic select test', commit_sha: 'def456' },
-  linked_msg_ids: [],
   messages: [],
   tool_metrics: [],
   metrics: { tool_calls: 3, duration_ms: 10000, traceability_score: 0, has_commit: true },

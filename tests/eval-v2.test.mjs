@@ -93,7 +93,6 @@ if (existsSync(multiAgentFile)) {
   assert(Array.isArray(firstAgent.blocked_events), `task_102: agent.blocked_events is array`);
 
   assert(Array.isArray(c.blocked_events), `task_102: top-level blocked_events is array`);
-  assert(Array.isArray(c.linked_msg_ids), `task_102: linked_msg_ids is array`);
 
   for (const key of Object.keys(c.agents)) {
     assert(key.includes(':'), `task_102: agent key '${key}' contains ':'`);
