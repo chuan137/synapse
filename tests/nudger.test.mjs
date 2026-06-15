@@ -113,6 +113,29 @@ console.log('\n[Test 4] start/stop lifecycle: stop() clears the interval');
   assert(pollCount === countAfterStop, `no new ticks after stop() (${pollCount} === ${countAfterStop})`);
 }
 
+// ── Test 5: start() idempotency — second call does not add a second interval ──
+
+console.log('\n[Test 5] start() idempotency: calling start() twice does not double the fire rate');
+
+{
+  let pollCount = 0;
+  const nudger = new Nudger({
+    getTmuxPane: (_id) => null,
+    execFileSync: (_cmd, _args) => Buffer.alloc(0),
+    getIdleAgentsWithUnreadSignature: () => {
+      pollCount++;
+      return [];
+    },
+  });
+
+  nudger.start(10);
+  nudger.start(10); // second call — should be a no-op
+  await new Promise(r => setTimeout(r, 55));
+  nudger.stop();
+  // If both intervals fired, pollCount would be ~10 not ~5
+  assert(pollCount < 8, `start() called twice does not double the fire rate (got ${pollCount})`);
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n=== TEST SUMMARY ===`);
