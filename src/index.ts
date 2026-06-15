@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
@@ -41,6 +41,14 @@ function synapseInit(projectRoot: string, silent = false, update = false): boole
   for (const f of ['SYNAPSE.md', 'SYNAPSE-orchestrator.md', 'SYNAPSE-worker.md',
                     'boot-orchestrator.md', 'boot-worker-restart.md']) {
     copyFileSync(join(SYNAPSE_INSTALL_ROOT, 'templates', f), join(synapseDir, f));
+  }
+
+  // Copy skills into .claude/skills/ (always refresh; .claude/ is project-scoped, gitignored in user projects)
+  const skillsSrc = join(SYNAPSE_INSTALL_ROOT, 'templates', 'skills');
+  const skillsDst = join(projectRoot, '.claude', 'skills');
+  if (existsSync(skillsSrc)) {
+    mkdirSync(skillsDst, { recursive: true });
+    cpSync(skillsSrc, skillsDst, { recursive: true });
   }
 
   // Unread messages are surfaced by the dashboard poller (see src/dashboard.ts),
