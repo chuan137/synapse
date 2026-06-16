@@ -190,6 +190,7 @@
       const isOrch = a.slot === 0;
       const currentTask = a.current_task ? esc(a.current_task) : '';
       const stateText = currentTask || a.state;
+      const sumChip = renderToolSumChip(a.agent_id);
       return `
         <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" data-state="${esc(a.state)}">
           <div class="agent-card-body">
@@ -218,6 +219,7 @@
               ${a.orch_over_threshold ? '<span class="agent-health-dot" title="Orchestrator tool-call threshold exceeded"></span>' : ''}
               ${a.orch_idle_blocked ? '<span class="agent-health-dot orch-idle-blocked-dot" title="Orchestrator idle while workers are blocked"></span>' : ''}
               <span class="agent-state-task">${esc(stateText)}</span>
+              ${sumChip}
             </div>
           </div>
           ${renderMetricChips(a.agent_id)}
@@ -385,6 +387,14 @@
       return `<span class="${cls}" data-tip="${tooltip}"><b>${esc(label)}</b> ${m.calls}${errs}</span>`;
     }).join('');
     return `<div class="agent-metrics">${chips}</div>`;
+  }
+
+  function renderToolSumChip(agentId) {
+    const rows = toolMetrics.filter(m => m.synapse_agent_id === agentId);
+    const totalCalls = rows.reduce((s, m) => s + m.calls, 0);
+    return totalCalls > 0
+      ? `<span class="agent-tool-sum" title="Total tool calls this session">${totalCalls} calls</span>`
+      : '';
   }
 
   // ── Render activity feed ───────────────────────────────────────────────────

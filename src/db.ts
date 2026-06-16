@@ -368,19 +368,25 @@ const stmts = {
     ORDER BY calls DESC
   `),
 
-  // Per-agent + per-tool rollup across the whole swarm (for the dashboard).
+  // Per-agent + per-tool rollup for the current session only (for the dashboard bar).
+  // JOIN agent_status filters to agents with a live session; a restarted agent gets
+  // a new session_id so old rows no longer match and the bar resets to 0.
   toolMetricsAll: db.prepare<[], {
     synapse_agent_id: string; tool: string; calls: number; errors: number; avg_ms: number | null; max_ms: number | null;
   }>(`
-    SELECT synapse_agent_id,
-           tool,
+    SELECT tm.synapse_agent_id,
+           tm.tool,
            COUNT(*)              AS calls,
            SUM(status = 'error') AS errors,
            AVG(duration_ms)      AS avg_ms,
            MAX(duration_ms)      AS max_ms
-    FROM tool_metrics
-    GROUP BY synapse_agent_id, tool
-    ORDER BY synapse_agent_id, calls DESC
+      FROM tool_metrics tm
+      JOIN agent_status a
+        ON a.agent_id = tm.synapse_agent_id
+       AND a.session_id = tm.session_id
+     WHERE a.ended_at IS NULL
+     GROUP BY tm.synapse_agent_id, tm.tool
+     ORDER BY tm.synapse_agent_id, calls DESC
   `),
 };
 

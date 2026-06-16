@@ -470,6 +470,12 @@
       white-space: nowrap;
     }
 
+    .agent-tool-sum {
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
     /* Metrics — hidden by default, visible only on selected card */
     .agent-metrics {
       display: none;
