@@ -193,7 +193,7 @@
       const isOrch = a.slot === 0;
       const currentTask = a.current_task ? esc(a.current_task) : '';
       const stateText = currentTask || a.state;
-      const sumChip = renderToolSumChip(a.agent_id);
+      const sumChip = renderToolSumBadge(a.agent_id);
       return `
         <div class="${cardClass}" data-agent-id="${esc(a.agent_id)}" data-state="${esc(a.state)}">
           <div class="agent-card-body">
@@ -390,14 +390,24 @@
     return `<div class="agent-metrics">${totalRow}${chips}</div>`;
   }
 
+  function toolSumClass(totalCalls) {
+    return totalCalls >= restartHint ? 'agent-tool-sum danger'
+         : totalCalls >= compactHint ? 'agent-tool-sum warn'
+         : 'agent-tool-sum';
+  }
+
+  function renderToolSumBadge(agentId) {
+    const rows = toolMetrics.filter(m => m.synapse_agent_id === agentId);
+    const totalCalls = rows.reduce((s, m) => s + m.calls, 0);
+    if (totalCalls === 0) return '';
+    return `<span class="${toolSumClass(totalCalls)}" title="Total tool calls this session">${totalCalls} calls</span>`;
+  }
+
   function renderToolSumChip(agentId) {
     const rows = toolMetrics.filter(m => m.synapse_agent_id === agentId);
     const totalCalls = rows.reduce((s, m) => s + m.calls, 0);
     if (totalCalls === 0) return '';
-    const cls = totalCalls >= restartHint ? 'agent-tool-sum danger'
-              : totalCalls >= compactHint ? 'agent-tool-sum warn'
-              : 'agent-tool-sum';
-    return `<span class="${cls}" title="Total tool calls this session"><b>Total</b> ${totalCalls}</span>`;
+    return `<span class="${toolSumClass(totalCalls)}" title="Total tool calls this session"><b>Total</b> ${totalCalls}</span>`;
   }
 
   // ── Render activity feed ───────────────────────────────────────────────────
