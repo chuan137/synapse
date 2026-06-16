@@ -137,6 +137,10 @@ Sequence:
 4. Orchestrator runs `synapse worktree merge <slug>` after DONE
 5. On conflict: escalate to the human or route a follow-up task
 
+### Settings Reference
+
+See [`settings-schema.md`](settings-schema.md) for a complete reference to `.synapse/settings.json` keys — thresholds for health-monitor alerts, UI preferences, and auto-restart behaviour. All health-monitor keys re-read every 15 seconds, so tuning takes effect live.
+
 ---
 
 {ROLE_INSTRUCTIONS}
