@@ -34,6 +34,8 @@ function makeDeps(overrides = {}) {
     queryOrchSessions:    ()           => [],
     queryOrchIdleBlocked: (_minMs, _now) => [],
     queryBlockedWorkers:  ()           => [],
+    getTmuxPane:          (_id)        => null,
+    execFileSync:         ()           => {},
     readSynapseSettings:  () => ({}),
     sendMessage:          () => 0,
     ...overrides,
@@ -188,7 +190,10 @@ console.log('\n[Test 8] start() idempotency: calling start() twice does not doub
   const hm = new HealthMonitor({
     intervalMs: 10,
     deps: makeDeps({
-      queryAgents: (_t) => { pollCount++; return []; },
+      // queryAgents is called twice per poll (threshold + compact-hint), so
+      // pollCount tracks poll ticks, not individual queryAgents calls here.
+      // Use a separate counter for the interval itself via queryOrchSessions.
+      queryOrchSessions: () => { pollCount++; return []; },
     }),
   });
 
@@ -334,7 +339,7 @@ console.log('\n[Test 15] Worker query (slot > 0) separate from orch query (slot 
     }),
   });
   hm['_poll']();
-  assert(workerCalls.length === 1, `worker query called once`);
+  assert(workerCalls.length === 2, `worker query called twice (threshold + compact-hint)`);
   assert(orchCalls.length   === 1, `orch query called once`);
   assert(workerCalls[0] === 100, `worker uses worker threshold (100)`);
   assert(orchCalls[0]   === 200, `orch uses orch threshold (200)`);
@@ -452,6 +457,87 @@ console.log('\n[Test 19] Finding 3 regression: idle-blocked fires again after or
   // Tick 3: condition still true but new session → new message should fire
   hm['_poll']();
   assert(sent.length === 2, `T19: second message sent after orch session change (got ${sent.length})`);
+}
+
+// ── Test 20: auto-compact fires at half-threshold ─────────────────────────────
+
+console.log('\n[Test 20] Auto-compact: fires tmux send-keys at half-threshold');
+
+{
+  const panes = { 'w:1': 'pane-1' };
+  const tmuxCalls = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a' }]
+        : [],
+      getTmuxPane: (id) => panes[id] ?? null,
+      execFileSync: (cmd, args) => { tmuxCalls.push({ cmd, args }); },
+    }),
+  });
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T20a: execFileSync called once`);
+  assert(tmuxCalls[0]?.cmd === 'tmux', `T20b: command is tmux`);
+  assert(
+    JSON.stringify(tmuxCalls[0]?.args) === JSON.stringify(['send-keys', '-t', 'pane-1', '/compact', 'Enter']),
+    `T20c: args are send-keys -t pane /compact Enter`,
+  );
+}
+
+// ── Test 21: auto-compact fires only once per session ─────────────────────────
+
+console.log('\n[Test 21] Auto-compact: does not fire again for same session');
+
+{
+  const tmuxCalls = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a' }]
+        : [],
+      getTmuxPane: () => 'pane-1',
+      execFileSync: () => { tmuxCalls.push(1); },
+    }),
+  });
+  hm['_poll']();
+  hm['_poll']();
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T21: compact fired only once for same session (got ${tmuxCalls.length})`);
+}
+
+// ── Test 22: auto-compact re-arms after session rotation ─────────────────────
+
+console.log('\n[Test 22] Auto-compact: re-arms after session rotation');
+
+{
+  let sessionId = 'sess-a';
+  const tmuxCalls = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: sessionId }]
+        : [],
+      getTmuxPane: () => 'pane-1',
+      execFileSync: () => { tmuxCalls.push(sessionId); },
+    }),
+  });
+  // Tick 1: fires for sess-a
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T22a: compact fired for sess-a`);
+
+  // Tick 2: same session — no second fire
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T22b: no second fire same session`);
+
+  // Session rotation
+  sessionId = 'sess-b';
+
+  // Tick 3: new session → fires again
+  hm['_poll']();
+  assert(tmuxCalls.length === 2, `T22c: compact fired again after session rotation (got ${tmuxCalls.length})`);
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

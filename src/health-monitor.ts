@@ -1,4 +1,5 @@
-import { db, readSynapseSettings, sendMessage } from './db.js';
+import { execFileSync } from 'child_process';
+import { db, getTmuxPane, readSynapseSettings, sendMessage } from './db.js';
 
 const COUNTED_TOOLS = [
   'Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash',
@@ -23,6 +24,8 @@ interface HealthMonitorDeps {
   queryOrchSessions:    () => AgentSessionRow[];
   queryOrchIdleBlocked: (minBlockedMs: number, now: number) => { agent_id: string }[];
   queryBlockedWorkers:  () => { agent_id: string }[];
+  getTmuxPane:          (agentId: string) => string | null;
+  execFileSync:         typeof execFileSync;
   readSynapseSettings:  typeof readSynapseSettings;
   sendMessage:          typeof sendMessage;
 }
@@ -31,6 +34,8 @@ interface HealthMonitorOptions {
   thresholdToolCalls?:     number;   // workers, default 200
   orchThresholdToolCalls?: number;   // orch, default 250
   idleBlockedThresholdMs?: number;   // default 60_000
+  compactHint?:            number;   // half-threshold for auto-compact; default Math.floor(defaultThreshold / 2)
+  autoCompactWorkers?:     boolean;  // default true
   intervalMs?:             number;   // default 15_000
   deps?: Partial<HealthMonitorDeps>;
 }
@@ -121,6 +126,8 @@ export class HealthMonitor {
   private readonly defaultThreshold:       number;
   private readonly orchDefaultThreshold:   number;
   private readonly idleBlockedThresholdMs: number;
+  private readonly defaultCompactHint:     number;
+  private readonly autoCompactWorkers:     boolean;
   private readonly intervalMs:             number;
   private readonly deps:                   HealthMonitorDeps;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -131,6 +138,7 @@ export class HealthMonitor {
   // One-shot warning keys — cleared on monitor start
   private warnedOrch        = new Set<string>();
   private warnedIdleBlocked = new Set<string>();
+  private compactedAgents   = new Set<string>(); // key: `${agent_id}:${session_id}`
 
   currentWarnings = new Set<string>();  // worker tool-call threshold
   orchWarnings    = new Set<string>();  // orch tool-call threshold
@@ -140,6 +148,8 @@ export class HealthMonitor {
     this.defaultThreshold       = opts.thresholdToolCalls     ?? 200;
     this.orchDefaultThreshold   = opts.orchThresholdToolCalls ?? 250;
     this.idleBlockedThresholdMs = opts.idleBlockedThresholdMs ?? 60_000;
+    this.defaultCompactHint     = opts.compactHint ?? Math.floor(this.defaultThreshold / 2);
+    this.autoCompactWorkers     = opts.autoCompactWorkers ?? true;
     this.intervalMs             = opts.intervalMs ?? 15_000;
     this.deps = {
       queryAgents:          defaultQueryAgents,
@@ -147,6 +157,8 @@ export class HealthMonitor {
       queryOrchSessions:    defaultQueryOrchSessions,
       queryOrchIdleBlocked: defaultQueryOrchIdleBlocked,
       queryBlockedWorkers:  defaultQueryBlockedWorkers,
+      getTmuxPane,
+      execFileSync,
       readSynapseSettings,
       sendMessage,
       ...opts.deps,
@@ -157,6 +169,7 @@ export class HealthMonitor {
     if (this.timer) return;
     this.warnedOrch.clear();
     this.warnedIdleBlocked.clear();
+    this.compactedAgents.clear();
     this.timer = setInterval(() => this._poll(), this.intervalMs);
   }
 
@@ -189,6 +202,28 @@ export class HealthMonitor {
     }
     for (const id of crossingIds) {
       this.currentWarnings.add(id);
+    }
+
+    // ── Auto-compact workers at half-threshold ────────────────────────────────
+    // `compactHint` is re-read from settings each poll (mirrors toolCallRestartHint pattern).
+    // Orchestrator (slot 0) is excluded — QUERY_SQL already filters slot > 0.
+    if (this.autoCompactWorkers) {
+      const compactHint = typeof settings.compactHint === 'number'
+        ? settings.compactHint
+        : this.defaultCompactHint;
+
+      const compactRows = this.deps.queryAgents(compactHint);
+      for (const row of compactRows) {
+        const sessionKey = `${row.agent_id}:${row.session_id}`;
+        if (this.compactedAgents.has(sessionKey)) continue;
+        const pane = this.deps.getTmuxPane(row.agent_id);
+        if (!pane) {
+          process.stderr.write(`[health-monitor] auto-compact: no tmux pane for ${row.agent_id}, skipping\n`);
+          continue;
+        }
+        this.deps.execFileSync('tmux', ['send-keys', '-t', pane, '/compact', 'Enter']);
+        this.compactedAgents.add(sessionKey);
+      }
     }
 
     // ── Orchestrator session tracking (unconditional — fixes stale key bug) ───
