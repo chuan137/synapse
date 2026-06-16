@@ -73,8 +73,6 @@
   });
 
   // ── SSE ──────────────────────────────────────────────────────────────────
-  const dot   = document.getElementById('conn-dot');
-  const label = document.getElementById('conn-label');
 
   function connect() {
     const es = new EventSource('/events');
@@ -82,8 +80,6 @@
 
     es.onopen = () => {
       if (connStatus) { connStatus.textContent = '● live'; connStatus.dataset.state = 'connected'; }
-      dot.classList.add('connected');
-      label.textContent    = 'live';
     };
 
     es.onmessage = (e) => {
@@ -107,8 +103,6 @@
 
     es.onerror = () => {
       if (connStatus) { connStatus.textContent = '● disconnected'; connStatus.dataset.state = 'disconnected'; }
-      dot.classList.remove('connected');
-      label.textContent    = 'disconnected — retrying…';
       es.close();
       setTimeout(connect, 3000);
     };
