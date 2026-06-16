@@ -523,8 +523,9 @@
 
   // ── Insights tab ─────────────────────────────────────────────────────────
 
-  function insightsSectionHtml(id, title, bodyHtml) {
-    const collapsed = localStorage.getItem(`synapse_insights_${id}_collapsed`) === 'true';
+  function insightsSectionHtml(id, title, bodyHtml, defaultCollapsed = false) {
+    const stored = localStorage.getItem(`synapse_insights_${id}_collapsed`);
+    const collapsed = stored !== null ? stored === 'true' : defaultCollapsed;
     return `<div class="insights-section${collapsed ? ' collapsed' : ''}" data-section="${id}">
       <div class="insights-section-header">
         <span class="insights-chevron">▼</span>
@@ -538,8 +539,8 @@
     document.getElementById('modal-title').textContent = titleText;
     document.getElementById('modal-agent-slot').textContent = '';
     const modalEl = document.querySelector('#agent-config-backdrop .modal');
-    // Replace field/actions with our content, restore on close
-    const original = modalEl.innerHTML;
+    // Save config modal content so all close paths can restore it
+    _insightsModalOriginal = modalEl.innerHTML;
     modalEl.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <h2 style="font-family:inherit;font-size:14px;margin:0">${esc(titleText)}</h2>
@@ -548,16 +549,13 @@
       ${bodyHtml}
     `;
     document.getElementById('agent-config-backdrop').classList.remove('hidden');
-    document.getElementById('insights-modal-close').addEventListener('click', () => {
-      document.getElementById('agent-config-backdrop').classList.add('hidden');
-      modalEl.innerHTML = original;
-    });
+    document.getElementById('insights-modal-close').addEventListener('click', closeConfigDialog);
   }
 
   async function renderInsights() {
     const el = document.getElementById('insights-content');
     el.innerHTML = insightsSectionHtml('eval', 'Eval', '<div style="color:var(--muted);font-size:11px">Loading…</div>') +
-                   insightsSectionHtml('retro', 'Retro', '<div style="color:var(--muted);font-size:11px">Loading…</div>');
+                   insightsSectionHtml('retro', 'Retro', '<div style="color:var(--muted);font-size:11px">Loading…</div>', true);
 
     el.querySelectorAll('.insights-section-header').forEach(hdr => {
       hdr.addEventListener('click', () => {
@@ -1144,6 +1142,7 @@
   const modalSave      = document.getElementById('modal-save');
 
   let configAgentId = null;
+  let _insightsModalOriginal = null;
 
   function openAgentConfigDialog(agentId) {
     const agent = agentStatuses.find(a => a.agent_id === agentId);
@@ -1157,6 +1156,10 @@
   }
 
   function closeConfigDialog() {
+    if (_insightsModalOriginal !== null) {
+      document.querySelector('#agent-config-backdrop .modal').innerHTML = _insightsModalOriginal;
+      _insightsModalOriginal = null;
+    }
     configBackdrop.classList.add('hidden');
     configAgentId = null;
   }
