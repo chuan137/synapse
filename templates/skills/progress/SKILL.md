@@ -1,6 +1,6 @@
 ---
 name: progress
-description: Maintain .synapse/progress.md (Open / Backlog / Stopped) and weekly done/<MONDAY>.md archives. Subcommands: archive, rotate, move, new-topic.
+description: Maintain .synapse/progress.md (Open / Deferred) and weekly done/<MONDAY>.md archives. Subcommands: update, archive, rotate, move, new-topic.
 ---
 
 # /progress
@@ -11,7 +11,7 @@ Manage `.synapse/progress.md` and weekly done archives at `.synapse/done/<MONDAY
 
 | File | Purpose |
 |---|---|
-| `.synapse/progress.md` | Live work tracker. Three blocks: **Open**, **Backlog**, **Stopped/Rejected**. Items grouped by `### Topic` headers. |
+| `.synapse/progress.md` | Live work tracker. Two blocks: **Open**, **Deferred**. Items grouped by `### Topic` headers, each item a GFM checkbox bullet (`- [x]` done, `- [ ]` to do). |
 | `.synapse/done/<MONDAY>.md` | Weekly archive. One file per ISO week, named by that Monday (`YYYY-MM-DD`). |
 
 **Monday date computation:**
@@ -23,6 +23,47 @@ python3 -c "import datetime; d=datetime.date.today(); print((d - datetime.timede
 ```sh
 git log -1 --format="%ci" <sha>   # → "2026-06-15 14:23:11 +0800"
 ```
+
+---
+
+## Subcommand: `/progress update [<topic>] [<bullet>]`
+
+Primary entry point for updating progress. Supports three operations:
+
+### Mark a bullet checked
+
+```
+/progress update "<topic>" --check "<bullet text or substring>"
+```
+
+1. Find the `### <topic>` block (case-insensitive substring match; error if ambiguous).
+2. Find the matching `- [ ] <bullet>` line (substring match; error if ambiguous or already checked).
+3. Flip it to `- [x] <bullet>`.
+4. **Auto-archive check**: if all bullets in the topic are now `[x]`, move the entire `### Topic` block (heading + all bullets) out of `progress.md` into `.synapse/done/<MONDAY>.md` (current week's Monday). Append under a `## <topic>` heading in that done file (create heading if absent, create file with `# Done — Week of <MONDAY>` header if absent). Keep bullets as-is (`[x]` format). Print: `archived "<topic>" → done/<MONDAY>.md`.
+
+### Add a bullet to an existing topic
+
+```
+/progress update "<topic>" --add "<new bullet text>"
+```
+
+1. Find the `### <topic>` block (same matching rules).
+2. Append `- [ ] <new bullet text>` at the end of that topic's bullets.
+
+### Add a new topic
+
+```
+/progress update --new-topic "<name>" [--block {open|deferred}] [--bullet "<first bullet>"]`
+```
+
+Shorthand for `/progress new-topic` — see that subcommand for full rules. Default block: `open`.
+
+### Interactive mode
+
+If invoked as `/progress update` with no args, prompt the operator:
+1. Ask which topic (list existing Open topics).
+2. Ask the operation: check a bullet / add a bullet / add topic.
+3. Proceed with the chosen operation.
 
 ---
 
@@ -50,7 +91,7 @@ Archive only those specific commits.
    - Else use the matching `### Topic` from `progress.md`'s Open block.
    - Else ask the operator which topic to use (don't create silently).
 5. Append bullet: `` - `<short_sha>` <commit subject>. <one-paragraph what+why+impact (infer from commit body, message thread, or diff)> ``
-6. If this commit completes a `### Topic` block in `progress.md` (all bullets resolved), remove that topic from Open — or move to Stopped if it was a rejection.
+6. If this commit completes a `### Topic` block in `progress.md` (all bullets resolved), remove that topic from Open.
 
 ### Idempotence
 
@@ -85,33 +126,33 @@ Idempotent — safe to run multiple times.
 
 ---
 
-## Subcommand: `/progress move <topic-name> --to {open|backlog|stopped} [--reason "<one line>"]`
+## Subcommand: `/progress move <topic-name> --to {open|deferred} [--reason "<one line>"]`
 
-Move an entire `### Topic` block between the three blocks in `progress.md`.
+Move an entire `### Topic` block between the two blocks in `progress.md`.
 
 1. Find the `### <topic-name>` heading (case-insensitive substring match if exact not found; error if ambiguous).
 2. Extract the full block: the heading + all bullets until the next `###` or `##`.
 3. Remove it from its current block.
 4. Insert it under the target `## Block` heading.
-5. If `--to stopped`, prepend a `- Reason: <reason>` bullet (prompt operator for reason if not supplied via `--reason`).
+5. If `--reason` supplied, prepend a `- Reason: <reason>` line after the heading.
 
 ### Example
 
 ```
-/progress move "Stub stdio MCP" --to stopped --reason "MCP name collision; isolated DB approach used instead"
+/progress move "Stub stdio MCP" --to deferred --reason "MCP name collision; revisit after protocol stabilises"
 ```
 
 ---
 
-## Subcommand: `/progress new-topic <name> [--block {open|backlog|stopped}] [--note "<first bullet>"]`
+## Subcommand: `/progress new-topic <name> [--block {open|deferred}] [--note "<first bullet>"]`
 
 Add a new `### <name>` placeholder to `progress.md`.
 
 1. Default block: `open`.
 2. Reject if a `### <name>` heading already exists (case-insensitive) in the target block — report "topic already exists" and stop.
 3. Insert `### <name>` under the specified `## Block` heading (append at end of that block's topics).
-4. If `--note` supplied, add it as the first bullet.
-5. Else add a placeholder: `- _(no items yet)_`
+4. If `--note` supplied, add it as the first bullet: `- [ ] <note>`.
+5. Else add a placeholder: `- [ ] _(no items yet)_`
 
 ### Example
 
@@ -131,21 +172,18 @@ Add a new `### <name>` placeholder to `progress.md`.
 ## Open
 
 ### Topic A
-- action item or decision needed
-- another bullet
+- [x] finished subtask
+- [ ] subtask to do
+- [ ] another subtask to do
 
 ### Topic B
-- …
+- [ ] …
 
-## Backlog
+## Deferred
 
 ### Topic C
-- work identified, not scheduled
-
-## Stopped / Rejected
-
-### Approach D
-- Reason: <why abandoned>
+- [ ] work identified, not scheduled
+- Reason: <one line, optional>
 ```
 
 ### done/<MONDAY>.md
@@ -163,6 +201,8 @@ Add a new `### <name>` placeholder to `progress.md`.
 - `ghi9012` …
 ```
 
+When a topic is auto-archived via `/progress update --check`, its bullets land as `[x]` checkbox lines (not the prose-bullet style used by `/progress archive` — the two paths produce different bullet shapes intentionally).
+
 ---
 
 ## Edge cases
@@ -173,3 +213,4 @@ Add a new `### <name>` placeholder to `progress.md`.
 - **Commit spans multiple topics**: pick the primary topic; note the others in the paragraph.
 - **Multi-week batch archive**: creates multiple `done/` files as needed.
 - **Commit message too sparse to write a paragraph**: use the commit subject + whatever can be inferred from context; keep the paragraph short rather than padding.
+- **Auto-archive with no bullets**: a topic with zero bullets is never auto-archived — at least one `[x]` bullet must exist.
