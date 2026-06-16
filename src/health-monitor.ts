@@ -34,7 +34,6 @@ interface HealthMonitorOptions {
   thresholdToolCalls?:     number;   // workers, default 200
   orchThresholdToolCalls?: number;   // orch, default 250
   idleBlockedThresholdMs?: number;   // default 60_000
-  compactHint?:            number;   // half-threshold for auto-compact; default Math.floor(defaultThreshold / 2)
   autoCompactWorkers?:     boolean;  // default true
   intervalMs?:             number;   // default 15_000
   deps?: Partial<HealthMonitorDeps>;
@@ -126,7 +125,6 @@ export class HealthMonitor {
   private readonly defaultThreshold:       number;
   private readonly orchDefaultThreshold:   number;
   private readonly idleBlockedThresholdMs: number;
-  private readonly defaultCompactHint:     number;
   private readonly autoCompactWorkers:     boolean;
   private readonly intervalMs:             number;
   private readonly deps:                   HealthMonitorDeps;
@@ -148,7 +146,6 @@ export class HealthMonitor {
     this.defaultThreshold       = opts.thresholdToolCalls     ?? 200;
     this.orchDefaultThreshold   = opts.orchThresholdToolCalls ?? 250;
     this.idleBlockedThresholdMs = opts.idleBlockedThresholdMs ?? 60_000;
-    this.defaultCompactHint     = opts.compactHint ?? Math.floor(this.defaultThreshold / 2);
     this.autoCompactWorkers     = opts.autoCompactWorkers ?? true;
     this.intervalMs             = opts.intervalMs ?? 15_000;
     this.deps = {
@@ -206,11 +203,13 @@ export class HealthMonitor {
 
     // ── Auto-compact workers at half-threshold ────────────────────────────────
     // `compactHint` is re-read from settings each poll (mirrors toolCallRestartHint pattern).
+    // When not explicitly set, it auto-tracks the current worker threshold so the
+    // compact trigger stays proportional even if the operator changes toolCallRestartHint.
     // Orchestrator (slot 0) is excluded — QUERY_SQL already filters slot > 0.
     if (this.autoCompactWorkers) {
       const compactHint = typeof settings.compactHint === 'number'
         ? settings.compactHint
-        : this.defaultCompactHint;
+        : Math.floor(threshold / 2);
 
       const compactRows = this.deps.queryAgents(compactHint);
       for (const row of compactRows) {

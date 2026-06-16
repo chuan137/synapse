@@ -594,6 +594,46 @@ console.log('\n[Test 24] Null-pane: no execFileSync, compactedAgents marked, no 
   assert(stderrLines2.length === 0, `T24d: no second stderr log after key recorded`);
 }
 
+// ── Test 25: compactHint tracks live toolCallRestartHint when not explicitly set ─
+
+console.log('\n[Test 25] compactHint auto-tracks live toolCallRestartHint');
+
+{
+  const tmuxCalls = [];
+  // toolCallRestartHint = 400 → compactHint should be 200 (not the default 100)
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      readSynapseSettings: () => ({ toolCallRestartHint: 400 }),
+      // Worker at count=200 — below old default (100 < 200 is false but above new half=200 exactly)
+      queryAgents: (t) => t <= 200
+        ? [{ agent_id: 'w:9', role: 'developer', tool_call_count: 200, session_id: 'sess-x' }]
+        : [],
+      getTmuxPane: () => 'pane-9',
+      execFileSync: () => { tmuxCalls.push(1); },
+    }),
+  });
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T25a: compact fires at count=200 when toolCallRestartHint=400 (half=200)`);
+
+  // With default threshold (200) and no settings override, half = 100.
+  // Worker at count=100 — should fire for default case.
+  const tmuxCalls2 = [];
+  const hm2 = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      readSynapseSettings: () => ({}),
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:10', role: 'developer', tool_call_count: 100, session_id: 'sess-y' }]
+        : [],
+      getTmuxPane: () => 'pane-10',
+      execFileSync: () => { tmuxCalls2.push(1); },
+    }),
+  });
+  hm2['_poll']();
+  assert(tmuxCalls2.length === 1, `T25b: compact fires at count=100 when toolCallRestartHint unset (default half=100)`);
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n=== TEST SUMMARY ===`);
