@@ -174,6 +174,17 @@ export function openDb(dbPath: string): Database.Database {
      WHERE name = 'Joker' OR name LIKE 'Developer :%'
   `).run();
 
+  // Migrate legacy literal model ids ('claude-opus-4-8' etc.) to NULL so the
+  // run-time resolver picks the env-configured family model. Family aliases
+  // ('opus' / 'sonnet' / 'haiku') and NULL are kept; anything else is dropped.
+  // Idempotent: re-running matches no rows once cleaned.
+  database.prepare(`
+    UPDATE agent_status
+       SET model = NULL
+     WHERE model IS NOT NULL
+       AND model NOT IN ('opus', 'sonnet', 'haiku')
+  `).run();
+
   return database;
 }
 

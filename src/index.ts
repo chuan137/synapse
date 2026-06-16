@@ -8,7 +8,7 @@ import { exec, execFileSync, execSync, spawn } from 'child_process';
 import { openDb, attachCommitToTaskBySlot, resetMetricCount } from './db.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { parseRoleFile } from './roles.js';
-import { resolveModelForRole, resolveAllModels } from './models.js';
+import { resolveModelForRole, resolveAllModels, resolveFamily, isFamily } from './models.js';
 
 /** List all available named roles from templates/roles/, returning their metadata. */
 function listAvailableRoles(templatesDir: string): { role: string; description: string; capabilities: string[] }[] {
@@ -236,8 +236,19 @@ program
     }
 
     const claudeArgs = ['--append-system-prompt', systemPrompt];
-    // Model resolution: persisted DB value (operator-set) > role default from models.ts
-    const resolvedModel = persistedModel ?? resolveModelForRole(role, cwd);
+    // Model resolution:
+    //   1. Persisted DB value: if it's a family name ('opus'|'sonnet'|'haiku'),
+    //      resolve through env / settings (so a retired literal id can't get pinned).
+    //   2. If it's a literal model id (legacy), pass through verbatim.
+    //   3. Otherwise fall back to the role default from models.ts.
+    let resolvedModel: string;
+    if (isFamily(persistedModel)) {
+      resolvedModel = resolveFamily(persistedModel, cwd).model;
+    } else if (persistedModel) {
+      resolvedModel = persistedModel;
+    } else {
+      resolvedModel = resolveModelForRole(role, cwd);
+    }
     claudeArgs.push('--model', resolvedModel);
     if (persistedEffort) claudeArgs.push('--effort', persistedEffort);
     if (isWorker) {

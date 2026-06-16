@@ -7,6 +7,7 @@ import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles
 import { buildSystemPrompt } from './system-prompt.js';
 import { Nudger } from './nudge.js';
 import { HealthMonitor } from './health-monitor.js';
+import { resolveFamily, isFamily } from './models.js';
 import {
   db,
   DB_PATH,
@@ -833,16 +834,21 @@ app.patch('/api/agents/:agentId', (req: Request, res: Response) => {
 
   // If a new model was set and the agent has a live pane, apply it immediately
   // by sending the /model slash command and confirming the switch.
+  // Family names ('opus'/'sonnet'/'haiku') are resolved to a concrete id first,
+  // since older Claude Code versions don't accept family aliases at /model.
   if (fields.model) {
     const pane = getTmuxPane(agentId);
     if (pane) {
+      const sendModel = isFamily(fields.model)
+        ? resolveFamily(fields.model, GIT_CWD).model
+        : fields.model;
       try {
-        execFileSync('tmux', ['send-keys', '-t', pane, `/model ${fields.model}`, 'Enter']);
+        execFileSync('tmux', ['send-keys', '-t', pane, `/model ${sendModel}`, 'Enter']);
         // Brief pause for the confirmation prompt to appear, then confirm option 1.
         setTimeout(() => {
           try { execFileSync('tmux', ['send-keys', '-t', pane, '1', 'Enter']); } catch { /* best-effort */ }
         }, 800);
-        process.stderr.write(`[Synapse] sent /model ${fields.model} to pane ${pane}\n`);
+        process.stderr.write(`[Synapse] sent /model ${sendModel} to pane ${pane}\n`);
       } catch { /* best-effort — agent may not be at a prompt */ }
     }
   }

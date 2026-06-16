@@ -4,6 +4,15 @@ import { homedir } from 'os';
 
 export type Family = 'haiku' | 'sonnet' | 'opus';
 
+export const FAMILIES: readonly Family[] = ['haiku', 'sonnet', 'opus'];
+
+const FAMILY_SET: ReadonlySet<string> = new Set(FAMILIES);
+
+/** Type guard: narrows a string to Family when it matches a known family name. */
+export function isFamily(s: string | null | undefined): s is Family {
+  return typeof s === 'string' && FAMILY_SET.has(s);
+}
+
 const ROLE_FAMILY: Record<string, Family> = {
   orchestrator:    'opus',
   'test-runner':   'haiku',
