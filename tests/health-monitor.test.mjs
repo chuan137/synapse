@@ -540,6 +540,60 @@ console.log('\n[Test 22] Auto-compact: re-arms after session rotation');
   assert(tmuxCalls.length === 2, `T22c: compact fired again after session rotation (got ${tmuxCalls.length})`);
 }
 
+// ── Test 23: autoCompactWorkers: false → queryAgents called once ──────────────
+
+console.log('\n[Test 23] autoCompactWorkers: false → queryAgents called once per poll');
+
+{
+  const agentCalls = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    autoCompactWorkers: false,
+    deps: makeDeps({
+      queryAgents: (t) => { agentCalls.push(t); return []; },
+    }),
+  });
+  hm['_poll']();
+  assert(agentCalls.length === 1, `T23: queryAgents called once when autoCompactWorkers=false (got ${agentCalls.length})`);
+}
+
+// ── Test 24: null-pane → no execFileSync, session key recorded, stderr logged ─
+
+console.log('\n[Test 24] Null-pane: no execFileSync, compactedAgents marked, no retry');
+
+{
+  const tmuxCalls = [];
+  const stderrLines = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:2', role: 'developer', tool_call_count: 105, session_id: 'sess-a' }]
+        : [],
+      getTmuxPane: () => null,
+      execFileSync: () => { tmuxCalls.push(1); },
+    }),
+  });
+
+  // Patch stderr to capture writes
+  const origWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (s) => { stderrLines.push(s); return true; };
+
+  hm['_poll']();
+  process.stderr.write = origWrite;
+
+  assert(tmuxCalls.length === 0, `T24a: execFileSync not called for null-pane agent`);
+  assert(hm['compactedAgents'].has('w:2:sess-a'), `T24b: session key added to compactedAgents despite null pane`);
+  assert(stderrLines.some(l => l.includes('w:2')), `T24c: stderr logged for null-pane agent`);
+
+  // Second poll — must not retry (key already in compactedAgents)
+  const stderrLines2 = [];
+  process.stderr.write = (s) => { stderrLines2.push(s); return true; };
+  hm['_poll']();
+  process.stderr.write = origWrite;
+  assert(stderrLines2.length === 0, `T24d: no second stderr log after key recorded`);
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n=== TEST SUMMARY ===`);

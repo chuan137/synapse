@@ -216,13 +216,13 @@ export class HealthMonitor {
       for (const row of compactRows) {
         const sessionKey = `${row.agent_id}:${row.session_id}`;
         if (this.compactedAgents.has(sessionKey)) continue;
+        this.compactedAgents.add(sessionKey);
         const pane = this.deps.getTmuxPane(row.agent_id);
         if (!pane) {
           process.stderr.write(`[health-monitor] auto-compact: no tmux pane for ${row.agent_id}, skipping\n`);
           continue;
         }
         this.deps.execFileSync('tmux', ['send-keys', '-t', pane, '/compact', 'Enter']);
-        this.compactedAgents.add(sessionKey);
       }
     }
 
