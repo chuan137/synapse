@@ -481,6 +481,65 @@ app.get('/api/eval/live', (_req: Request, res: Response) => {
   res.json(getAllEvalResults());
 });
 
+app.get('/api/eval/case', (req: Request, res: Response) => {
+  const taskId = parseInt(String(req.query.task_id), 10);
+  if (isNaN(taskId)) { res.status(400).json({ error: 'task_id required' }); return; }
+  const evalDir = join(GIT_CWD, '.synapse', 'evaluations');
+  const goodPath = join(evalDir, `task_${taskId}_good.json`);
+  const badPath  = join(evalDir, `task_${taskId}_bad.json`);
+  if (existsSync(goodPath)) { res.json(JSON.parse(readFileSync(goodPath, 'utf8'))); return; }
+  if (existsSync(badPath))  { res.json(JSON.parse(readFileSync(badPath,  'utf8'))); return; }
+  res.status(404).json({ error: 'No case file available' });
+});
+
+// ── Retros endpoints ───────────────────────────────────────────────────────
+
+const RETROS_DIR = join(GIT_CWD, '.synapse', 'retros');
+
+app.get('/api/retros', (_req: Request, res: Response) => {
+  if (!existsSync(RETROS_DIR)) { res.json([]); return; }
+  const files = readdirSync(RETROS_DIR).filter(f => f.endsWith('.md'));
+  const retros = files.map(filename => {
+    const stem = filename.replace(/\.md$/, '');
+    // filename format: YYYYMMDD-HHmmss-<agent_id>.md  e.g. 20260609-223411-cec50b17-0.md
+    const m = stem.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(.+)$/);
+    let timestamp = 0;
+    let agent_id = stem;
+    if (m) {
+      timestamp = Date.UTC(
+        parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]),
+        parseInt(m[4]), parseInt(m[5]), parseInt(m[6]),
+      );
+      // convert last dash in agent segment to colon: cec50b17-0 → cec50b17:0
+      agent_id = m[7].replace(/-(\d+)$/, ':$1');
+    }
+    const body = readFileSync(join(RETROS_DIR, filename), 'utf8');
+    const task_count = (body.match(/- \d+:/g) ?? []).length;
+    const preview = body.split('\n').find(l => l.trim() && !l.startsWith('#'))?.trim().slice(0, 200) ?? '';
+    return { filename, timestamp, agent_id, task_count, preview };
+  }).sort((a, b) => b.timestamp - a.timestamp);
+  res.json(retros);
+});
+
+app.get('/api/retros/:filename', (req: Request, res: Response) => {
+  const filename = String(req.params['filename'] ?? '');
+  if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
+    res.status(400).json({ error: 'Invalid filename' }); return;
+  }
+  const filePath = join(RETROS_DIR, filename);
+  if (!existsSync(filePath)) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json({ content: readFileSync(filePath, 'utf8') });
+});
+
+app.post('/api/retros/run', (_req: Request, res: Response) => {
+  const orch = db.prepare<[], { agent_id: string }>(
+    `SELECT agent_id FROM agent_status WHERE slot = 0 AND ended_at IS NULL LIMIT 1`
+  ).get();
+  if (!orch) { res.status(503).json({ error: 'No active orchestrator' }); return; }
+  sendMessage('system', orch.agent_id, '[system] run /retro now', 5);
+  res.json({ queued: true });
+});
+
 // ── Proposals endpoints ────────────────────────────────────────────────────
 
 const PROPOSALS_DIR = join(GIT_CWD, '.synapse', 'proposals');

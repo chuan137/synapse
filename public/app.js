@@ -498,33 +498,83 @@
   tabProgress.addEventListener('click', () => switchMiddleTab('progress'));
 
   // ── Right panel tab switching ────────────────────────────────────────────
-  const tabEvents  = document.getElementById('tab-events');
-  const tabTasks   = document.getElementById('tab-tasks');
-  const tabEval    = document.getElementById('tab-eval');
-  const taskList   = document.getElementById('task-list');
-  const evalPanel  = document.getElementById('eval-panel');
+  const tabEvents    = document.getElementById('tab-events');
+  const tabTasks     = document.getElementById('tab-tasks');
+  const tabInsights  = document.getElementById('tab-insights');
+  const taskList     = document.getElementById('task-list');
+  const insightsPanel = document.getElementById('insights-panel');
 
   function switchRightTab(tab) {
     rightPanelTab = tab;
     tabEvents.classList.toggle('active', tab === 'events');
     tabTasks.classList.toggle('active', tab === 'tasks');
-    tabEval.classList.toggle('active', tab === 'eval');
+    tabInsights.classList.toggle('active', tab === 'insights');
     activityList.style.display = tab === 'events' ? '' : 'none';
     taskList.style.display = tab === 'tasks' ? '' : 'none';
-    evalPanel.style.display = tab === 'eval' ? '' : 'none';
+    insightsPanel.style.display = tab === 'insights' ? '' : 'none';
     if (tab === 'tasks') renderTasks();
-    if (tab === 'eval') renderEval();
+    if (tab === 'insights') renderInsights();
   }
 
   tabEvents.addEventListener('click', () => switchRightTab('events'));
   tabTasks.addEventListener('click', () => switchRightTab('tasks'));
-  tabEval.addEventListener('click', () => switchRightTab('eval'));
+  tabInsights.addEventListener('click', () => switchRightTab('insights'));
   switchRightTab('tasks');   // initialize to default
 
-  // ── Tasks rendering ──────────────────────────────────────────────────────
-  async function renderEval() {
-    const el = document.getElementById('eval-content');
-    el.innerHTML = '<div style="color:var(--muted);font-size:11px">Loading...</div>';
+  // ── Insights tab ─────────────────────────────────────────────────────────
+
+  function insightsSectionHtml(id, title, bodyHtml) {
+    const collapsed = localStorage.getItem(`synapse_insights_${id}_collapsed`) === 'true';
+    return `<div class="insights-section${collapsed ? ' collapsed' : ''}" data-section="${id}">
+      <div class="insights-section-header">
+        <span class="insights-chevron">▼</span>
+        <span>${title}</span>
+      </div>
+      <div class="insights-section-body">${bodyHtml}</div>
+    </div>`;
+  }
+
+  function openInsightsModal(titleText, bodyHtml) {
+    document.getElementById('modal-title').textContent = titleText;
+    document.getElementById('modal-agent-slot').textContent = '';
+    const modalEl = document.querySelector('#agent-config-backdrop .modal');
+    // Replace field/actions with our content, restore on close
+    const original = modalEl.innerHTML;
+    modalEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h2 style="font-family:inherit;font-size:14px;margin:0">${esc(titleText)}</h2>
+        <button id="insights-modal-close" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 9px;border-radius:4px;cursor:pointer;font-family:inherit">✕</button>
+      </div>
+      ${bodyHtml}
+    `;
+    document.getElementById('agent-config-backdrop').classList.remove('hidden');
+    document.getElementById('insights-modal-close').addEventListener('click', () => {
+      document.getElementById('agent-config-backdrop').classList.add('hidden');
+      modalEl.innerHTML = original;
+    });
+  }
+
+  async function renderInsights() {
+    const el = document.getElementById('insights-content');
+    el.innerHTML = insightsSectionHtml('eval', 'Eval', '<div style="color:var(--muted);font-size:11px">Loading…</div>') +
+                   insightsSectionHtml('retro', 'Retro', '<div style="color:var(--muted);font-size:11px">Loading…</div>');
+
+    el.querySelectorAll('.insights-section-header').forEach(hdr => {
+      hdr.addEventListener('click', () => {
+        const section = hdr.closest('.insights-section');
+        const id = section.dataset.section;
+        section.classList.toggle('collapsed');
+        localStorage.setItem(`synapse_insights_${id}_collapsed`, section.classList.contains('collapsed'));
+      });
+    });
+
+    await Promise.all([renderEvalSection(el), renderRetroSection(el)]);
+  }
+
+  async function renderEvalSection(insightsEl) {
+    const sectionEl = insightsEl.querySelector('[data-section="eval"] .insights-section-body');
+    if (!sectionEl) return;
+    sectionEl.innerHTML = '<div style="color:var(--muted);font-size:11px">Loading…</div>';
 
     const [liveResults, counts, proposals] = await Promise.all([
       fetch('/api/eval/live').then(r => r.json()),
@@ -548,20 +598,32 @@
       }).join('')}
     </div>`;
 
-    const rowsHtml = liveResults.map(r => {
-      const failedMetrics = r.metrics.filter(m => !m.passed);
-      return `<div class="eval-row ${r.pass ? 'eval-pass' : 'eval-fail'}">
-        <div class="eval-row-header">
-          <span class="eval-id">#${r.task_id}</span>
-          <span class="eval-label ${r.pass ? 'good' : 'bad'}">${r.pass ? 'PASS' : 'FAIL'}</span>
-          <span style="font-size:9px;color:var(--muted)">${new Date(r.created_at).toLocaleTimeString([], {hour12:false})}</span>
-        </div>
-        <div class="eval-title">${esc(r.title.slice(0, 55))}</div>
-        ${failedMetrics.length ? `<div class="eval-failures">${failedMetrics.map(m =>
-          `<span class="eval-chip">${esc(m.metric)}=${m.value ?? '✗'}</span>`
-        ).join('')}</div>` : ''}
-      </div>`;
-    }).join('');
+    const showPassing = localStorage.getItem('synapse_eval_show_passing') === 'true';
+    const visibleRows = showPassing ? liveResults : liveResults.filter(r => !r.pass);
+
+    function relTime(ts) {
+      const diff = Math.floor((Date.now() - ts) / 1000);
+      if (diff < 60) return `${diff}s ago`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      return `${Math.floor(diff / 3600)}h ago`;
+    }
+
+    const rowsHtml = visibleRows.length === 0
+      ? '<div style="color:var(--muted);font-size:11px;text-align:center;padding:12px 0">No failures yet.</div>'
+      : visibleRows.map(r => {
+        const failedMetrics = r.metrics.filter(m => !m.passed);
+        return `<div class="eval-row ${r.pass ? 'eval-pass' : 'eval-fail'} eval-clickable" data-task-id="${r.task_id}" style="cursor:pointer">
+          <div class="eval-row-header">
+            <span class="eval-id">#${r.task_id}</span>
+            <span class="eval-label ${r.pass ? 'good' : 'bad'}">${r.pass ? 'PASS' : 'FAIL'}</span>
+            <span style="font-size:9px;color:var(--muted)">${relTime(r.created_at)}</span>
+          </div>
+          <div class="eval-title">${esc(r.title.slice(0, 55))}</div>
+          ${failedMetrics.length ? `<div class="eval-failures">${failedMetrics.map(m =>
+            `<span class="eval-chip">${esc(m.metric)}=${m.value ?? '✗'}</span>`
+          ).join('')}</div>` : ''}
+        </div>`;
+      }).join('');
 
     const proposalsHtml = proposals.length === 0
       ? '<div style="color:var(--muted);font-size:11px">No proposals yet.</div>'
@@ -592,28 +654,46 @@
         </div>`;
       }).join('');
 
-    el.innerHTML = `
-      <div style="margin-bottom:10px">
+    sectionEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
         <button id="eval-run-btn" class="btn-run-eval">▶ Run improvement loop</button>
-        <span id="eval-run-status" style="font-size:10px;color:var(--muted);margin-left:8px"></span>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer">
+          <input type="checkbox" id="eval-show-passing" ${showPassing ? 'checked' : ''}>
+          Show passing
+        </label>
+        <span id="eval-run-status" style="font-size:10px;color:var(--muted)"></span>
       </div>
       ${counterHtml}
-      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Recent evals (${liveResults.length})</div>
-      ${rowsHtml}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Recent evals (${visibleRows.length}${showPassing ? '' : ' failures'})</div>
+      <div id="eval-rows-list">${rowsHtml}</div>
       <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Proposals (${proposals.length})</div>
       <div id="proposals-list">${proposalsHtml}</div>
     `;
 
-    document.getElementById('eval-run-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('eval-run-btn');
-      const status = document.getElementById('eval-run-status');
+    sectionEl.querySelector('#eval-run-btn').addEventListener('click', async () => {
+      const btn = sectionEl.querySelector('#eval-run-btn');
+      const status = sectionEl.querySelector('#eval-run-status');
       btn.disabled = true;
       status.textContent = 'Starting…';
       await fetch('/api/eval/run', { method: 'POST' });
       status.textContent = 'Loop started — re-run eval to see updated results';
     });
 
-    el.querySelectorAll('.btn-gen-proposal').forEach(btn => {
+    sectionEl.querySelector('#eval-show-passing').addEventListener('change', (e) => {
+      localStorage.setItem('synapse_eval_show_passing', e.target.checked);
+      renderEvalSection(insightsEl);
+    });
+
+    sectionEl.querySelectorAll('.eval-clickable').forEach(row => {
+      row.addEventListener('click', async () => {
+        const taskId = row.dataset.taskId;
+        const data = await fetch(`/api/eval/case?task_id=${taskId}`).then(r => r.json());
+        openInsightsModal(`Eval case #${taskId}`,
+          `<pre class="insights-modal-pre">${esc(JSON.stringify(data, null, 2))}</pre>`);
+      });
+    });
+
+    sectionEl.querySelectorAll('.btn-gen-proposal').forEach(btn => {
       btn.addEventListener('click', async () => {
         const metric = btn.dataset.metric;
         btn.disabled = true;
@@ -631,7 +711,7 @@
       });
     });
 
-    document.getElementById('proposals-list').addEventListener('click', async (e) => {
+    sectionEl.querySelector('#proposals-list').addEventListener('click', async (e) => {
       const btn = e.target.closest('.btn-proposal');
       if (!btn) return;
       const action = btn.dataset.action;
@@ -639,10 +719,61 @@
       btn.disabled = true;
       try {
         await fetch(`/api/proposals/${encodeURIComponent(file)}/${action}`, { method: 'POST' });
-        renderEval();
+        renderEvalSection(insightsEl);
       } catch {
         btn.disabled = false;
       }
+    });
+  }
+
+  async function renderRetroSection(insightsEl) {
+    const sectionEl = insightsEl.querySelector('[data-section="retro"] .insights-section-body');
+    if (!sectionEl) return;
+
+    const retros = await fetch('/api/retros').then(r => r.json());
+
+    function fmtDate(ts) {
+      if (!ts) return '—';
+      return new Date(ts).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    const cardsHtml = retros.length === 0
+      ? '<div style="color:var(--muted);font-size:11px;text-align:center;padding:12px 0">No retros yet — click ▶ Run retro to start one.</div>'
+      : retros.map(r => {
+        const skillsText = 'No skill candidates identified.';
+        return `<div class="retro-card" data-filename="${esc(r.filename)}">
+          <div class="retro-card-header">
+            <span class="retro-date">${fmtDate(r.timestamp)}</span>
+            <span class="retro-agent">${esc(r.agent_id)}</span>
+            <span class="retro-task-count">${r.task_count} task${r.task_count === 1 ? '' : 's'}</span>
+          </div>
+          ${r.preview ? `<div class="retro-preview">${esc(r.preview)}</div>` : ''}
+          <div class="retro-skills">${skillsText}</div>
+        </div>`;
+      }).join('');
+
+    sectionEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <button id="retro-run-btn" class="btn-run-retro">▶ Run retro</button>
+        <span id="retro-run-status" style="font-size:10px;color:var(--muted)"></span>
+      </div>
+      ${cardsHtml}
+    `;
+
+    sectionEl.querySelector('#retro-run-btn').addEventListener('click', async () => {
+      const btn = sectionEl.querySelector('#retro-run-btn');
+      const status = sectionEl.querySelector('#retro-run-status');
+      btn.disabled = true;
+      const data = await fetch('/api/retros/run', { method: 'POST' }).then(r => r.json());
+      status.textContent = data.queued ? 'queued — check orchestrator' : (data.error ?? 'error');
+    });
+
+    sectionEl.querySelectorAll('.retro-card').forEach(card => {
+      card.addEventListener('click', async () => {
+        const filename = card.dataset.filename;
+        const data = await fetch(`/api/retros/${encodeURIComponent(filename)}`).then(r => r.json());
+        openInsightsModal(filename, `<pre class="insights-modal-pre">${esc(data.content ?? data.error ?? '')}</pre>`);
+      });
     });
   }
 
