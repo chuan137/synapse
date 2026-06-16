@@ -477,13 +477,6 @@
       color: var(--error);
     }
 
-    .agent-metrics-total {
-      width: 100%;
-      padding-bottom: 4px;
-      margin-bottom: 4px;
-      border-bottom: 1px solid var(--border);
-    }
-
     /* Metrics — hidden by default, visible only on selected card */
     .agent-metrics {
       display: none;

@@ -387,8 +387,7 @@
       return `<span class="${cls}" data-tip="${tooltip}"><b>${esc(label)}</b> ${m.calls}${errs}</span>`;
     }).join('');
     const totalRow = renderToolSumChip(agentId);
-    const totalHtml = totalRow ? `<div class="agent-metrics-total">${totalRow}</div>` : '';
-    return `<div class="agent-metrics">${totalHtml}${chips}</div>`;
+    return `<div class="agent-metrics">${totalRow}${chips}</div>`;
   }
 
   function renderToolSumChip(agentId) {
