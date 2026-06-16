@@ -397,7 +397,7 @@
     const cls = totalCalls >= restartHint ? 'agent-tool-sum danger'
               : totalCalls >= compactHint ? 'agent-tool-sum warn'
               : 'agent-tool-sum';
-    return `<span class="${cls}" title="Total tool calls this session">${totalCalls} calls</span>`;
+    return `<span class="${cls}" title="Total tool calls this session"><b>Total</b> ${totalCalls}</span>`;
   }
 
   // ── Render activity feed ───────────────────────────────────────────────────
