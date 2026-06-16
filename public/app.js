@@ -199,7 +199,6 @@
                 <span class="agent-name">${humanName || 'agent'}</span>
                 <span class="agent-slot">${esc(slot)}</span>
               </div>
-              ${!selected ? sumChip : ''}
               <div class="agent-card-actions">
                 <button class="agent-icon-btn focus-btn" data-focus-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} data-tip="Focus tmux pane">⊙</button>
                 <button class="agent-icon-btn ping-btn" data-ping-id="${esc(a.agent_id)}" ${hasTmux ? '' : 'disabled'} data-tip="Ping agent">↯</button>
@@ -220,6 +219,7 @@
               ${a.orch_over_threshold ? '<span class="agent-health-dot" title="Orchestrator tool-call threshold exceeded"></span>' : ''}
               ${a.orch_idle_blocked ? '<span class="agent-health-dot orch-idle-blocked-dot" title="Orchestrator idle while workers are blocked"></span>' : ''}
               <span class="agent-state-task">${esc(stateText)}</span>
+              ${!selected ? sumChip : ''}
             </div>
           </div>
           ${renderMetricChips(a.agent_id)}

@@ -344,7 +344,7 @@
       padding: 12px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
 
     .agent-card {
@@ -366,7 +366,7 @@
 
     /* ── Card body padding ── */
     .agent-card-body {
-      padding: 9px 8px 9px 13px;
+      padding: 10px 9px 10px 13px;
     }
 
     /* Row 1: slot + name | icon actions */
@@ -396,12 +396,17 @@
       flex-shrink: 0;
     }
 
-    /* Always-visible icon action buttons */
+    /* Always-visible icon action buttons — grouped as a distinct control
+       cluster, separated from the identity/badge zone by a hairline divider
+       so the row reads as "info | controls" rather than one undifferentiated strip. */
     .agent-card-actions {
       display: flex;
       align-items: center;
-      gap: 1px;
+      gap: 3px;
       flex-shrink: 0;
+      margin-left: 4px;
+      padding-left: 7px;
+      border-left: 1px solid var(--border);
     }
 
     .agent-icon-btn {
@@ -431,7 +436,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      margin-top: 3px;
+      margin-top: 6px;
     }
 
     .agent-state-dot {
@@ -469,6 +474,8 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      flex: 1;
+      min-width: 0;
     }
 
     .agent-tool-sum {
@@ -515,23 +522,12 @@
     }
     .surface-btn:disabled { opacity: 0.28; cursor: not-allowed; }
 
-    /* ── Kebab / more-actions icon button ── */
+    /* ── Kebab / more-actions icon button ──
+       Sized to match .agent-icon-btn (26x26, radius 6px) so all three action
+       icons sit on a common baseline instead of the kebab reading 2px small. */
     .kebab-btn {
-      background: none;
-      border: none;
-      color: var(--muted);
       font-size: 15px;
       line-height: 1;
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 5px;
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.12s, color 0.12s;
-      padding: 0;
     }
     .kebab-btn:hover {
       background: color-mix(in srgb, var(--muted) 14%, transparent);
@@ -990,8 +986,8 @@
     /* Per-agent tool metric chips — layout + border (visibility controlled above) */
     .agent-metrics {
       flex-wrap: wrap;
-      gap: 3px;
-      padding: 6px 11px 7px 14px;
+      gap: 4px;
+      padding: 8px 11px 9px 14px;
       border-top: 1px solid var(--border);
     }
     .metric-chip {
