@@ -29,8 +29,11 @@ function assert(condition, message) {
 
 function makeDeps(overrides = {}) {
   return {
-    queryAgents: (_threshold) => [],
-    readSynapseSettings: () => ({}),
+    queryAgents:          (_threshold) => [],
+    queryOrch:            (_threshold) => [],
+    queryOrchIdleBlocked: (_minMs, _now) => [],
+    readSynapseSettings:  () => ({}),
+    sendMessage:          () => 0,
     ...overrides,
   };
 }
@@ -137,9 +140,9 @@ console.log('\n[Test 5] currentWarnings reflects multiple crossing agents');
   assert(hm.currentWarnings.size === 2, `exactly two warnings`);
 }
 
-// ── Test 6: slot 0 excluded (handled by SQL query) ───────────────────────────
+// ── Test 6: slot 0 excluded from worker query ─────────────────────────────────
 
-console.log('\n[Test 6] Slot 0 (orchestrator) excluded by SQL query');
+console.log('\n[Test 6] Slot 0 (orchestrator) excluded by worker SQL query');
 
 {
   const hm = new HealthMonitor({
@@ -149,7 +152,7 @@ console.log('\n[Test 6] Slot 0 (orchestrator) excluded by SQL query');
     }),
   });
   hm['_poll']();
-  assert(hm.currentWarnings.size === 0, `orchestrator (slot=0) excluded — no warning`);
+  assert(hm.currentWarnings.size === 0, `orchestrator (slot=0) excluded — no worker warning`);
 }
 
 // ── Test 7: start()/stop() lifecycle ─────────────────────────────────────────
@@ -192,6 +195,166 @@ console.log('\n[Test 8] start() idempotency: calling start() twice does not doub
   await new Promise(r => setTimeout(r, 55));
   hm.stop();
   assert(pollCount < 8, `calling start() twice does not double the fire rate (got ${pollCount})`);
+}
+
+// ── Test 9: MCP tools and Task counted in worker query ───────────────────────
+
+console.log('\n[Test 9] COUNTED_TOOLS includes Task; MCP wildcard handled by SQL (mock returns row)');
+
+{
+  // The SQL wildcard is in the DB — here we verify the mock path:
+  // if queryAgents returns a row (as the real SQL would for mcp__ tools), it shows up.
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 10,
+    deps: makeDeps({
+      queryAgents: (_t) => [{
+        agent_id: 'proj:5', role: 'developer', tool_call_count: 15, session_id: 'sess-mcp',
+      }],
+    }),
+  });
+  hm['_poll']();
+  assert(hm.currentWarnings.has('proj:5'), `agent with MCP/Task tool calls appears in warnings`);
+}
+
+// ── Test 10: orch below threshold → orchWarnings empty ───────────────────────
+
+console.log('\n[Test 10] Orch below threshold — orchWarnings empty');
+
+{
+  const hm = new HealthMonitor({
+    orchThresholdToolCalls: 250,
+    deps: makeDeps({
+      queryOrch: (_t) => [],
+    }),
+  });
+  hm['_poll']();
+  assert(hm.orchWarnings.size === 0, `orchWarnings empty when orch below threshold`);
+}
+
+// ── Test 11: orch crosses threshold → orchWarnings set + bus message ──────────
+
+console.log('\n[Test 11] Orch crosses threshold → orchWarnings set + sendMessage called');
+
+{
+  const sent = [];
+  const hm = new HealthMonitor({
+    orchThresholdToolCalls: 250,
+    deps: makeDeps({
+      queryOrch: (_t) => [{
+        agent_id: 'proj:0', role: 'orchestrator', tool_call_count: 260, session_id: 'sess-orch',
+      }],
+      sendMessage: (from, to, content, prio) => { sent.push({ from, to, content, prio }); return 0; },
+    }),
+  });
+  hm['_poll']();
+  assert(hm.orchWarnings.has('proj:0'), `orchWarnings contains orch agent`);
+  assert(sent.length === 1, `one bus message sent`);
+  assert(sent[0].to === 'human', `message goes to human`);
+  assert(sent[0].content.includes('[health]'), `message tagged [health]`);
+  assert(sent[0].content.includes('260'), `message includes tool call count`);
+}
+
+// ── Test 12: orch threshold one-shot — does NOT re-send on next tick ──────────
+
+console.log('\n[Test 12] Orch threshold one-shot: same condition does not re-send on next tick');
+
+{
+  const sent = [];
+  const hm = new HealthMonitor({
+    orchThresholdToolCalls: 250,
+    deps: makeDeps({
+      queryOrch: (_t) => [{
+        agent_id: 'proj:0', role: 'orchestrator', tool_call_count: 260, session_id: 'sess-orch2',
+      }],
+      sendMessage: (from, to, content, prio) => { sent.push(content); return 0; },
+    }),
+  });
+  hm['_poll']();
+  hm['_poll']();
+  hm['_poll']();
+  assert(sent.length === 1, `sendMessage called only once for repeated threshold crossing (got ${sent.length})`);
+}
+
+// ── Test 13: orch idle while worker blocked ≥threshold → orchIdleBlocked set ──
+
+console.log('\n[Test 13] Orch idle while worker blocked ≥ threshold → orchIdleBlocked + bus message');
+
+{
+  const sent = [];
+  const hm = new HealthMonitor({
+    idleBlockedThresholdMs: 60_000,
+    deps: makeDeps({
+      queryOrchIdleBlocked: (_minMs, _now) => [{ agent_id: 'proj:0' }],
+      sendMessage: (from, to, content, prio) => { sent.push({ to, content }); return 0; },
+    }),
+  });
+  hm['_poll']();
+  assert(hm.orchIdleBlocked.has('proj:0'), `orchIdleBlocked set`);
+  assert(sent.length === 1, `one bus message sent`);
+  assert(sent[0].to === 'human', `message goes to human`);
+  assert(sent[0].content.includes('[health]'), `message tagged [health]`);
+}
+
+// ── Test 14: orch idle-blocked one-shot ──────────────────────────────────────
+
+console.log('\n[Test 14] Orch idle-blocked one-shot: repeated condition does not re-send');
+
+{
+  const sent = [];
+  const hm = new HealthMonitor({
+    idleBlockedThresholdMs: 60_000,
+    deps: makeDeps({
+      queryOrchIdleBlocked: (_minMs, _now) => [{ agent_id: 'proj:0' }],
+      sendMessage: (from, to, content, prio) => { sent.push(content); return 0; },
+    }),
+  });
+  hm['_poll']();
+  hm['_poll']();
+  hm['_poll']();
+  assert(sent.length === 1, `sendMessage called only once for repeated idle-blocked condition (got ${sent.length})`);
+}
+
+// ── Test 15: orch and worker queries are separate ─────────────────────────────
+
+console.log('\n[Test 15] Worker query (slot > 0) separate from orch query (slot = 0)');
+
+{
+  const workerCalls = [];
+  const orchCalls   = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls:     100,
+    orchThresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => { workerCalls.push(t); return []; },
+      queryOrch:   (t) => { orchCalls.push(t); return []; },
+    }),
+  });
+  hm['_poll']();
+  assert(workerCalls.length === 1, `worker query called once`);
+  assert(orchCalls.length   === 1, `orch query called once`);
+  assert(workerCalls[0] === 100, `worker uses worker threshold (100)`);
+  assert(orchCalls[0]   === 200, `orch uses orch threshold (200)`);
+}
+
+// ── Test 16: settings keys override defaults ──────────────────────────────────
+
+console.log('\n[Test 16] orchToolCallHint and idleBlockedThresholdMs override defaults');
+
+{
+  const orchThresholdsSeen = [];
+  const idleMsSeen         = [];
+  const hm = new HealthMonitor({
+    orchThresholdToolCalls: 999, // should be overridden by settings
+    idleBlockedThresholdMs: 999,
+    deps: makeDeps({
+      readSynapseSettings:  () => ({ orchToolCallHint: 300, idleBlockedThresholdMs: 45_000 }),
+      queryOrch:            (t) => { orchThresholdsSeen.push(t); return []; },
+      queryOrchIdleBlocked: (minMs, _now) => { idleMsSeen.push(minMs); return []; },
+    }),
+  });
+  hm['_poll']();
+  assert(orchThresholdsSeen[0] === 300, `orchToolCallHint=300 from settings overrides constructor default`);
+  assert(idleMsSeen[0] === 45_000, `idleBlockedThresholdMs=45000 from settings overrides constructor default`);
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

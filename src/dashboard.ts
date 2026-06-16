@@ -37,7 +37,11 @@ import {
 } from './db.js';
 import { spawnWorker } from './spawn.js';
 
-type AugmentedStatus = AgentStatus & { over_threshold: boolean };
+type AugmentedStatus = AgentStatus & {
+  over_threshold:      boolean;
+  orch_over_threshold: boolean;
+  orch_idle_blocked:   boolean;
+};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.SYNAPSE_PORT ?? '4000', 10);
@@ -124,13 +128,15 @@ function broadcast(data: object) {
 }
 
 // Poll DB every 500ms and push state to all connected dashboards
-let lastStatuses   = '';
-let lastMessages   = '';
-let lastApprovals  = '';
-let lastEvents     = '';
-let lastTasks      = '';
-let lastPlan       = '';
-let lastWarnings   = '';
+let lastStatuses     = '';
+let lastMessages     = '';
+let lastApprovals    = '';
+let lastEvents       = '';
+let lastTasks        = '';
+let lastPlan         = '';
+let lastWarnings     = '';
+let lastOrchWarnings = '';
+let lastOrchIdle     = '';
 
 const nudger = new Nudger();
 nudger.start(500);
@@ -146,36 +152,46 @@ setInterval(() => {
   const metrics    = getAllToolMetrics();
   const tasks      = listAllTasks(200);
 
-  const warnings = healthMonitor.currentWarnings;
+  const warnings     = healthMonitor.currentWarnings;
+  const orchWarnings = healthMonitor.orchWarnings;
+  const orchIdle     = healthMonitor.orchIdleBlocked;
   const augmentedStatuses: AugmentedStatus[] = statuses.map((s) => ({
     ...s,
-    over_threshold: warnings.has(s.agent_id),
+    over_threshold:      warnings.has(s.agent_id),
+    orch_over_threshold: orchWarnings.has(s.agent_id),
+    orch_idle_blocked:   orchIdle.has(s.agent_id),
   }));
 
-  const statusStr     = JSON.stringify(statuses);
-  const msgStr        = JSON.stringify(messages.map((m) => m.id));
-  const approvalStr   = JSON.stringify(approvals.map((a) => a.id));
-  const eventStr      = JSON.stringify(events.map((e) => e.id));
-  const taskStr       = JSON.stringify(tasks.map((a) => `${a.id}:${a.status}:${a.commit_sha}`));
-  const planStr       = `${currentPlan.updated_at}`;
-  const warningStr    = JSON.stringify([...warnings].sort());
+  const statusStr      = JSON.stringify(statuses);
+  const msgStr         = JSON.stringify(messages.map((m) => m.id));
+  const approvalStr    = JSON.stringify(approvals.map((a) => a.id));
+  const eventStr       = JSON.stringify(events.map((e) => e.id));
+  const taskStr        = JSON.stringify(tasks.map((a) => `${a.id}:${a.status}:${a.commit_sha}`));
+  const planStr        = `${currentPlan.updated_at}`;
+  const warningStr     = JSON.stringify([...warnings].sort());
+  const orchWarningStr = JSON.stringify([...orchWarnings].sort());
+  const orchIdleStr    = JSON.stringify([...orchIdle].sort());
 
   if (
-    statusStr !== lastStatuses ||
-    msgStr !== lastMessages ||
-    approvalStr !== lastApprovals ||
-    eventStr !== lastEvents ||
-    taskStr !== lastTasks ||
-    planStr !== lastPlan ||
-    warningStr !== lastWarnings
+    statusStr    !== lastStatuses  ||
+    msgStr       !== lastMessages  ||
+    approvalStr  !== lastApprovals ||
+    eventStr     !== lastEvents    ||
+    taskStr      !== lastTasks     ||
+    planStr      !== lastPlan      ||
+    warningStr   !== lastWarnings  ||
+    orchWarningStr !== lastOrchWarnings ||
+    orchIdleStr  !== lastOrchIdle
   ) {
-    lastStatuses   = statusStr;
-    lastMessages   = msgStr;
-    lastApprovals  = approvalStr;
-    lastEvents     = eventStr;
-    lastTasks      = taskStr;
-    lastPlan       = planStr;
-    lastWarnings   = warningStr;
+    lastStatuses     = statusStr;
+    lastMessages     = msgStr;
+    lastApprovals    = approvalStr;
+    lastEvents       = eventStr;
+    lastTasks        = taskStr;
+    lastPlan         = planStr;
+    lastWarnings     = warningStr;
+    lastOrchWarnings = orchWarningStr;
+    lastOrchIdle     = orchIdleStr;
     broadcast({ statuses: augmentedStatuses, messages, approvals, events, metrics, tasks, plan: currentPlan });
   }
 }, 500);

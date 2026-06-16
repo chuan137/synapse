@@ -450,6 +450,18 @@
       background: var(--error);
     }
 
+    .agent-health-dot.orch-idle-blocked-dot {
+      background: var(--warn);
+    }
+
+    .agent-card.health-warning {
+      border-color: color-mix(in srgb, var(--error) 35%, var(--border));
+    }
+
+    .agent-card.health-warning:has(.orch-idle-blocked-dot):not(:has(.agent-health-dot:not(.orch-idle-blocked-dot))) {
+      border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+    }
+
     .agent-state-task {
       font-size: 10px;
       color: var(--muted);

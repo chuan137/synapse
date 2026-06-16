@@ -181,7 +181,8 @@
 
     agentsList.innerHTML = agentStatuses.map(a => {
       const selected = a.agent_id === selectedAgentId;
-      const cardClass = ['agent-card', selected ? 'selected' : ''].filter(Boolean).join(' ');
+      const healthClass = (a.over_threshold || a.orch_over_threshold || a.orch_idle_blocked) ? ' health-warning' : '';
+      const cardClass = ['agent-card', selected ? 'selected' : '', healthClass].filter(Boolean).join(' ');
       const slot = `:${a.slot}`;
       const humanName = a.name && a.name !== a.agent_id ? esc(a.name) : '';
       const hasTmux = !!a.tmux_pane;
@@ -214,6 +215,8 @@
             <div class="agent-state-row">
               <span class="agent-state-dot" data-state="${esc(a.state)}" style="background:${stateColor};"></span>
               ${a.over_threshold ? '<span class="agent-health-dot" title="Tool call threshold exceeded"></span>' : ''}
+              ${a.orch_over_threshold ? '<span class="agent-health-dot" title="Orchestrator tool-call threshold exceeded"></span>' : ''}
+              ${a.orch_idle_blocked ? '<span class="agent-health-dot orch-idle-blocked-dot" title="Orchestrator idle while workers are blocked"></span>' : ''}
               <span class="agent-state-task">${esc(stateText)}</span>
             </div>
           </div>
@@ -225,7 +228,7 @@
     // Update health warning badge in Agents panel header
     const badge = document.getElementById('agents-warning-badge');
     if (badge) {
-      const warnCount = (agentStatuses ?? []).filter(a => a.over_threshold).length;
+      const warnCount = (agentStatuses ?? []).filter(a => a.over_threshold || a.orch_over_threshold || a.orch_idle_blocked).length;
       badge.textContent = String(warnCount);
       badge.style.display = warnCount > 0 ? '' : 'none';
     }
