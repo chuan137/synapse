@@ -7,6 +7,8 @@
   let allTasks         = [];
   let planContent      = '';
   let selectedAgentId  = null;
+  let compactHint      = 100;
+  let restartHint      = 200;
   let middlePanelTab   = 'messages'; // 'messages' | 'progress' | 'file:<path>'
   // Local tracking of clicked approval buttons — persists across SSE re-renders
   // until approved_at propagates from the server.
@@ -85,7 +87,7 @@
     };
 
     es.onmessage = (e) => {
-      const { statuses, messages, approvals, events, metrics, tasks, plan } = JSON.parse(e.data);
+      const { statuses, messages, approvals, events, metrics, tasks, plan, compactHint: ch, toolCallRestartHint: rh } = JSON.parse(e.data);
       agentStatuses    = statuses;
       allMessages      = messages;
       pendingApprovals = approvals ?? [];
@@ -93,6 +95,8 @@
       toolMetrics      = metrics ?? [];
       allTasks         = tasks ?? [];
       if (plan !== undefined) planContent = plan.content ?? '';
+      if (ch != null)  compactHint  = ch;
+      if (rh != null)  restartHint  = rh;
       renderAgents();
       renderMessages();
       renderApprovals();
@@ -181,8 +185,7 @@
 
     agentsList.innerHTML = agentStatuses.map(a => {
       const selected = a.agent_id === selectedAgentId;
-      const healthClass = (a.over_threshold || a.orch_over_threshold || a.orch_idle_blocked) ? ' health-warning' : '';
-      const cardClass = ['agent-card', selected ? 'selected' : '', healthClass].filter(Boolean).join(' ');
+      const cardClass = ['agent-card', selected ? 'selected' : ''].filter(Boolean).join(' ');
       const slot = `:${a.slot}`;
       const humanName = a.name && a.name !== a.agent_id ? esc(a.name) : '';
       const hasTmux = !!a.tmux_pane;
@@ -215,9 +218,6 @@
             </div>
             <div class="agent-state-row">
               <span class="agent-state-dot" data-state="${esc(a.state)}" style="background:${stateColor};"></span>
-              ${a.over_threshold ? '<span class="agent-health-dot" title="Tool call threshold exceeded"></span>' : ''}
-              ${a.orch_over_threshold ? '<span class="agent-health-dot" title="Orchestrator tool-call threshold exceeded"></span>' : ''}
-              ${a.orch_idle_blocked ? '<span class="agent-health-dot orch-idle-blocked-dot" title="Orchestrator idle while workers are blocked"></span>' : ''}
               <span class="agent-state-task">${esc(stateText)}</span>
               ${!selected ? sumChip : ''}
             </div>
@@ -386,15 +386,19 @@
       const tooltip = `${esc(m.tool)}: ${m.calls} calls${m.errors > 0 ? ', ' + m.errors + ' errors' : ''}${m.avg_ms != null ? ', avg ' + Math.round(m.avg_ms) + 'ms' : ''}`;
       return `<span class="${cls}" data-tip="${tooltip}"><b>${esc(label)}</b> ${m.calls}${errs}</span>`;
     }).join('');
-    return `<div class="agent-metrics">${chips}</div>`;
+    const totalRow = renderToolSumChip(agentId);
+    const totalHtml = totalRow ? `<div class="agent-metrics-total">${totalRow}</div>` : '';
+    return `<div class="agent-metrics">${totalHtml}${chips}</div>`;
   }
 
   function renderToolSumChip(agentId) {
     const rows = toolMetrics.filter(m => m.synapse_agent_id === agentId);
     const totalCalls = rows.reduce((s, m) => s + m.calls, 0);
-    return totalCalls > 0
-      ? `<span class="agent-tool-sum" title="Total tool calls this session">${totalCalls} calls</span>`
-      : '';
+    if (totalCalls === 0) return '';
+    const cls = totalCalls >= restartHint ? 'agent-tool-sum danger'
+              : totalCalls >= compactHint ? 'agent-tool-sum warn'
+              : 'agent-tool-sum';
+    return `<span class="${cls}" title="Total tool calls this session">${totalCalls} calls</span>`;
   }
 
   // ── Render activity feed ───────────────────────────────────────────────────

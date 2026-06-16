@@ -162,6 +162,10 @@ setInterval(() => {
     orch_idle_blocked:   orchIdle.has(s.agent_id),
   }));
 
+  const broadcastSettings = readSettings();
+  const broadcastRestartHint  = typeof broadcastSettings.toolCallRestartHint === 'number' ? broadcastSettings.toolCallRestartHint : 200;
+  const broadcastCompactHint  = typeof broadcastSettings.compactHint === 'number' ? broadcastSettings.compactHint : Math.floor(broadcastRestartHint / 2);
+
   const statusStr      = JSON.stringify(statuses);
   const msgStr         = JSON.stringify(messages.map((m) => m.id));
   const approvalStr    = JSON.stringify(approvals.map((a) => a.id));
@@ -192,7 +196,7 @@ setInterval(() => {
     lastWarnings     = warningStr;
     lastOrchWarnings = orchWarningStr;
     lastOrchIdle     = orchIdleStr;
-    broadcast({ statuses: augmentedStatuses, messages, approvals, events, metrics, tasks, plan: currentPlan });
+    broadcast({ statuses: augmentedStatuses, messages, approvals, events, metrics, tasks, plan: currentPlan, compactHint: broadcastCompactHint, toolCallRestartHint: broadcastRestartHint });
   }
 }, 500);
 
