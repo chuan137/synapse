@@ -486,6 +486,7 @@
   }
 
   const filesContent  = document.getElementById('files-content');
+  const msgStatusRow  = document.getElementById('msg-status-row');
 
   // middlePanelTab: 'messages' | 'progress' | 'file:<path>'
   function switchMiddleTab(tab) {
@@ -497,6 +498,7 @@
     progressContentEl.style.display = tab === 'progress' ? '' : 'none';
     filesContent.style.display = isFile ? 'flex' : 'none';
     composeEl.style.display = tab === 'messages' ? '' : 'none';
+    msgStatusRow.style.display = tab === 'messages' ? '' : 'none';
     if (tab === 'progress') renderProgress();
     if (isFile) renderFileViewer(tab.slice(5));
   }
@@ -881,7 +883,6 @@
   setInterval(renderAgents, 5_000);
 
   // ── Status row (pinned below message list) ────────────────────────────────
-  const msgStatusRow    = document.getElementById('msg-status-row');
   const msgStatusDot    = document.getElementById('msg-status-dot');
   const msgStatusState  = document.getElementById('msg-status-state');
   const msgStatusSep    = document.getElementById('msg-status-sep');
@@ -901,7 +902,7 @@
     const task = agent.current_task ?? '';
     msgStatusTask.textContent = task;
     msgStatusSep.style.display = task ? '' : 'none';
-    msgStatusRow.style.display = '';
+    msgStatusRow.style.display = middlePanelTab === 'messages' ? '' : 'none';
   }
 
   // ── Render messages ───────────────────────────────────────────────────────
