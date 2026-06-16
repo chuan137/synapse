@@ -31,7 +31,9 @@ function makeDeps(overrides = {}) {
   return {
     queryAgents:          (_threshold) => [],
     queryOrch:            (_threshold) => [],
+    queryOrchSessions:    ()           => [],
     queryOrchIdleBlocked: (_minMs, _now) => [],
+    queryBlockedWorkers:  ()           => [],
     readSynapseSettings:  () => ({}),
     sendMessage:          () => 0,
     ...overrides,
@@ -277,7 +279,7 @@ console.log('\n[Test 12] Orch threshold one-shot: same condition does not re-sen
 
 // ── Test 13: orch idle while worker blocked ≥threshold → orchIdleBlocked set ──
 
-console.log('\n[Test 13] Orch idle while worker blocked ≥ threshold → orchIdleBlocked + bus message');
+console.log('\n[Test 13] Orch idle while worker blocked ≥ threshold → orchIdleBlocked + bus message with worker list');
 
 {
   const sent = [];
@@ -285,6 +287,7 @@ console.log('\n[Test 13] Orch idle while worker blocked ≥ threshold → orchId
     idleBlockedThresholdMs: 60_000,
     deps: makeDeps({
       queryOrchIdleBlocked: (_minMs, _now) => [{ agent_id: 'proj:0' }],
+      queryBlockedWorkers:  ()             => [{ agent_id: 'proj:3' }],
       sendMessage: (from, to, content, prio) => { sent.push({ to, content }); return 0; },
     }),
   });
@@ -293,6 +296,7 @@ console.log('\n[Test 13] Orch idle while worker blocked ≥ threshold → orchId
   assert(sent.length === 1, `one bus message sent`);
   assert(sent[0].to === 'human', `message goes to human`);
   assert(sent[0].content.includes('[health]'), `message tagged [health]`);
+  assert(sent[0].content.includes('proj:3'), `message includes blocked worker agent_id`);
 }
 
 // ── Test 14: orch idle-blocked one-shot ──────────────────────────────────────
@@ -355,6 +359,99 @@ console.log('\n[Test 16] orchToolCallHint and idleBlockedThresholdMs override de
   hm['_poll']();
   assert(orchThresholdsSeen[0] === 300, `orchToolCallHint=300 from settings overrides constructor default`);
   assert(idleMsSeen[0] === 45_000, `idleBlockedThresholdMs=45000 from settings overrides constructor default`);
+}
+
+// ── Test 17: Finding 1 regression — orch session changes while below threshold ─
+// The stale-key bug: if orch restarts (new session) while count is below threshold,
+// lastSeenOrchSession must still be updated so the next threshold crossing fires
+// a fresh message.
+
+console.log('\n[Test 17] Finding 1 regression: orch session change while below threshold → new message on next crossing');
+
+{
+  const sent = [];
+  let orchSessionId = 'sess-old';
+  let orchRowsAbove = [];
+
+  const hm = new HealthMonitor({
+    orchThresholdToolCalls: 250,
+    deps: makeDeps({
+      // queryOrchSessions always reflects current orch session (unconditional)
+      queryOrchSessions: () => [{ agent_id: 'proj:0', session_id: orchSessionId }],
+      queryOrch: (_t) => orchRowsAbove,
+      sendMessage: (from, to, content) => { sent.push(content); return 0; },
+    }),
+  });
+
+  // Tick 1: orch above threshold with old session → message sent
+  orchRowsAbove = [{ agent_id: 'proj:0', role: 'orchestrator', tool_call_count: 260, session_id: 'sess-old' }];
+  hm['_poll']();
+  assert(sent.length === 1, `T17: first message sent on initial crossing`);
+
+  // Tick 2: orch restarts — new session, count drops below threshold
+  orchSessionId = 'sess-new';
+  orchRowsAbove = []; // below threshold
+  hm['_poll']();
+  assert(sent.length === 1, `T17: no new message while below threshold`);
+
+  // Tick 3: orch climbs above threshold again with NEW session
+  orchRowsAbove = [{ agent_id: 'proj:0', role: 'orchestrator', tool_call_count: 270, session_id: 'sess-new' }];
+  hm['_poll']();
+  assert(sent.length === 2, `T17: second message sent after session-reset + new crossing (got ${sent.length})`);
+}
+
+// ── Test 18: Finding 2 — queryBlockedWorkers injected dep used in idle-blocked message ─
+
+console.log('\n[Test 18] Finding 2: queryBlockedWorkers dep controls worker list in idle-blocked message');
+
+{
+  const sent = [];
+  const hm = new HealthMonitor({
+    idleBlockedThresholdMs: 60_000,
+    deps: makeDeps({
+      queryOrchIdleBlocked: () => [{ agent_id: 'proj:0' }],
+      queryBlockedWorkers:  () => [{ agent_id: 'proj:7' }, { agent_id: 'proj:8' }],
+      sendMessage: (_from, _to, content) => { sent.push(content); return 0; },
+    }),
+  });
+  hm['_poll']();
+  assert(sent.length === 1, `T18: message sent`);
+  assert(sent[0].includes('proj:7'), `T18: first blocked worker in message`);
+  assert(sent[0].includes('proj:8'), `T18: second blocked worker in message`);
+}
+
+// ── Test 19: Finding 3 regression — idle-blocked resets on orch session change ─
+
+console.log('\n[Test 19] Finding 3 regression: idle-blocked fires again after orch session change');
+
+{
+  const sent = [];
+  let orchSessionId = 'sess-a';
+
+  const hm = new HealthMonitor({
+    idleBlockedThresholdMs: 60_000,
+    deps: makeDeps({
+      queryOrchSessions:    () => [{ agent_id: 'proj:0', session_id: orchSessionId }],
+      queryOrchIdleBlocked: () => [{ agent_id: 'proj:0' }],
+      queryBlockedWorkers:  () => [{ agent_id: 'proj:2' }],
+      sendMessage: (_from, _to, content) => { sent.push(content); return 0; },
+    }),
+  });
+
+  // Tick 1: idle-blocked fires → message sent
+  hm['_poll']();
+  assert(sent.length === 1, `T19: first idle-blocked message sent`);
+
+  // Tick 2: same session, same condition → no re-send
+  hm['_poll']();
+  assert(sent.length === 1, `T19: no re-send on same session (got ${sent.length})`);
+
+  // Orch restarts with a new session
+  orchSessionId = 'sess-b';
+
+  // Tick 3: condition still true but new session → new message should fire
+  hm['_poll']();
+  assert(sent.length === 2, `T19: second message sent after orch session change (got ${sent.length})`);
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

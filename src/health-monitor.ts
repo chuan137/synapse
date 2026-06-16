@@ -12,10 +12,17 @@ interface AgentToolRow {
   session_id: string;
 }
 
+interface AgentSessionRow {
+  agent_id: string;
+  session_id: string;
+}
+
 interface HealthMonitorDeps {
   queryAgents:          (threshold: number) => AgentToolRow[];
   queryOrch:            (threshold: number) => AgentToolRow[];
+  queryOrchSessions:    () => AgentSessionRow[];
   queryOrchIdleBlocked: (minBlockedMs: number, now: number) => { agent_id: string }[];
+  queryBlockedWorkers:  () => { agent_id: string }[];
   readSynapseSettings:  typeof readSynapseSettings;
   sendMessage:          typeof sendMessage;
 }
@@ -45,7 +52,7 @@ const QUERY_SQL = `
   HAVING COUNT(tm.id) >= ?
 `;
 
-// Orchestrator query: slot = 0
+// Orchestrator query: slot = 0, only agents above threshold
 const ORCH_QUERY_SQL = `
   SELECT a.agent_id,
          a.role,
@@ -60,6 +67,14 @@ const ORCH_QUERY_SQL = `
      AND a.slot = 0
    GROUP BY a.agent_id
   HAVING COUNT(tm.id) >= ?
+`;
+
+// Unconditional orch session query — used to keep lastSeenOrchSession current
+// even when the orch is below threshold (fixes stale session key after restart)
+const ORCH_SESSIONS_SQL = `
+  SELECT agent_id, session_id
+    FROM agent_status
+   WHERE slot = 0 AND ended_at IS NULL
 `;
 
 const ORCH_IDLE_BLOCKED_SQL = `
@@ -77,6 +92,11 @@ const ORCH_IDLE_BLOCKED_SQL = `
      )
 `;
 
+const BLOCKED_WORKERS_SQL = `
+  SELECT agent_id FROM agent_status
+   WHERE slot > 0 AND ended_at IS NULL AND state = 'blocked'
+`;
+
 function defaultQueryAgents(threshold: number): AgentToolRow[] {
   return db.prepare(QUERY_SQL).all(...COUNTED_TOOLS, threshold) as AgentToolRow[];
 }
@@ -85,24 +105,32 @@ function defaultQueryOrch(threshold: number): AgentToolRow[] {
   return db.prepare(ORCH_QUERY_SQL).all(...COUNTED_TOOLS, threshold) as AgentToolRow[];
 }
 
+function defaultQueryOrchSessions(): AgentSessionRow[] {
+  return db.prepare(ORCH_SESSIONS_SQL).all() as AgentSessionRow[];
+}
+
 function defaultQueryOrchIdleBlocked(minBlockedMs: number, now: number): { agent_id: string }[] {
   return db.prepare(ORCH_IDLE_BLOCKED_SQL).all(now, minBlockedMs) as { agent_id: string }[];
 }
 
+function defaultQueryBlockedWorkers(): { agent_id: string }[] {
+  return db.prepare(BLOCKED_WORKERS_SQL).all() as { agent_id: string }[];
+}
+
 export class HealthMonitor {
-  private readonly defaultThreshold:      number;
-  private readonly orchDefaultThreshold:  number;
+  private readonly defaultThreshold:       number;
+  private readonly orchDefaultThreshold:   number;
   private readonly idleBlockedThresholdMs: number;
-  private readonly intervalMs:            number;
-  private readonly deps:                  HealthMonitorDeps;
+  private readonly intervalMs:             number;
+  private readonly deps:                   HealthMonitorDeps;
   private timer: ReturnType<typeof setInterval> | null = null;
 
   private lastSeenSession     = new Map<string, string>();
   private lastSeenOrchSession = new Map<string, string>();
 
   // One-shot warning keys — cleared on monitor start
-  private warnedOrch         = new Set<string>();
-  private warnedIdleBlocked  = new Set<string>();
+  private warnedOrch        = new Set<string>();
+  private warnedIdleBlocked = new Set<string>();
 
   currentWarnings = new Set<string>();  // worker tool-call threshold
   orchWarnings    = new Set<string>();  // orch tool-call threshold
@@ -116,7 +144,9 @@ export class HealthMonitor {
     this.deps = {
       queryAgents:          defaultQueryAgents,
       queryOrch:            defaultQueryOrch,
+      queryOrchSessions:    defaultQueryOrchSessions,
       queryOrchIdleBlocked: defaultQueryOrchIdleBlocked,
+      queryBlockedWorkers:  defaultQueryBlockedWorkers,
       readSynapseSettings,
       sendMessage,
       ...opts.deps,
@@ -161,19 +191,23 @@ export class HealthMonitor {
       this.currentWarnings.add(id);
     }
 
+    // ── Orchestrator session tracking (unconditional — fixes stale key bug) ───
+    // Update lastSeenOrchSession regardless of threshold crossing so that when
+    // the orch restarts and later climbs above threshold, the session key is fresh
+    // and a new warning message is sent.
+    for (const row of this.deps.queryOrchSessions()) {
+      if (this.lastSeenOrchSession.get(row.agent_id) !== row.session_id) {
+        this.orchWarnings.delete(row.agent_id);
+        this.lastSeenOrchSession.set(row.agent_id, row.session_id);
+      }
+    }
+
     // ── Orchestrator tool-call threshold ──────────────────────────────────────
     const orchThreshold = typeof settings.orchToolCallHint === 'number'
       ? settings.orchToolCallHint
       : this.orchDefaultThreshold;
 
     const orchRows = this.deps.queryOrch(orchThreshold);
-
-    for (const row of orchRows) {
-      if (this.lastSeenOrchSession.get(row.agent_id) !== row.session_id) {
-        this.orchWarnings.delete(row.agent_id);
-        this.lastSeenOrchSession.set(row.agent_id, row.session_id);
-      }
-    }
 
     const orchCrossingIds = new Set(orchRows.map((r) => r.agent_id));
     for (const id of this.orchWarnings) {
@@ -207,11 +241,12 @@ export class HealthMonitor {
       if (!newIdleBlocked.has(id)) this.orchIdleBlocked.delete(id);
     }
     for (const id of newIdleBlocked) {
-      const wasAlreadySet = this.orchIdleBlocked.has(id);
       this.orchIdleBlocked.add(id);
-      if (!wasAlreadySet && !this.warnedIdleBlocked.has(id)) {
-        this.warnedIdleBlocked.add(id);
-        const blockedWorkers = this._getBlockedWorkerIds();
+      // Use session-scoped key so a restarted orch fires a fresh warning
+      const sessionKey = `${id}:${this.lastSeenOrchSession.get(id) ?? ''}`;
+      if (!this.warnedIdleBlocked.has(sessionKey)) {
+        this.warnedIdleBlocked.add(sessionKey);
+        const blockedWorkers = this.deps.queryBlockedWorkers().map((r) => r.agent_id);
         const list = blockedWorkers.length > 0 ? blockedWorkers.join(', ') : 'unknown';
         this.deps.sendMessage(
           'system',
@@ -220,17 +255,6 @@ export class HealthMonitor {
           5,
         );
       }
-    }
-  }
-
-  private _getBlockedWorkerIds(): string[] {
-    try {
-      const rows = db.prepare(
-        `SELECT agent_id FROM agent_status WHERE slot > 0 AND ended_at IS NULL AND state = 'blocked'`
-      ).all() as { agent_id: string }[];
-      return rows.map((r) => r.agent_id);
-    } catch {
-      return [];
     }
   }
 }
