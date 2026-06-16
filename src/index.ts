@@ -340,9 +340,13 @@ program
       ].join('\n') + '\n', 'utf8');
       chmodSync(launchScript, 0o755);
 
-      // No -t: tmux new-window defaults to the current session, placing the orchestrator
-      // window where the operator can see it (distinct from -t synapse-workers used for workers).
-      execSync(`tmux new-window -d -c ${JSON.stringify(cwd)} -n ORCH ${JSON.stringify(launchScript)}`);
+      // Place the orch window immediately after the server window (-a -t windowName).
+      // Fall back to appending at the end if the server window was not named (rare).
+      try {
+        execSync(`tmux new-window -a -t ${JSON.stringify(windowName)} -d -c ${JSON.stringify(cwd)} -n ORCH ${JSON.stringify(launchScript)}`);
+      } catch {
+        execSync(`tmux new-window -d -c ${JSON.stringify(cwd)} -n ORCH ${JSON.stringify(launchScript)}`);
+      }
       process.stderr.write('[Synapse] Launched orchestrator in tmux window "ORCH" (slot :0).\n');
     }
 
