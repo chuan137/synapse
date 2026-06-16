@@ -470,7 +470,7 @@ console.log('\n[Test 20] Auto-compact: fires tmux send-keys at half-threshold');
     thresholdToolCalls: 200,
     deps: makeDeps({
       queryAgents: (t) => t <= 100
-        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a' }]
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a', state: 'idle' }]
         : [],
       getTmuxPane: (id) => panes[id] ?? null,
       execFileSync: (cmd, args) => { tmuxCalls.push({ cmd, args }); },
@@ -495,7 +495,7 @@ console.log('\n[Test 21] Auto-compact: does not fire again for same session');
     thresholdToolCalls: 200,
     deps: makeDeps({
       queryAgents: (t) => t <= 100
-        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a' }]
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a', state: 'idle' }]
         : [],
       getTmuxPane: () => 'pane-1',
       execFileSync: () => { tmuxCalls.push(1); },
@@ -518,7 +518,7 @@ console.log('\n[Test 22] Auto-compact: re-arms after session rotation');
     thresholdToolCalls: 200,
     deps: makeDeps({
       queryAgents: (t) => t <= 100
-        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: sessionId }]
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: sessionId, state: 'idle' }]
         : [],
       getTmuxPane: () => 'pane-1',
       execFileSync: () => { tmuxCalls.push(sessionId); },
@@ -568,7 +568,7 @@ console.log('\n[Test 24] Null-pane: no execFileSync, compactedAgents marked, no 
     thresholdToolCalls: 200,
     deps: makeDeps({
       queryAgents: (t) => t <= 100
-        ? [{ agent_id: 'w:2', role: 'developer', tool_call_count: 105, session_id: 'sess-a' }]
+        ? [{ agent_id: 'w:2', role: 'developer', tool_call_count: 105, session_id: 'sess-a', state: 'idle' }]
         : [],
       getTmuxPane: () => null,
       execFileSync: () => { tmuxCalls.push(1); },
@@ -607,7 +607,7 @@ console.log('\n[Test 25] compactHint auto-tracks live toolCallRestartHint');
       readSynapseSettings: () => ({ toolCallRestartHint: 400 }),
       // Worker at count=200 — below old default (100 < 200 is false but above new half=200 exactly)
       queryAgents: (t) => t <= 200
-        ? [{ agent_id: 'w:9', role: 'developer', tool_call_count: 200, session_id: 'sess-x' }]
+        ? [{ agent_id: 'w:9', role: 'developer', tool_call_count: 200, session_id: 'sess-x', state: 'idle' }]
         : [],
       getTmuxPane: () => 'pane-9',
       execFileSync: () => { tmuxCalls.push(1); },
@@ -624,7 +624,7 @@ console.log('\n[Test 25] compactHint auto-tracks live toolCallRestartHint');
     deps: makeDeps({
       readSynapseSettings: () => ({}),
       queryAgents: (t) => t <= 100
-        ? [{ agent_id: 'w:10', role: 'developer', tool_call_count: 100, session_id: 'sess-y' }]
+        ? [{ agent_id: 'w:10', role: 'developer', tool_call_count: 100, session_id: 'sess-y', state: 'idle' }]
         : [],
       getTmuxPane: () => 'pane-10',
       execFileSync: () => { tmuxCalls2.push(1); },
@@ -632,6 +632,92 @@ console.log('\n[Test 25] compactHint auto-tracks live toolCallRestartHint');
   });
   hm2['_poll']();
   assert(tmuxCalls2.length === 1, `T25b: compact fires at count=100 when toolCallRestartHint unset (default half=100)`);
+}
+
+// ── Test 26: working-state worker not compacted ───────────────────────────────
+
+console.log('\n[Test 26] Auto-compact: working-state worker skipped, not added to compactedAgents');
+
+{
+  const tmuxCalls = [];
+  const pingCalls = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a', state: 'working' }]
+        : [],
+      getTmuxPane: () => 'pane-1',
+      execFileSync: (cmd, args) => { tmuxCalls.push({ cmd, args }); },
+      pingAgent: (id) => { pingCalls.push(id); return true; },
+    }),
+  });
+  hm['_poll']();
+  assert(tmuxCalls.length === 0, `T26a: execFileSync not called for working-state worker`);
+  assert(pingCalls.length === 0, `T26b: pingAgent not called for working-state worker`);
+  assert(!hm['compactedAgents'].has('w:1:sess-a'), `T26c: sessionKey NOT added to compactedAgents (allows retry when idle)`);
+}
+
+// ── Test 27: idle-state worker compacted + nudge called ───────────────────────
+
+console.log('\n[Test 27] Auto-compact: idle-state worker compacted + pingAgent called');
+
+{
+  const tmuxCalls = [];
+  const pingCalls = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a', state: 'idle' }]
+        : [],
+      getTmuxPane: () => 'pane-1',
+      execFileSync: (cmd, args) => { tmuxCalls.push({ cmd, args }); },
+      pingAgent: (id) => { pingCalls.push(id); return true; },
+    }),
+  });
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T27a: execFileSync called once for idle-state worker`);
+  assert(pingCalls.length === 1, `T27b: pingAgent called once after compact`);
+  assert(pingCalls[0] === 'w:1', `T27c: pingAgent called with correct agent_id`);
+  assert(hm['compactedAgents'].has('w:1:sess-a'), `T27d: sessionKey added to compactedAgents`);
+}
+
+// ── Test 28: working on poll N, idle on poll N+1 → compact fires only on N+1 ──
+
+console.log('\n[Test 28] Auto-compact: working on poll N → no compact; idle on poll N+1 → compact fires');
+
+{
+  let workerState = 'working';
+  const tmuxCalls = [];
+  const pingCalls = [];
+  const hm = new HealthMonitor({
+    thresholdToolCalls: 200,
+    deps: makeDeps({
+      queryAgents: (t) => t <= 100
+        ? [{ agent_id: 'w:1', role: 'developer', tool_call_count: 105, session_id: 'sess-a', state: workerState }]
+        : [],
+      getTmuxPane: () => 'pane-1',
+      execFileSync: (cmd, args) => { tmuxCalls.push({ cmd, args }); },
+      pingAgent: (id) => { pingCalls.push(id); return true; },
+    }),
+  });
+
+  // Poll N: working → no compact
+  hm['_poll']();
+  assert(tmuxCalls.length === 0, `T28a: no compact on poll N when working`);
+  assert(!hm['compactedAgents'].has('w:1:sess-a'), `T28b: sessionKey not added on poll N`);
+
+  // Poll N+1: idle → compact fires
+  workerState = 'idle';
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T28c: compact fires on poll N+1 when idle (got ${tmuxCalls.length})`);
+  assert(pingCalls.length === 1, `T28d: pingAgent called on poll N+1`);
+  assert(hm['compactedAgents'].has('w:1:sess-a'), `T28e: sessionKey added on poll N+1`);
+
+  // Poll N+2: same session, already compacted → no re-fire
+  hm['_poll']();
+  assert(tmuxCalls.length === 1, `T28f: no second compact on poll N+2 (got ${tmuxCalls.length})`);
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

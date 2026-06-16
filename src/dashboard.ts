@@ -141,7 +141,7 @@ let lastOrchIdle     = '';
 const nudger = new Nudger();
 nudger.start(500);
 
-const healthMonitor = new HealthMonitor();
+const healthMonitor = new HealthMonitor({ deps: { pingAgent: (id) => nudger.pingAgent(id) } });
 healthMonitor.start();
 
 setInterval(() => {

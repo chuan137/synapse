@@ -11,6 +11,7 @@ interface AgentToolRow {
   role: string | null;
   tool_call_count: number;
   session_id: string;
+  state: string;  // 'idle' | 'working' | 'blocked' | 'error'
 }
 
 interface AgentSessionRow {
@@ -28,6 +29,7 @@ interface HealthMonitorDeps {
   execFileSync:         typeof execFileSync;
   readSynapseSettings:  typeof readSynapseSettings;
   sendMessage:          typeof sendMessage;
+  pingAgent:            (agentId: string) => boolean;
 }
 
 interface HealthMonitorOptions {
@@ -44,6 +46,7 @@ const QUERY_SQL = `
   SELECT a.agent_id,
          a.role,
          a.session_id,
+         a.state,
          COUNT(tm.id) AS tool_call_count
     FROM agent_status a
     JOIN tool_metrics tm
@@ -61,6 +64,7 @@ const ORCH_QUERY_SQL = `
   SELECT a.agent_id,
          a.role,
          a.session_id,
+         a.state,
          COUNT(tm.id) AS tool_call_count
     FROM agent_status a
     JOIN tool_metrics tm
@@ -158,6 +162,7 @@ export class HealthMonitor {
       execFileSync,
       readSynapseSettings,
       sendMessage,
+      pingAgent:            () => false,
       ...opts.deps,
     };
   }
@@ -215,6 +220,8 @@ export class HealthMonitor {
       for (const row of compactRows) {
         const sessionKey = `${row.agent_id}:${row.session_id}`;
         if (this.compactedAgents.has(sessionKey)) continue;
+        // Only compact when idle — send-keys into a mid-tool-call agent corrupts input.
+        if (row.state !== 'idle') continue;
         this.compactedAgents.add(sessionKey);
         const pane = this.deps.getTmuxPane(row.agent_id);
         if (!pane) {
@@ -222,6 +229,8 @@ export class HealthMonitor {
           continue;
         }
         this.deps.execFileSync('tmux', ['send-keys', '-t', pane, '/compact', 'Enter']);
+        // Nudge after compact so agent picks up its next pending message once PostCompact finishes.
+        this.deps.pingAgent(row.agent_id);
       }
     }
 
