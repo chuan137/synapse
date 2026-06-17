@@ -16,17 +16,11 @@ Each agent runs as its own Claude Code CLI session (currently interactive termin
 
 **The Synapse bus** is the only communication layer between agents and the operator. Everything swarm-visible flows through it; S-Deck renders it live.
 
-**Messaging** — three calls drive the bus:
+Synapse bus messages carry a priority:
 
-- `read_messages` — receive messages. Synapse nudges you to call it each turn; call it yourself mid-turn when waiting on a reply
-- `send_message` — send to the operator (`human`) or another agent by agent ID
-- `update_status` — broadcast your current state to the dashboard; not a reply
-
-Messages carry a priority:
-
-**P0** — urgent. Stop everything, handle it, confirm via `send_message`.
+**P0** — urgent. Stop everything, handle it.
 **P5** — normal. Handle at your next checkpoint.
-Match priority on replies: P0 question → P0 reply.
+
 
 **MCP tools:**
 
@@ -46,8 +40,8 @@ Match priority on replies: P0 question → P0 reply.
 
 | File | When to create | Who writes | Who reads |
 |---|---|---|---|
-| `<id>-plan.md` | Research/Plan step — investigation output or design spec | Planner (or developer) worker | Worker, before executing |
 | `<id>.md` | Handoff — full task brief when content exceeds ~300 tokens | Orchestrator (`delegate_task` with `task_file: true`) | Worker, as task instructions |
+| `<id>-plan.md` | Research/Plan step — investigation output or design spec | Planner (or developer) worker | Worker, before executing |
 | `<id>-report.md` | Worker DONE — detailed findings, diffs, or results too long for inline | Worker (`report_done` with `report_file: true`) | Orchestrator, after worker finishes |
 | `<id>-review.md` | Verify step — code-reviewer output when review is too long for inline | Code-reviewer worker | Orchestrator, before merge |
 
@@ -61,15 +55,14 @@ Rules:
 
 ## 2. Mandatory Collaboration Rules
 
-**Rule 1 — Respond on the bus to whoever tasked you.**
-The orchestrator responds to the human; workers respond to their orchestrator. `read_messages` to receive, `send_message` to reply.
+**Rule 1 — Respond on the bus to whoever tasked you.** The orchestrator responds to the human; workers respond to their orchestrator.
 
-**1.1 — Every turn ends by sending results back to the initiator.** When a turn's work is done, the result goes via `send_message` to whoever started the exchange — never scratchpad/terminal output only. Markdown written to the CLI does not count as a reply, even if it looks complete.
-*Trigger:* any message this turn from `human` or another agent that asks a question, requests action, or contains "?" produces a `send_message` reply BEFORE turn end. Full answer, not a summary.
+**1.1 - Every turn ends by responding back to the initiator.** Full answer, not a summary. Send the respond via Synapse bus. Do not send to the scratchpad in terminal.
+**1.2 - Match priority on replies.** P0 question → P0 reply.
 
-**Rule 2 — Broadcast every state change.**
-Call `update_status` whenever your state changes, at every phase transition, and at the end of every turn.
-States: `idle` · `working` · `error` (report these yourself) · `blocked` (set automatically — do not report it yourself)
+**Rule 2 — Broadcast every state change.** Update your state changes at the start/end of every turn. And at every phase transition.
+
+**States**: `idle` · `working` · `error` (report these yourself) · `blocked` (set automatically — do not report it yourself)
 
 Phase transitions that fire `update_status` (orchestrators especially — workers transition less often):
 
@@ -81,8 +74,9 @@ Phase transitions that fire `update_status` (orchestrators especially — worker
 
 `current_task` describes the work, not the state. Write `"split working-tree changes into 5 commits"`, not `"Working on — split …"`. Vague statuses (`"thinking"`, `"processing"`, `"preparing..."`) are forbidden — be concrete or skip the update.
 
-**Rule 3 — Announce milestones. Stay silent otherwise.**
-The operator watches the deck, not your scratchpad. The moment one of these occurs, fire a one-line `send_message` (`content="<TAG> …"`, priority 5) to `human` before moving on:
+**Rule 3 — Announce milestones. Stay silent otherwise.** Self report to operator your behaviors in turn.
+
+The moment one of these occurs, fire a one-line `send_message` (`content="<TAG> …"`, priority 5) to `human` before moving on:
 
 | Tag | Fire it when… |
 |---|---|
@@ -99,19 +93,22 @@ Worker exceptions: `DONE` is posted automatically by `report_done` — do not po
 If a turn produced none of the above, stay silent.
 
 **Rule 4 — Non-trivial code changes happen in a worktree.**
-If the task touches more than one file or modifies more than 3 lines, the orchestrator creates a worktree and the worker commits inside it. Skip only for trivial single-file tweaks under 3 lines — there the worker edits the main working tree and leaves the change uncommitted; the orchestrator commits after DONE. See [Worktree Reference](#worktree-reference) for CLI commands and sequence.
+If the task touches more than one file or modifies more than 3 lines, the orchestrator creates a worktree and the worker commits inside it.
+Skip only for trivial single-file tweaks under 3 lines — there the worker edits the main working tree and leaves the change uncommitted; the orchestrator commits after DONE.
+See [Worktree Reference](#worktree-reference) for CLI commands and sequence.
 
 ---
 
 ## 3. Pitfalls — what NOT to do
 
-**Don't coordinate swarm work through the local Task tools.**
-You may see a `<system-reminder>` suggesting `TaskCreate` / `TaskUpdate` / `TaskList`. These tools are **private to your session** — S-Deck and other agents cannot see them. Use the bus for anything swarm-visible: `send_message`, `update_status`, `delegate_task`. Task* is fine for private, single-session planning only — swarm coordination that goes through Task* instead of the bus is silently lost. Orchestrators don't use them at all: their only task tracker is `start_task` / `finish_task`.
-
 **Don't confuse subagents with Synapse workers.**
-**Synapse workers** are long-lived agents registered on the bus. Delegating to a worker keeps each agent's context clean and makes the work visible on S-Deck. **Subagents** (`Agent` tool) are short-lived helpers you spin up inside your own workflow — parallel research, isolated reads — invisible to the bus and gone when done.
+**Synapse workers** are long-lived agents registered on the bus. Delegating to a worker keeps each agent's context clean and makes the work visible on S-Deck.
+**Subagents** (`Agent` tool) are short-lived helpers you spin up inside your own workflow — parallel research, isolated reads — invisible to the bus and gone when done.
 
 The distinction matters for delegation: when the orchestrator splits off a subtask, that work goes to a Synapse worker so the operator can track it. When you (orchestrator or worker) need a tool to help execute your own task, subagents are the right choice.
+
+**Don't coordinate Synapse workers through the local Task tools.** 
+You may see a `<system-reminder>` suggesting `TaskCreate` / `TaskUpdate` / `TaskList`. Do not use them to coordinate Synapse workers. Orchestrator should Use `start_task` / `finish_task`.
 
 ---
 
