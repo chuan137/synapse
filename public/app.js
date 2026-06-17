@@ -583,27 +583,7 @@
     if (!sectionEl) return;
     sectionEl.innerHTML = '<div style="color:var(--muted);font-size:11px">Loading…</div>';
 
-    const [liveResults, counts, proposals] = await Promise.all([
-      fetch('/api/eval/live').then(r => r.json()),
-      fetch('/api/eval/counts').then(r => r.json()),
-      fetch('/api/proposals').then(r => r.json()),
-    ]);
-
-    const METRICS = ['traceability', 'tool_calls', 'duration', 'has_commit'];
-    const THRESHOLD = 3;
-    const counterHtml = `<div class="eval-counters">
-      ${METRICS.map(m => {
-        const count = counts[m] ?? 0;
-        const color = count >= THRESHOLD ? 'var(--p0)' : count >= 2 ? 'var(--warn)' : 'var(--muted)';
-        const btn = count >= THRESHOLD
-          ? `<button class="btn-gen-proposal" data-metric="${esc(m)}" style="margin-left:6px;font-size:9px;padding:1px 6px">Generate proposal</button>`
-          : '';
-        return `<div class="eval-counter" style="display:flex;align-items:center;gap:4px">
-          <span style="color:${color}">${m}: ${count}/${THRESHOLD}</span>
-          ${btn}
-        </div>`;
-      }).join('')}
-    </div>`;
+    const liveResults = await fetch('/api/eval/live').then(r => r.json());
 
     const showPassing = localStorage.getItem('synapse_eval_show_passing') === 'true';
     const visibleRows = showPassing ? liveResults : liveResults.filter(r => !r.pass);
@@ -632,59 +612,16 @@
         </div>`;
       }).join('');
 
-    const proposalsHtml = proposals.length === 0
-      ? '<div style="color:var(--muted);font-size:11px">No proposals yet.</div>'
-      : proposals.map(p => {
-        const statusColor = p.status === 'deployed' ? 'var(--idle)'
-          : p.verdict?.deploy_recommended ? 'var(--idle)'
-          : p.status === 'gate_rejected' ? 'var(--p0)'
-          : 'var(--muted)';
-        const verdictHtml = p.verdict ? `<div style="font-size:10px;margin-bottom:4px">
-          ${p.verdict.regression_prevented ? '✓' : '✗'} prevents failure &nbsp;
-          ${p.verdict.regression_free ? '✓' : '✗'} regression-free &nbsp;
-          ${p.verdict.size_ok ? '✓' : '✗'} size ok
-        </div>` : '';
-        const btnsHtml = p.status !== 'deployed' ? `
-          <button class="btn-proposal" data-action="gate" data-file="${esc(p.filename)}">Run Gate</button>
-          <button class="btn-proposal" data-action="regenerate" data-file="${esc(p.filename)}">Regenerate</button>
-          ${p.verdict?.deploy_recommended ? `<button class="btn-proposal btn-deploy" data-action="deploy" data-file="${esc(p.filename)}">Deploy</button>` : ''}
-        ` : '<span style="color:var(--idle);font-size:10px">Deployed ✓</span>';
-        return `<div class="eval-row proposal-row" data-file="${esc(p.filename)}">
-          <div class="eval-row-header">
-            <span class="eval-label" style="color:${statusColor}">${esc(p.status.toUpperCase())}</span>
-            <span style="font-size:10px;color:var(--muted)">${esc(p.metric)} · ${esc(p.timestamp)}</span>
-          </div>
-          <div class="eval-title" style="margin:4px 0">${esc((p.rootCause || '').slice(0, 80))}</div>
-          <div style="font-size:10px;color:var(--muted);margin-bottom:6px">→ ${esc((p.proposedChange || '').slice(0, 100))}</div>
-          ${verdictHtml}
-          <div class="proposal-btns">${btnsHtml}</div>
-        </div>`;
-      }).join('');
-
     sectionEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-        <button id="eval-run-btn" class="btn-run-eval">▶ Run improvement loop</button>
         <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer">
           <input type="checkbox" id="eval-show-passing" ${showPassing ? 'checked' : ''}>
           Show passing
         </label>
-        <span id="eval-run-status" style="font-size:10px;color:var(--muted)"></span>
       </div>
-      ${counterHtml}
       <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Recent evals (${visibleRows.length}${showPassing ? '' : ' failures'})</div>
       <div id="eval-rows-list">${rowsHtml}</div>
-      <div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Proposals (${proposals.length})</div>
-      <div id="proposals-list">${proposalsHtml}</div>
     `;
-
-    sectionEl.querySelector('#eval-run-btn').addEventListener('click', async () => {
-      const btn = sectionEl.querySelector('#eval-run-btn');
-      const status = sectionEl.querySelector('#eval-run-status');
-      btn.disabled = true;
-      status.textContent = 'Starting…';
-      await fetch('/api/eval/run', { method: 'POST' });
-      status.textContent = 'Loop started — re-run eval to see updated results';
-    });
 
     sectionEl.querySelector('#eval-show-passing').addEventListener('change', (e) => {
       localStorage.setItem('synapse_eval_show_passing', e.target.checked);
@@ -698,38 +635,6 @@
         openInsightsModal(`Eval case #${taskId}`,
           `<pre class="insights-modal-pre">${esc(JSON.stringify(data, null, 2))}</pre>`);
       });
-    });
-
-    sectionEl.querySelectorAll('.btn-gen-proposal').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const metric = btn.dataset.metric;
-        btn.disabled = true;
-        btn.textContent = 'Spawning…';
-        try {
-          await fetch('/api/proposals/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ metric }),
-          });
-          btn.textContent = 'Spawned ✓';
-        } catch {
-          btn.textContent = 'Error';
-        }
-      });
-    });
-
-    sectionEl.querySelector('#proposals-list').addEventListener('click', async (e) => {
-      const btn = e.target.closest('.btn-proposal');
-      if (!btn) return;
-      const action = btn.dataset.action;
-      const file = btn.dataset.file;
-      btn.disabled = true;
-      try {
-        await fetch(`/api/proposals/${encodeURIComponent(file)}/${action}`, { method: 'POST' });
-        renderEvalSection(insightsEl);
-      } catch {
-        btn.disabled = false;
-      }
     });
   }
 
