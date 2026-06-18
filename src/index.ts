@@ -434,7 +434,7 @@ function attachMergeCommit(root: string, name: string): void {
   }
   try {
     const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-    const taskId = attachCommitToTaskBySlot(slot, headSha);
+    const taskId = attachCommitToTaskBySlot(slot, headSha, root);
     if (taskId !== null) {
       process.stderr.write(`[worktree merge] attached ${headSha.slice(0, 7)} to slot :${slot} task\n`);
       const indexJs = join(dirname(fileURLToPath(import.meta.url)), 'index.js');

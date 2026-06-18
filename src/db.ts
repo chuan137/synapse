@@ -163,6 +163,7 @@ export function openDb(dbPath: string): Database.Database {
     `ALTER TABLE agent_status ADD COLUMN current_task_id INTEGER`,
     `ALTER TABLE tool_metrics ADD COLUMN task_id INTEGER`,
     `ALTER TABLE agent_status ADD COLUMN ready_at INTEGER`,
+    `ALTER TABLE tasks ADD COLUMN commit_cwd TEXT`,
   ]) {
     try { database.exec(sql); } catch { /* already applied or not applicable */ }
   }
@@ -629,15 +630,17 @@ export function finishTask(
   status: 'completed' | 'aborted',
   resultMsgId: number | null,
   commitSha: string | null,
+  commitCwd: string | null = null,
 ): boolean {
   const r = db.prepare(`
     UPDATE tasks
        SET status        = ?,
            finished_at   = COALESCE(finished_at, ?),
            result_msg_id = COALESCE(?, result_msg_id),
-           commit_sha    = COALESCE(?, commit_sha)
+           commit_sha    = COALESCE(?, commit_sha),
+           commit_cwd    = COALESCE(?, commit_cwd)
      WHERE id = ? AND status != 'aborted'
-  `).run(status, Date.now(), resultMsgId, commitSha, taskId);
+  `).run(status, Date.now(), resultMsgId, commitSha, commitCwd, taskId);
   return r.changes > 0;
 }
 
@@ -669,7 +672,7 @@ export function getMostRecentInProgressTask(agentId: string): { id: number } | n
  * and mark it completed. Prefers tasks recorded for the committing agent, falls
  * back to the most recently started in-progress task across all agents.
  */
-export function attachCommitToCurrentTask(agentId: string, commitSha: string): number | null {
+export function attachCommitToCurrentTask(agentId: string, commitSha: string, commitCwd: string | null = null): number | null {
   const row = db.prepare(`
     SELECT id FROM tasks
     WHERE status = 'in_progress' AND commit_sha IS NULL
@@ -679,10 +682,11 @@ export function attachCommitToCurrentTask(agentId: string, commitSha: string): n
   db.prepare(`
     UPDATE tasks
        SET commit_sha  = ?,
+           commit_cwd  = COALESCE(?, commit_cwd),
            status      = 'completed',
            finished_at = COALESCE(finished_at, ?)
      WHERE id = ?
-  `).run(commitSha, Date.now(), row.id);
+  `).run(commitSha, commitCwd, Date.now(), row.id);
   return row.id;
 }
 
@@ -691,7 +695,7 @@ export function attachCommitToCurrentTask(agentId: string, commitSha: string): n
  * the given slot, and mark it completed. Used by `synapse worktree merge` to link the
  * integration commit to the worker's task. Returns the task ID if updated, null otherwise.
  */
-export function attachCommitToTaskBySlot(slot: number, commitSha: string): number | null {
+export function attachCommitToTaskBySlot(slot: number, commitSha: string, commitCwd: string | null = null): number | null {
   const agent = getAgentBySlot(slot);
   if (!agent) return null;
   const row = db.prepare(`
@@ -703,10 +707,11 @@ export function attachCommitToTaskBySlot(slot: number, commitSha: string): numbe
   db.prepare(`
     UPDATE tasks
        SET commit_sha  = ?,
+           commit_cwd  = COALESCE(?, commit_cwd),
            status      = 'completed',
            finished_at = COALESCE(finished_at, ?)
      WHERE id = ?
-  `).run(commitSha, Date.now(), row.id);
+  `).run(commitSha, commitCwd, Date.now(), row.id);
   return row.id;
 }
 

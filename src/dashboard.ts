@@ -914,10 +914,18 @@ app.get('/api/commit/:sha/diff', (req: Request, res: Response) => {
     res.status(400).json({ error: 'invalid sha' });
     return;
   }
+  // Look up the directory where this commit was made, fall back to GIT_CWD.
+  const row = db.prepare<[string], { commit_cwd: string | null }>(
+    `SELECT commit_cwd FROM tasks WHERE commit_sha = ? LIMIT 1`
+  ).get(sha);
+  let repoCwd = GIT_CWD;
+  if (row?.commit_cwd && existsSync(row.commit_cwd) && existsSync(join(row.commit_cwd, '.git'))) {
+    repoCwd = row.commit_cwd;
+  }
   try {
-    const diff = execFileSync('git', ['show', '--stat', '-p', sha], { encoding: 'utf8', cwd: GIT_CWD });
-    const subject = execFileSync('git', ['log', '-1', '--format=%s', sha], { encoding: 'utf8', cwd: GIT_CWD }).trim();
-    res.json({ sha, subject, diff });
+    const diff = execFileSync('git', ['show', '--stat', '-p', sha], { encoding: 'utf8', cwd: repoCwd });
+    const subject = execFileSync('git', ['log', '-1', '--format=%s', sha], { encoding: 'utf8', cwd: repoCwd }).trim();
+    res.json({ sha, subject, diff, repo_cwd: repoCwd });
   } catch {
     res.status(404).json({ error: 'commit not found' });
   }

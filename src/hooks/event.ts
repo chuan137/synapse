@@ -119,11 +119,12 @@ function emitDeterministicMilestones(hookType: string, sessionId: string, payloa
   const firstLine = subject.split(/\\n|\n/)[0].trim();
   postMilestoneOnce(sessionId, `✅ committed ${hash}: ${firstLine}`.slice(0, MAX_LEN));
 
-  // Attach the commit SHA to this agent's current in_progress task (if any).
+  // Attach the commit SHA (and the working directory) to this agent's current in_progress task (if any).
   const agentId = getAgentIdBySession(sessionId);
+  const commitCwd: string | null = typeof payload.tool_input?.cwd === 'string' ? payload.tool_input.cwd : null;
   if (agentId) {
     try {
-      const taskId = attachCommitToCurrentTask(agentId, hash);
+      const taskId = attachCommitToCurrentTask(agentId, hash, commitCwd);
       if (taskId !== null) {
         const indexJs = join(dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
         const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(taskId)], {
