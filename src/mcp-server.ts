@@ -663,17 +663,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
     // Safety net: clear cookie from any worker still attributed to this task
     clearCurrentTaskIdForTask(task_id);
-    // Fire-and-forget: extract C3 case file for this task
-    setImmediate(async () => {
-      try {
-        const { extractCases } = await import('./eval/extract.js');
-        const evalDir = join(dirname(DB_PATH), 'evaluations');
-        extractCases(DB_PATH, evalDir, 1, task_id);
-      } catch (err: any) {
-        console.warn(`[finish_task] auto-extract failed for task ${task_id}:`, err?.message ?? err);
-      }
-    });
     if (ok && status === 'completed') {
+      // `eval --task-id` extracts the case file AND evaluates/persists/threshold-checks it —
+      // no separate extractCases() call needed here (that was duplicate work).
       const indexJs = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
       const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(task_id)], {
         detached: true,
@@ -681,6 +673,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         env: { ...process.env },
       });
       child.unref();
+    } else {
+      // Aborted tasks aren't evaluated (no pass/fail thresholds apply), but still get a case
+      // file extracted for the record.
+      setImmediate(async () => {
+        try {
+          const { extractCases } = await import('./eval/extract.js');
+          const evalDir = join(dirname(DB_PATH), 'evaluations');
+          extractCases(DB_PATH, evalDir, 1, task_id);
+        } catch (err: any) {
+          console.warn(`[finish_task] auto-extract failed for task ${task_id}:`, err?.message ?? err);
+        }
+      });
     }
     // Auto-restart after AUTO_RESTART_AFTER_TASKS completed tasks
     const settings = readSynapseSettings();
