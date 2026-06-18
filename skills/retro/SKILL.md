@@ -20,7 +20,7 @@ Skip for trivial back-and-forth (single-message answers, status checks). The tri
 
 1. `get_history` — last ~30 messages (routing decisions, operator replies, worker reports)
 2. The closed task record: `task_id`, `started_at`, `finished_at`, `commit_sha`, `trigger_msg_id`, `result_msg_id`
-3. `PLAN.md` current state (`.synapse/PLAN.md`)
+3. `progress.md` current state (`.synapse/progress.md`)
 4. `git log --oneline -5` — recent commits in context
 
 Don't pad the retro with what you haven't read. If a source is unavailable, say so.
@@ -85,7 +85,7 @@ The model's natural bias is to soft-pedal its own mistakes. Counter it:
 - "Task completed successfully" — that's in the tasks table, not here.
 - Generic praise/blame ("worker did well", "worker dropped the ball") — not actionable.
 - Restating what happened without analysis — that's a diary, not a retro.
-- Speculation about future work — that belongs in PLAN.md.
+- Speculation about future work — that belongs in `.synapse/progress.md`.
 - LLM filler ("valuable lessons", "great collaboration", "I'm proud of") — noise.
 
 **Required specificity:** cite message ids, file paths, commit SHAs whenever you make a claim. Vague observations are noise. "The spec was unclear" is noise; "spec msg 1593 omitted the output path — worker had to infer it, added one round-trip" is a retro entry.
@@ -97,6 +97,6 @@ The model's natural bias is to soft-pedal its own mistakes. Counter it:
 
 **Minimum viable retro:** If genuinely nothing useful after honest reflection, write 2 lines stating that and naming the bar that wasn't cleared. Don't pad to look thorough.
 
-**If the retro reveals a systemic defect:** file a PLAN.md item and reference it from the retro with the PLAN.md line number or section.
+**If the retro reveals a systemic defect:** file a `.synapse/progress.md` item and reference it from the retro with the section/line.
 
 **Scope:** Retros are about orchestration quality — routing, specs, delegation, operator interaction. Not about worker implementation quality (that's the code reviewer's job) and not about the product feature itself.
