@@ -760,7 +760,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const preview = lines.slice(0, 3).join('\n');
       outboundContent = `Task brief at .synapse/tasks/${fileId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
     }
-    const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority);
+    const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority, false, undefined, task_id ?? null);
     // Set worker cookie: attribute subsequent tool_metrics rows to this task.
     // Only set when task_id is known; orchestrators never receive a cookie.
     if (task_id !== undefined) {

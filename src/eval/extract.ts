@@ -325,25 +325,17 @@ function buildRoutingQuality(db: any, task: any): RoutingQuality {
   const startedAt: number = task.started_at;
   const finishedAt: number | null = task.finished_at ?? null;
 
-  // reroute_count: distinct workers the orchestrator (slot 0) sent messages to
-  // during the task's time window, minus 1 (first delegation is not a reroute).
-  // Uses time-window proxy because delegate_task doesn't stamp messages.task_id.
-  const orchRow = db.prepare(
-    `SELECT agent_id FROM agent_status WHERE slot = 0 AND ended_at IS NULL LIMIT 1`
-  ).get() as { agent_id: string } | undefined;
-
-  let rerouteCount = 0;
-  if (orchRow) {
-    const distinctWorkers = db.prepare(`
-      SELECT COUNT(DISTINCT to_id) AS cnt FROM messages
-      WHERE from_id = ?
-        AND to_id != 'human'
-        AND to_id != 'system'
-        AND created_at >= ?
-        AND created_at <= COALESCE(?, 9999999999999)
-    `).get(orchRow.agent_id, startedAt, finishedAt) as { cnt: number } | undefined;
-    rerouteCount = Math.max(0, (distinctWorkers?.cnt ?? 1) - 1);
-  }
+  // reroute_count: distinct workers the orchestrator sent messages to for this
+  // task (via messages.task_id stamped by delegate_task), minus 1 (first
+  // delegation is not a reroute).
+  const distinctWorkers = db.prepare(`
+    SELECT COUNT(DISTINCT to_id) AS cnt FROM messages
+    WHERE task_id = ?
+      AND to_id != 'human'
+      AND to_id != 'system'
+      AND NOT (to_id LIKE '%:0')
+  `).get(taskId) as { cnt: number } | undefined;
+  const rerouteCount = Math.max(0, (distinctWorkers?.cnt ?? 1) - 1);
 
   // escalation_count: 'escalate' decisions logged for this task
   const escalationRow = db.prepare(
@@ -355,16 +347,16 @@ function buildRoutingQuality(db: any, task: any): RoutingQuality {
     `SELECT COUNT(*) AS cnt FROM orch_decisions WHERE related_task_id = ?`
   ).get(taskId) as { cnt: number };
 
-  // time_to_first_done_ms: from task.started_at to first message with type='done'
+  // time_to_first_done_ms: from task.started_at to first done message addressed to the orchestrator
   const firstDoneRow = db.prepare(`
     SELECT created_at FROM messages
     WHERE type = 'done'
-      AND (from_id = ? OR to_id = ?)
+      AND to_id = ?
       AND created_at >= ?
       AND created_at <= COALESCE(?, 9999999999999)
     ORDER BY created_at
     LIMIT 1
-  `).get(task.agent_id, task.agent_id, startedAt, finishedAt) as { created_at: number } | undefined;
+  `).get(task.agent_id, startedAt, finishedAt) as { created_at: number } | undefined;
 
   return {
     reroute_count: rerouteCount,

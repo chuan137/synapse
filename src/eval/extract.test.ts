@@ -44,7 +44,7 @@ test('routing_quality: baseline — one worker, decisions logged, done message',
   d.pragma('foreign_keys = OFF');
 
   d.prepare(`INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at) VALUES (10, 'orch:0', 'baseline task', 'completed', 1000, 5000)`).run();
-  d.prepare(`INSERT INTO messages (from_id, to_id, content, created_at, type) VALUES ('orch:0', 'worker:1', 'Do X', 1500, 'message')`).run();
+  d.prepare(`INSERT INTO messages (from_id, to_id, content, created_at, type, task_id) VALUES ('orch:0', 'worker:1', 'Do X', 1500, 'message', 10)`).run();
   d.prepare(`INSERT INTO orch_decisions (agent_id, kind, value, related_task_id, created_at) VALUES ('orch:0', 'route', 'worker:1', 10, 1200)`).run();
   d.prepare(`INSERT INTO messages (from_id, to_id, content, created_at, type) VALUES ('worker:1', 'orch:0', 'DONE', 4500, 'done')`).run();
 
@@ -65,9 +65,9 @@ test('routing_quality: two distinct workers → reroute_count = 1', async () => 
   const d = openDb(DB_FILE);
   d.pragma('foreign_keys = OFF');
 
-  d.prepare(`INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at) VALUES (11, 'orch:0', 'rerouted task', 'completed', 2000, 8000)`).run();
-  d.prepare(`INSERT INTO messages (from_id, to_id, content, created_at, type) VALUES ('orch:0', 'worker:2', 'Do Y', 2500, 'message')`).run();
-  d.prepare(`INSERT INTO messages (from_id, to_id, content, created_at, type) VALUES ('orch:0', 'worker:3', 'Review Y', 5000, 'message')`).run();
+  d.prepare(`INSERT OR IGNORE INTO tasks (id, agent_id, title, status, started_at, finished_at) VALUES (11, 'orch:0', 'rerouted task', 'completed', 5100, 9000)`).run();
+  d.prepare(`INSERT INTO messages (from_id, to_id, content, created_at, type, task_id) VALUES ('orch:0', 'worker:2', 'Do Y', 5500, 'message', 11)`).run();
+  d.prepare(`INSERT INTO messages (from_id, to_id, content, created_at, type, task_id) VALUES ('orch:0', 'worker:3', 'Review Y', 7000, 'message', 11)`).run();
 
   d.close();
 
@@ -77,12 +77,7 @@ test('routing_quality: two distinct workers → reroute_count = 1', async () => 
   const rq = cases[0].routing_quality;
   assert.equal(rq.reroute_count, 1, 'two distinct workers = 1 reroute');
   assert.equal(rq.no_decisions_logged, true, 'no decisions logged for task 11');
-  // time_to_first_done_ms may pick up a done message from another task in the same DB/window;
-  // assert it's either null or a positive number (not negative or NaN).
-  assert.ok(
-    rq.time_to_first_done_ms === null || rq.time_to_first_done_ms > 0,
-    'time_to_first_done_ms must be null or positive',
-  );
+  assert.equal(rq.time_to_first_done_ms, null, 'no done message seeded for task 11');
 });
 
 test('routing_quality: escalation logged', async () => {
