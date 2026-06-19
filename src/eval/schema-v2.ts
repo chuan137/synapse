@@ -43,6 +43,13 @@ export interface BlockedEvent {
   category: 'CONFUSED' | 'WAITING' | 'ERROR' | 'OTHER';
 }
 
+export interface RoutingQuality {
+  reroute_count: number;           // distinct workers delegated to for this task (from orchestrator msgs in time window), minus 1; floor 0
+  escalation_count: number;        // number of 'escalate' decisions logged in orch_decisions for this task
+  no_decisions_logged: boolean;    // true when zero orch_decisions rows exist for this task
+  time_to_first_done_ms: number | null;  // ms from task start to first done-type message
+}
+
 export interface ThresholdsFile {
   calibrated_at: string;
   sample_size: Record<string, number>;

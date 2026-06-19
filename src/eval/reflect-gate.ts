@@ -30,10 +30,12 @@ import { db, DB_PATH, sendMessage, getAgentState } from '../db.js';
 //                           This gate sleeps inside this same process; that's
 //                           the whole point of spawning it standalone.
 //
-// On any trip, sends a single mandatory (P0) bus message to the live
-// orchestrator instructing it to run `/reflect-task <task_id>` — mandatory
-// per the rule added to templates/SYNAPSE-orchestrator.md, not just a nudge
-// it can ignore.
+// On any trip, sends a single bus message to the live orchestrator with the
+// gate signal and threshold delta. The orchestrator must respond: either run
+// `/reflect-task <task_id>` or post `DECISION: skip reflect-task <task_id> — <reason>`.
+// Note: gates 1 and 2 hard-trip when value > threshold. The idle-drift
+// probabilistic layer (gate 3) only activates in the no-hard-trip path —
+// the softness bias from gates 1/2 only matters when neither gate fired.
 
 const EVAL_DIR = join(dirname(DB_PATH), 'evaluations');
 const THRESHOLDS_PATH = join(dirname(DB_PATH), '..', 'src', 'eval', 'thresholds.json');
@@ -217,12 +219,27 @@ function findOrchestrator(): string | null {
 }
 
 function nudgeOrchestrator(taskId: number, orchAgentId: string, trip: GateTrip): void {
+  // Build a human-readable interpretation of the trip for the gate message.
+  // This gives the orchestrator enough context to judge whether to run /reflect-task
+  // or post a DECISION skip with reasoning.
+  let interpretation = trip.reason;
+  if (trip.gate === 'tool_volume') {
+    // Extract the numeric delta from the reason string for a concise "+N%" summary.
+    const m = trip.reason.match(/tool_calls=(\d+) exceeds .* threshold (\d+)/);
+    if (m) {
+      const actual = parseInt(m[1], 10);
+      const threshold = parseInt(m[2], 10);
+      const pct = Math.round(((actual - threshold) / threshold) * 100);
+      interpretation = `tool_calls=${actual}, threshold=${threshold} (+${pct}%)`;
+    }
+  }
+
   sendMessage(
     'system',
     orchAgentId,
-    `[system] mandatory: task ${taskId} tripped reflect-gate (${trip.gate}: ${trip.reason}) — ` +
-      `run /reflect-task ${taskId} before starting new work.`,
-    0, // P0 — protocol-mandatory, see templates/SYNAPSE-orchestrator.md
+    `[system] reflect-gate task ${taskId}: ${trip.gate} tripped (${interpretation}).\n` +
+      `Respond: run /reflect-task ${taskId}, or post DECISION: skip reflect-task ${taskId} — <reason>.`,
+    0,
   );
 }
 

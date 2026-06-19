@@ -1,7 +1,7 @@
 import { openDb } from '../db.js';
 import { mkdirSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
-import type { AgentTrajectory, BlockedEvent, ToolStats } from './schema-v2.js';
+import type { AgentTrajectory, BlockedEvent, RoutingQuality, ToolStats } from './schema-v2.js';
 
 // ── C3 interfaces ─────────────────────────────────────────────────────────────
 
@@ -56,6 +56,8 @@ export interface TrajectoryCase {
   agents: Record<string, AgentTrajectory>;
   blocked_events: BlockedEvent[];
   tool_metrics: { summary: ToolMetricsSummary; ids: number[] };
+  routing_quality: RoutingQuality;
+  reflection_path: string | null;    // set by /reflect-task after writing the reflection file
 }
 
 const BLOCKED_PATTERNS: { pattern: RegExp | string; category: BlockedEvent['category'] }[] = [
@@ -316,6 +318,62 @@ function buildToolMetricsSummary(toolMetricsWithInput: any[]): { summary: ToolMe
   };
 }
 
+// ── Routing quality extraction ─────────────────────────────────────────────────
+
+function buildRoutingQuality(db: any, task: any): RoutingQuality {
+  const taskId: number = task.id;
+  const startedAt: number = task.started_at;
+  const finishedAt: number | null = task.finished_at ?? null;
+
+  // reroute_count: distinct workers the orchestrator (slot 0) sent messages to
+  // during the task's time window, minus 1 (first delegation is not a reroute).
+  // Uses time-window proxy because delegate_task doesn't stamp messages.task_id.
+  const orchRow = db.prepare(
+    `SELECT agent_id FROM agent_status WHERE slot = 0 AND ended_at IS NULL LIMIT 1`
+  ).get() as { agent_id: string } | undefined;
+
+  let rerouteCount = 0;
+  if (orchRow) {
+    const distinctWorkers = db.prepare(`
+      SELECT COUNT(DISTINCT to_id) AS cnt FROM messages
+      WHERE from_id = ?
+        AND to_id != 'human'
+        AND to_id != 'system'
+        AND created_at >= ?
+        AND created_at <= COALESCE(?, 9999999999999)
+    `).get(orchRow.agent_id, startedAt, finishedAt) as { cnt: number } | undefined;
+    rerouteCount = Math.max(0, (distinctWorkers?.cnt ?? 1) - 1);
+  }
+
+  // escalation_count: 'escalate' decisions logged for this task
+  const escalationRow = db.prepare(
+    `SELECT COUNT(*) AS cnt FROM orch_decisions WHERE kind = 'escalate' AND related_task_id = ?`
+  ).get(taskId) as { cnt: number };
+
+  // no_decisions_logged: zero orch_decisions rows for this task
+  const decisionsRow = db.prepare(
+    `SELECT COUNT(*) AS cnt FROM orch_decisions WHERE related_task_id = ?`
+  ).get(taskId) as { cnt: number };
+
+  // time_to_first_done_ms: from task.started_at to first message with type='done'
+  const firstDoneRow = db.prepare(`
+    SELECT created_at FROM messages
+    WHERE type = 'done'
+      AND (from_id = ? OR to_id = ?)
+      AND created_at >= ?
+      AND created_at <= COALESCE(?, 9999999999999)
+    ORDER BY created_at
+    LIMIT 1
+  `).get(task.agent_id, task.agent_id, startedAt, finishedAt) as { created_at: number } | undefined;
+
+  return {
+    reroute_count: rerouteCount,
+    escalation_count: escalationRow.cnt,
+    no_decisions_logged: decisionsRow.cnt === 0,
+    time_to_first_done_ms: firstDoneRow ? firstDoneRow.created_at - startedAt : null,
+  };
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 export function extractCases(dbPath: string, outDir: string, limit = 20, taskId?: number): TrajectoryCase[] {
@@ -443,6 +501,7 @@ function buildCase(db: any, task: any): TrajectoryCase {
 
   const toolMetricsSummary = buildToolMetricsSummary(toolMetricsWithInput);
   const totalDurationMs = (task.started_at && task.finished_at) ? task.finished_at - task.started_at : null;
+  const routingQuality = buildRoutingQuality(db, task);
 
   return {
     schema_version: 3,
@@ -463,5 +522,7 @@ function buildCase(db: any, task: any): TrajectoryCase {
     agents,
     blocked_events: blockedEvents,
     tool_metrics: toolMetricsSummary,
+    routing_quality: routingQuality,
+    reflection_path: null,
   };
 }

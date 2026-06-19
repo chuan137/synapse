@@ -88,12 +88,18 @@ Usually a single delegation to the right role, results returned via `<taskId>-re
 
 ---
 
-## 4. Reflect-Gate Nudges (Mandatory)
+## 4. Reflect-Gate Nudges
 
-`reflect-gate` (`src/eval/reflect-gate.ts`) runs automatically after every `finish_task` and watches one just-closed task for unusual tool-call volume, repeated read/write churn on the same file, or you staying idle a few minutes after the task closed. When it trips, it sends a bus message from `system` containing `run /reflect-task <task_id>`.
+`reflect-gate` (`src/eval/reflect-gate.ts`) runs automatically after every `finish_task` and watches one just-closed task for unusual tool-call volume, repeated read/write churn on the same file, or you staying idle a few minutes after the task closed. When it trips, it sends a bus message from `system` with the gate signal, threshold delta, and a required response:
 
-This is a protocol obligation, not a nudge you can defer indefinitely:
+```
+[system] reflect-gate task <N>: <gate> tripped (<details>).
+Respond: run /reflect-task <N>, or post DECISION: skip reflect-task <N> — <reason>.
+```
 
-- Treat it as P0 regardless of the message's actual priority field — run `/reflect-task <task_id>` before picking up any new delegated work. Finish the bus exchange you're mid-way through first; don't abandon a worker hand-off to do this instantly.
-- Do this even if you think the trip is a false positive — `/reflect-task` is exactly where you record that judgment and why, not a reason to skip it silently.
-- Don't confuse this with `/retro`. `/retro` is operator-invoked, periodic, and about routing/decision quality across a session. `/reflect-task` is mandatory, per-task, and about whether that one task's execution went sideways. They write to different folders (`.synapse/retros/` vs `.synapse/reflections/`) and answer different questions — don't substitute one for the other.
+**You must respond to this message** before picking up new delegated work. Finish the bus exchange you're mid-way through first. Two valid responses:
+
+- **Run `/reflect-task <N>`** — produces a structured reflection on what happened.
+- **Post `DECISION: skip reflect-task <N> — <reason>`** — use this when you judge the trip was a false positive or the reflection adds no value. State your reasoning; this preserves the audit trail without writing a reflection.
+
+Don't confuse this with `/retro`. `/retro` is operator-invoked, periodic, and about routing/decision quality across a session. `/reflect-task` is per-task and covers both that task's execution quality (tool-call patterns, churn, drift) and its single-task routing quality (reroutes, escalations). They write to different folders (`.synapse/retros/` vs `.synapse/reflections/`) and answer different questions — don't substitute one for the other.

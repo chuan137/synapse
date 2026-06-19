@@ -318,3 +318,50 @@ test('Unit 3 — gate-1 trips → nudgeOrchestrator called for tool_volume', asy
   assert.ok(nudged.length > 0, 'expected nudgeOrchestrator to be called');
   assert.ok(nudged[0].includes('tool_volume'), 'expected tool_volume gate trip');
 });
+
+// ── Gate message format (Q3) ─────────────────────────────────────────────────
+
+test('Gate message: includes threshold delta and DECISION-skip instruction', async (t) => {
+  const messages: string[] = [];
+
+  t.mock.module('../db.js', {
+    namedExports: {
+      DB_PATH: join(TMP, 'test.db'),
+      db: { prepare: () => ({ get: () => ({ agent_id: 'orch:0' }) }) },
+      sendMessage: (_from: string, _to: string, content: string) => { messages.push(content); },
+      getAgentState: () => 'idle',
+    },
+  });
+
+  process.env.SYNAPSE_REFLECT_IDLE_MS = '0';
+
+  mkdirSync(join(TMP, 'evaluations'), { recursive: true });
+  writeFileSync(
+    join(TMP, 'evaluations', 'task_3_abc.json'),
+    JSON.stringify({
+      agents: {
+        'dev-1': {
+          role: 'developer',
+          agent_id: 'abc:1',
+          tools: { Read: { calls: 88 } }, // 88 > 80, +10%
+        },
+      },
+    }),
+    'utf8',
+  );
+
+  // @ts-ignore — ?v= query string busts ESM cache; TS doesn't resolve these specifiers
+  const { runReflectGate } = await import('./reflect-gate.js?v=12');
+  await runReflectGate(3);
+
+  assert.ok(messages.length > 0, 'expected a gate message to be sent');
+  const msg = messages[0];
+  // New format: includes threshold delta (+N%) and DECISION-skip option
+  assert.match(msg, /reflect-gate task 3/, 'message must reference task id');
+  assert.match(msg, /tool_volume tripped/, 'message must name the gate');
+  assert.match(msg, /\+\d+%/, 'message must include percent-over-threshold');
+  assert.match(msg, /DECISION: skip reflect-task 3/, 'message must offer DECISION-skip option');
+  // Must NOT contain the old "mandatory: ... run /reflect-task N before starting new work" phrasing
+  assert.doesNotMatch(msg, /mandatory:.*run \/reflect-task/, 'old mandatory phrasing must be gone');
+});
+
