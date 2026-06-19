@@ -357,7 +357,7 @@ test('Gate message: includes threshold delta and DECISION-skip instruction', asy
   assert.ok(messages.length > 0, 'expected a gate message to be sent');
   const msg = messages[0];
   // New format: includes threshold delta (+N%) and DECISION-skip option
-  assert.match(msg, /reflect-gate task 3/, 'message must reference task id');
+  assert.match(msg, /\[reflect-gate\] task 3/, 'message must reference task id');
   assert.match(msg, /tool_volume tripped/, 'message must name the gate');
   assert.match(msg, /\+\d+%/, 'message must include percent-over-threshold');
   assert.match(msg, /DECISION: skip reflect-task 3/, 'message must offer DECISION-skip option');

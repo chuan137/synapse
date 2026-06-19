@@ -264,7 +264,7 @@ export class HealthMonitor {
         const row = orchRows.find((r) => r.agent_id === id);
         const count = row?.tool_call_count ?? orchThreshold;
         this.deps.sendMessage(
-          'system',
+          'synapse',
           'human',
           `[health] orchestrator at ${count} tool calls (threshold ${orchThreshold}) — consider /clear or restart`,
           5,
@@ -296,7 +296,7 @@ export class HealthMonitor {
         const blockedWorkers = this.deps.queryBlockedWorkers().map((r) => r.agent_id);
         const list = blockedWorkers.length > 0 ? blockedWorkers.join(', ') : 'unknown';
         this.deps.sendMessage(
-          'system',
+          'synapse',
           'human',
           `[health] orch idle while workers blocked: ${list} blocked for ≥${idleBlockedMs / 1000}s`,
           5,

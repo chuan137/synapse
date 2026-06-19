@@ -236,7 +236,7 @@ function nudgeOrchestrator(taskId: number, orchAgentId: string, trip: GateTrip):
 
   sendHint(
     orchAgentId,
-    `[system] reflect-gate task ${taskId}: ${trip.gate} tripped (${interpretation}).\n` +
+    `[reflect-gate] task ${taskId}: ${trip.gate} tripped (${interpretation}).\n` +
       `Respond: run /reflect-task ${taskId}, or post DECISION: skip reflect-task ${taskId} — <reason>.`,
     0,
   );

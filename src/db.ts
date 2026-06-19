@@ -539,7 +539,7 @@ export function sendMessage(
 }
 
 export function sendHint(toId: string, content: string, priority: number = 5): number {
-  return sendMessage('system', toId, content, priority, false, undefined, null, 'hint');
+  return sendMessage('synapse', toId, content, priority, false, undefined, null, 'hint');
 }
 
 export function approveMessage(id: number): void {

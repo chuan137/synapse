@@ -333,6 +333,7 @@ function buildRoutingQuality(db: any, task: any): RoutingQuality {
     WHERE task_id = ?
       AND to_id != 'human'
       AND to_id != 'system'
+      AND to_id != 'synapse'
       AND NOT (to_id LIKE '%:0')
   `).get(taskId) as { cnt: number } | undefined;
   const rerouteCount = Math.max(0, (distinctWorkers?.cnt ?? 1) - 1);

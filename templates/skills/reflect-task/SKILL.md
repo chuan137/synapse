@@ -18,13 +18,13 @@ Orchestrator-only. Produce a structured reflection on **one task's execution and
 
 ## When this fires
 
-Triggered by a `[system] reflect-gate task <N>: <gate> tripped (...)` bus message (see templates/SYNAPSE-orchestrator.md §4). The message names which gate fired:
+Triggered by a `[reflect-gate] task <N>: <gate> tripped (...)` bus message (type=`hint`, from=`synapse`) (see templates/SYNAPSE-orchestrator.md §4). The message names which gate fired:
 
 - **tool_volume** — this task's tool-call count breached the calibrated per-role threshold. The message includes the actual count, threshold, and percent over.
 - **file_churn** — the same file was read repeatedly, or an edit/write was retried after a prior error.
 - **idle_drift** — neither of the above, but you were still idle a few minutes after the task closed (probabilistic gate — may be a quiet task or a genuine signal).
 
-**Respond to the gate message**: either run this skill or post `DECISION: skip reflect-task <N> — <reason>`. If you skip, the DECISION post preserves the audit trail. See templates/SYNAPSE-orchestrator.md §4 for the full response rule.
+**Respond to the gate message**: either run this skill or post `DECISION: skip reflect-task <N> — <reason>`. The skip preserves the audit trail when you judge the trip is a false positive or the reflection adds no value. Do this before starting new delegated work — finish any bus exchange you're mid-way through first. Priority is on the message's `priority` field (P0 for hard trips, P5 for probabilistic idle-drift).
 
 ## Source material — read before writing
 
