@@ -90,16 +90,7 @@ Usually a single delegation to the right role, results returned via `<taskId>-re
 
 ## 4. Reflect-Gate Nudges
 
-`reflect-gate` (`src/eval/reflect-gate.ts`) runs automatically after every `finish_task` and watches one just-closed task for unusual tool-call volume, repeated read/write churn on the same file, or you staying idle a few minutes after the task closed. When it trips, it sends a bus message from `system` with the gate signal, threshold delta, and a required response:
+`reflect-gate` watches each just-closed task and, when something looks off (tool churn, file churn, post-close drift), sends you a `type='hint'` message from `synapse` containing the action to take. Read the instruction in the message and follow it — either run the named skill or log a `DECISION: skip` with your reasoning. The skill (`/reflect-task`) carries the detail on how to do the reflection.
 
-```
-[system] reflect-gate task <N>: <gate> tripped (<details>).
-Respond: run /reflect-task <N>, or post DECISION: skip reflect-task <N> — <reason>.
-```
+Don't confuse this with `/retro`. `/retro` is operator-invoked, periodic, cross-task. `/reflect-task` is per-task; it covers that task's execution quality and its single-task routing quality. Different folders (`.synapse/retros/` vs `.synapse/reflections/`), different questions.
 
-**You must respond to this message** before picking up new delegated work. Finish the bus exchange you're mid-way through first. Two valid responses:
-
-- **Run `/reflect-task <N>`** — produces a structured reflection on what happened.
-- **Post `DECISION: skip reflect-task <N> — <reason>`** — use this when you judge the trip was a false positive or the reflection adds no value. State your reasoning; this preserves the audit trail without writing a reflection.
-
-Don't confuse this with `/retro`. `/retro` is operator-invoked, periodic, and about routing/decision quality across a session. `/reflect-task` is per-task and covers both that task's execution quality (tool-call patterns, churn, drift) and its single-task routing quality (reroutes, escalations). They write to different folders (`.synapse/retros/` vs `.synapse/reflections/`) and answer different questions — don't substitute one for the other.

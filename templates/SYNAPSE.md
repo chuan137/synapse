@@ -21,6 +21,8 @@ Synapse bus messages carry a priority:
 **P0** — urgent. Stop everything, handle it.
 **P5** — normal. Handle at your next checkpoint.
 
+Messages also carry a `type`. Most are `message`. Type `hint` is a system-generated advisory (reflect-gate, health-monitor) — dispatch on `msg.type === 'hint' && msg.from === 'synapse'`.
+
 
 **MCP tools:**
 
