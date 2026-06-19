@@ -5,5 +5,13 @@
   "task_level": {
     "traceability_score_max": 1
   },
+  "reflect_gate": {
+    "idle_drift": {
+      "p_base": 0.1,
+      "p_max": 0.6,
+      "softFloor": 0.5,
+      "aggregation": "max"
+    }
+  },
   "_warning": "No cases found in curated (tests/cases/) — thresholds are empty defaults"
 }

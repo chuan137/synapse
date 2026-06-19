@@ -686,6 +686,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       });
     }
+    if (ok) {
+      // reflect-gate: per-task execution reflection, distinct from /retro (periodic,
+      // routing-focused). Single detached process owns all 3 gate conditions, including
+      // its own internal idle-timer sleep — see src/eval/reflect-gate.ts header comment.
+      const reflectGateJs = join(dirname(fileURLToPath(import.meta.url)), 'eval', 'reflect-gate.js');
+      const reflectChild = spawn(process.execPath, [reflectGateJs, String(task_id)], {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env },
+      });
+      reflectChild.unref();
+    }
     // Auto-restart after AUTO_RESTART_AFTER_TASKS completed tasks
     const settings = readSynapseSettings();
     const AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number' ? settings.autoRestartTasks : 5;
