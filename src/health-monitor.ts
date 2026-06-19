@@ -268,6 +268,10 @@ export class HealthMonitor {
           'human',
           `[health] orchestrator at ${count} tool calls (threshold ${orchThreshold}) — consider /clear or restart`,
           5,
+          false,
+          undefined,
+          null,
+          'hint',
         );
       }
     }
@@ -296,6 +300,10 @@ export class HealthMonitor {
           'human',
           `[health] orch idle while workers blocked: ${list} blocked for ≥${idleBlockedMs / 1000}s`,
           5,
+          false,
+          undefined,
+          null,
+          'hint',
         );
       }
     }

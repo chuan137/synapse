@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
-import { db, DB_PATH, sendMessage, getAgentState } from '../db.js';
+import { db, DB_PATH, sendHint, getAgentState } from '../db.js';
 
 // ── reflect-gate ────────────────────────────────────────────────────────────
 // Per-task execution-reflection trigger.
@@ -234,8 +234,7 @@ function nudgeOrchestrator(taskId: number, orchAgentId: string, trip: GateTrip):
     }
   }
 
-  sendMessage(
-    'system',
+  sendHint(
     orchAgentId,
     `[system] reflect-gate task ${taskId}: ${trip.gate} tripped (${interpretation}).\n` +
       `Respond: run /reflect-task ${taskId}, or post DECISION: skip reflect-task ${taskId} — <reason>.`,

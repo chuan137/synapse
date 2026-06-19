@@ -149,9 +149,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           type: {
             type: 'string',
-            enum: ['message', 'done', 'decision', 'finding', 'blocked', 'commit'],
+            enum: ['message', 'done', 'decision', 'finding', 'blocked', 'commit', 'hint'],
             default: 'message',
-            description: 'Message type. Use "done" when reporting task completion, "decision" for choices made, "finding" for discoveries, "blocked" when stuck, "commit" for commit notifications. Defaults to "message".',
+            description: 'Message type. Use "done" when reporting task completion, "decision" for choices made, "finding" for discoveries, "blocked" when stuck, "commit" for commit notifications. "hint" is reserved for system-generated advisories (reflect-gate, health-monitor) — set by system callers only. Defaults to "message".',
           },
         },
         required: ['to_id', 'content', 'type'],
@@ -446,6 +446,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       priority: m.priority,
       at: new Date(m.created_at).toISOString(),
       content: m.content,
+      type: m.type ?? 'message',
     }));
 
     return {

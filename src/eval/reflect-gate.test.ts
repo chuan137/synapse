@@ -47,7 +47,7 @@ test('Unit 1 — gate-1: below threshold → null', async (t) => {
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: () => null,
     },
   });
@@ -72,7 +72,7 @@ test('Unit 1 — gate-1: above threshold → GateTrip', async (t) => {
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: () => null,
     },
   });
@@ -100,7 +100,7 @@ test('Unit 1 — gate-1: v1 fallback above threshold → GateTrip', async (t) =>
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: () => null,
     },
   });
@@ -121,7 +121,7 @@ test('Unit 1 — gate-1: v1 fallback below threshold → null', async (t) => {
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: () => null,
     },
   });
@@ -142,7 +142,7 @@ test('Unit 2 — idle-drift: always-fire RNG + orch idle → GateTrip', async (t
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: (_id: string) => 'idle',
     },
   });
@@ -162,7 +162,7 @@ test('Unit 2 — idle-drift: never-fire RNG → null', async (t) => {
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: (_id: string) => 'idle',
     },
   });
@@ -181,7 +181,7 @@ test('Unit 2 — idle-drift: f=1.0, rng just below p_max → GateTrip', async (t
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: (_id: string) => 'idle',
     },
   });
@@ -210,7 +210,7 @@ test('Unit 2 — idle-drift: f=1.0, rng just above p_max → null', async (t) =>
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: (_id: string) => 'idle',
     },
   });
@@ -238,7 +238,7 @@ test('Unit 2 — idle-drift: RNG fires but orch not idle → null', async (t) =>
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => null }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: (_id: string) => 'working', // not idle
     },
   });
@@ -259,7 +259,7 @@ test('Unit 3 — no case file → early-exit, no idle sleep', async (t) => {
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => ({ agent_id: 'orch:0' }) }) },
-      sendMessage: () => {},
+      sendHint: () => {},
       getAgentState: () => 'idle',
     },
   });
@@ -288,7 +288,7 @@ test('Unit 3 — gate-1 trips → nudgeOrchestrator called for tool_volume', asy
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => ({ agent_id: 'orch:0' }) }) },
-      sendMessage: (_from: string, _to: string, content: string) => { nudged.push(content); },
+      sendHint: (_to: string, content: string) => { nudged.push(content); },
       getAgentState: () => 'idle',
     },
   });
@@ -328,7 +328,7 @@ test('Gate message: includes threshold delta and DECISION-skip instruction', asy
     namedExports: {
       DB_PATH: join(TMP, 'test.db'),
       db: { prepare: () => ({ get: () => ({ agent_id: 'orch:0' }) }) },
-      sendMessage: (_from: string, _to: string, content: string) => { messages.push(content); },
+      sendHint: (_to: string, content: string) => { messages.push(content); },
       getAgentState: () => 'idle',
     },
   });

@@ -14,6 +14,7 @@ import {
   getAllStatuses,
   getRecentMessages,
   sendMessage,
+  sendHint,
   approveMessage,
   selectOption,
   getTmuxPane,
@@ -541,7 +542,7 @@ app.post('/api/retros/run', (_req: Request, res: Response) => {
     `SELECT agent_id FROM agent_status WHERE slot = 0 AND ended_at IS NULL LIMIT 1`
   ).get();
   if (!orch) { res.status(503).json({ error: 'No active orchestrator' }); return; }
-  sendMessage('system', orch.agent_id, '[system] run /retro now', 5);
+  sendHint(orch.agent_id, '[system] run /retro now', 5);
   res.json({ queued: true });
 });
 

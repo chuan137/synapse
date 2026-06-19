@@ -211,7 +211,7 @@ export interface Message {
   type: string | null;
 }
 
-export type MessageType = 'message' | 'done' | 'decision' | 'finding' | 'blocked' | 'commit';
+export type MessageType = 'message' | 'done' | 'decision' | 'finding' | 'blocked' | 'commit' | 'hint';
 
 export function detectMessageType(content: string): MessageType {
   const upper = content.trimStart().toUpperCase();
@@ -536,6 +536,10 @@ export function sendMessage(
   const resolvedType = type ?? detectMessageType(content);
   const r = stmts.insertMessage.run(fromId, toId, content, priority, Date.now(), needsApproval ? 1 : 0, options ? JSON.stringify(options) : null, taskId ?? null, resolvedType);
   return Number(r.lastInsertRowid);
+}
+
+export function sendHint(toId: string, content: string, priority: number = 5): number {
+  return sendMessage('system', toId, content, priority, false, undefined, null, 'hint');
 }
 
 export function approveMessage(id: number): void {
