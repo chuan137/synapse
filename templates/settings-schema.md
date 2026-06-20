@@ -16,6 +16,7 @@ The `.synapse/settings.json` file configures Synapse's runtime behaviour. The or
 | `idleBlockedThresholdMs` | number | **60000** | health-monitor | Milliseconds the orchestrator must remain idle while workers are blocked before a `[health]` alert fires. Re-read every 15 s. |
 | `headroom.enabled` | boolean | `false` | `synapse start` / `synapse run` | Opt-in: route every agent's API traffic through one shared local `headroom proxy` instance for context compression. |
 | `headroom.port` | number | auto-assigned | `synapse start` | Port for the shared headroom proxy. Don't set this by hand — see below. |
+| `headroom.env` | object | `{}` | `synapse start` / `synapse run` | Env vars passed to the headroom proxy at spawn. Overrides ambient shell vars on key conflict. Use to set any `HEADROOM_*` knob reliably (e.g. `HEADROOM_MODE`, `HEADROOM_DISABLE_KOMPRESS`). Takes effect only when the proxy is (re)started — to apply changes, stop the proxy (`pkill headroom`) and re-run `synapse start`. |
 
 ## Headroom proxy
 

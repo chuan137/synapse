@@ -61,10 +61,11 @@ async function waitForHealthy(port: number, attempts = 20, intervalMs = 250): Pr
   return false;
 }
 
-function spawnProxy(port: number, logFile: string): void {
+function spawnProxy(port: number, logFile: string, extraEnv: Record<string, string>): void {
   const child = spawn('headroom', ['proxy', '--port', String(port), '--log-file', logFile], {
     detached: true,
     stdio: 'ignore',
+    env: { ...process.env, ...extraEnv },
   });
   // spawn() reports a missing binary (ENOENT) asynchronously via 'error', not as a throw —
   // attach the handler before unref() so the message still surfaces.
@@ -101,8 +102,10 @@ export async function ensureHeadroomProxy(cwd: string): Promise<{ baseUrl: strin
     return { baseUrl };
   }
 
+  const settings = readSettings(cwd);
+  const extraEnv: Record<string, string> = settings.headroom?.env ?? {};
   const logFile = join(cwd, '.synapse', 'headroom.jsonl');
-  spawnProxy(port, logFile);
+  spawnProxy(port, logFile, extraEnv);
 
   const healthy = await waitForHealthy(port);
   if (!healthy) {
