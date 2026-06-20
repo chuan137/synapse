@@ -9,6 +9,7 @@ import { openDb, attachCommitToTaskBySlot, resetMetricCount } from './db.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { parseRoleFile } from './roles.js';
 import { resolveModelForRole, resolveAllModels, resolveFamily, isFamily } from './models.js';
+import { ensureHeadroomProxy, ensureHeadroomPort } from './headroom.js';
 
 /** List all available named roles from templates/roles/, returning their metadata. */
 function listAvailableRoles(templatesDir: string): { role: string; description: string; capabilities: string[] }[] {
@@ -204,7 +205,7 @@ program
   .option('--slot <slot>', 'Reuse a specific slot, e.g. --slot 0')
   .option('--task <task>', 'Task prompt for worker agents')
   .option('--task-file <file>', 'File containing task prompt for worker agents')
-  .action((options) => {
+  .action(async (options) => {
     const role = options.role as string;
     const isWorker = role !== 'orchestrator';
     const systemPrompt = buildSystemPrompt(role);
@@ -271,7 +272,14 @@ program
       claudeArgs.push(task);
     }
     claudeArgs.push(...extraArgs);
-    execFileSync('claude', claudeArgs, { stdio: 'inherit' });
+
+    // Route this agent's API traffic through the shared headroom proxy (if enabled
+    // in .synapse/settings.json). Every orchestrator/worker process goes through
+    // this same `run` command, so one call site covers the whole swarm.
+    const headroom = await ensureHeadroomProxy(cwd);
+    const childEnv = headroom ? { ...process.env, ANTHROPIC_BASE_URL: headroom.baseUrl } : process.env;
+
+    execFileSync('claude', claudeArgs, { stdio: 'inherit', env: childEnv });
   });
 
 program
@@ -315,6 +323,11 @@ program
 
     const isNew = synapseInit(cwd, true);
     if (isNew) process.stderr.write(`[Synapse] Initialized project at ${cwd}\n`);
+
+    // Mint the shared headroom proxy port now (if enabled) so it's persisted to
+    // settings.json before the orchestrator — or any worker it spawns — ever calls
+    // `synapse run`. Every later read just sees the same value already on disk.
+    ensureHeadroomPort(cwd);
 
     // Check if an orchestrator (slot 0) is already live in the DB
     let hasOrchestrator = false;

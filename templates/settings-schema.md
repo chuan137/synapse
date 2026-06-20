@@ -14,6 +14,18 @@ The `.synapse/settings.json` file configures Synapse's runtime behaviour. The or
 | `orchToolCallHint` | number | **250** | health-monitor | Orchestrator tool-call count that triggers a `[health]` alert message to the operator. Re-read every 15 s. |
 | `compactHint` | number | `floor(toolCallRestartHint / 2)`, default 100 | health-monitor | Worker tool-call count that triggers automatic `/compact` via tmux. Re-read every 15 s. |
 | `idleBlockedThresholdMs` | number | **60000** | health-monitor | Milliseconds the orchestrator must remain idle while workers are blocked before a `[health]` alert fires. Re-read every 15 s. |
+| `headroom.enabled` | boolean | `false` | `synapse start` / `synapse run` | Opt-in: route every agent's API traffic through one shared local `headroom proxy` instance for context compression. |
+| `headroom.port` | number | auto-assigned | `synapse start` | Port for the shared headroom proxy. Don't set this by hand — see below. |
+
+## Headroom proxy
+
+Enable with `"headroom": { "enabled": true }` — leave out `port`. The first time `synapse start` runs afterward, it mints a random port (20000–60000) and writes it back into `headroom.port` in `settings.json`. Every agent process from then on — the orchestrator and every worker, all of which go through `synapse run` — reads that same persisted port, checks `http://127.0.0.1:<port>/health` before exec'ing `claude`, and starts `headroom proxy --port <port> --log-file .synapse/headroom.jsonl` as a detached background process if nothing answers (waits up to 5s). Once healthy, the agent's `claude` process is launched with `ANTHROPIC_BASE_URL` pointed at the proxy.
+
+The port is randomized rather than a fixed default (e.g. 8787) so multiple Synapse projects running headroom on the same machine don't collide. It's persisted (not re-randomized per process) so every agent in *this* project's swarm lands on the same proxy instance.
+
+This is deliberately **one proxy per project**, not one per agent — wrapping each spawned worker individually (`headroom wrap claude`) would give each its own compression/memory store and lose the cross-agent dedup that matters most in Synapse, where multiple workers routinely read overlapping files/logs in the same repo.
+
+Requires `headroom-ai` to be installed and on `PATH` (`pip install "headroom-ai[proxy]"`). If the binary is missing or the proxy never becomes healthy, `synapse run` logs a warning and falls through to a normal, uncompressed `claude` session — this never blocks agent startup.
 
 ## Health-monitor behaviour
 
@@ -39,7 +51,9 @@ The health-monitor runs a background poll every 15 seconds, checking worker and 
   "toolCallRestartHint": 200,      // warn + compact eligibility
   "compactHint": 100,               // auto-compact at this count
   "orchToolCallHint": 250,          // orch health alert
-  "idleBlockedThresholdMs": 60000   // 60 seconds idle + blocked before alert
+  "idleBlockedThresholdMs": 60000,  // 60 seconds idle + blocked before alert
+
+  "headroom": { "enabled": true }  // opt-in; port is auto-assigned on next `synapse start`
 }
 ```
 
