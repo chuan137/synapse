@@ -1,7 +1,14 @@
 {
   "calibrated_at": "2026-06-09T21:28:42.446Z",
   "sample_size": {},
-  "by_role": {},
+  "by_role": {
+    "_default":      { "tool_calls_p90": 60 },
+    "orchestrator":  { "tool_calls_p90": 40 },
+    "developer":     { "tool_calls_p90": 80 },
+    "planner":       { "tool_calls_p90": 60 },
+    "code-reviewer": { "tool_calls_p90": 50 },
+    "test-runner":   { "tool_calls_p90": 30 }
+  },
   "task_level": {
     "traceability_score_max": 1
   },
@@ -13,5 +20,6 @@
       "aggregation": "max"
     }
   },
-  "_warning": "No cases found in curated (tests/cases/) — thresholds are empty defaults"
+  "bootstrapped_at": "2026-06-20",
+  "_warning": "Hand-authored bootstrap values — replace with calibration output once tests/cases/ is populated"
 }
