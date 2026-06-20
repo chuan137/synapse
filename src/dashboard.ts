@@ -7,7 +7,7 @@ import { parseRoleFile, serializeRoleFile, isValidRoleName, Role } from './roles
 import { buildSystemPrompt } from './system-prompt.js';
 import { Nudger } from './nudge.js';
 import { HealthMonitor } from './health-monitor.js';
-import { resolveFamily, isFamily } from './models.js';
+import { resolveFamily, isFamily, resolveModelForRole } from './models.js';
 import {
   db,
   DB_PATH,
@@ -43,6 +43,7 @@ type AugmentedStatus = AgentStatus & {
   over_threshold:      boolean;
   orch_over_threshold: boolean;
   orch_idle_blocked:   boolean;
+  resolved_model:      string;
 };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -162,6 +163,12 @@ setInterval(() => {
     over_threshold:      warnings.has(s.agent_id),
     orch_over_threshold: orchWarnings.has(s.agent_id),
     orch_idle_blocked:   orchIdle.has(s.agent_id),
+    resolved_model: (() => {
+      const m = s.model;
+      if (isFamily(m)) return resolveFamily(m, GIT_CWD).model;
+      if (m) return m;
+      return resolveModelForRole(s.role ?? 'sonnet', GIT_CWD);
+    })(),
   }));
 
   const broadcastSettings = readSettings();

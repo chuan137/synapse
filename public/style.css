@@ -642,6 +642,18 @@
     }
     .modal-field input:focus,
     .modal-field select:focus { border-color: var(--accent); }
+    .modal-read-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .modal-running-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .modal-running-sep { color: var(--border); font-size: 11px; }
+    .modal-running-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--border); }
     .modal-actions {
       display: flex;
       justify-content: flex-end;

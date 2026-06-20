@@ -101,6 +101,15 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <h2 id="modal-title">Configure Agent <span id="modal-agent-slot" style="color:var(--accent)"></span></h2>
     <div class="modal-field">
+      <label>Currently running</label>
+      <div class="modal-running-row">
+        <span id="modal-resolved-model" class="modal-read-value">—</span>
+        <span class="modal-running-sep">·</span>
+        <span class="modal-running-label">effort</span>
+        <span id="modal-resolved-effort" class="modal-read-value">—</span>
+      </div>
+    </div>
+    <div class="modal-field">
       <label for="modal-model">Model</label>
       <select id="modal-model">
         <option value="">— inherit default —</option>

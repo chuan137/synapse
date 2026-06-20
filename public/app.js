@@ -1064,6 +1064,14 @@
     modalSlot.textContent = `:${agent.slot}`;
     modalModel.value  = agent.model  ?? '';
     modalEffort.value = agent.effort ?? '';
+    // Populate read-only "Currently running" row
+    const resolvedLabel = agent.resolved_model
+      ? (agent.model && agent.model !== agent.resolved_model
+          ? `${agent.resolved_model} (${agent.model})`
+          : agent.resolved_model)
+      : '—';
+    document.getElementById('modal-resolved-model').textContent = resolvedLabel;
+    document.getElementById('modal-resolved-effort').textContent = agent.effort ?? 'default';
     configBackdrop.classList.remove('hidden');
     modalModel.focus();
   }
