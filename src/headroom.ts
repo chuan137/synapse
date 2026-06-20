@@ -20,6 +20,13 @@ function pickRandomPort(): number {
   return 20000 + Math.floor(Math.random() * 40000);
 }
 
+let dashboardUrlPrinted = false;
+function printDashboardUrl(port: number): void {
+  if (dashboardUrlPrinted) return;
+  dashboardUrlPrinted = true;
+  process.stderr.write(`[headroom] dashboard: http://localhost:${port}/dashboard\n`);
+}
+
 /**
  * Read `headroom.port` from settings.json, minting and persisting a random one the
  * first time headroom is enabled without an explicit port. Persisting (instead of
@@ -99,6 +106,7 @@ export async function ensureHeadroomProxy(cwd: string): Promise<{ baseUrl: strin
   const baseUrl = `http://127.0.0.1:${port}`;
 
   if (await isProxyHealthy(port)) {
+    printDashboardUrl(port);
     return { baseUrl };
   }
 
@@ -116,5 +124,6 @@ export async function ensureHeadroomProxy(cwd: string): Promise<{ baseUrl: strin
   }
 
   process.stderr.write(`[Synapse] headroom proxy running at ${baseUrl} (shared across all agents).\n`);
+  printDashboardUrl(port);
   return { baseUrl };
 }
