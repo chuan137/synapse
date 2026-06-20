@@ -327,7 +327,7 @@ program
     // Mint the shared headroom proxy port now (if enabled) so it's persisted to
     // settings.json before the orchestrator — or any worker it spawns — ever calls
     // `synapse run`. Every later read just sees the same value already on disk.
-    ensureHeadroomPort(cwd);
+    const headroomPort = ensureHeadroomPort(cwd);
 
     // Check if an orchestrator (slot 0) is already live in the DB
     let hasOrchestrator = false;
@@ -386,6 +386,9 @@ program
     process.on('SIGTERM', shutdown);
 
     const actualPort = await startDashboard(Number(options.port));
+    if (headroomPort !== null) {
+      process.stderr.write(`[Synapse] headroom dashboard: http://localhost:${headroomPort}/dashboard\n`);
+    }
     const url = `http://localhost:${actualPort}`;
     const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
     exec(`${opener} ${url}`);
