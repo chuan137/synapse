@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join, resolve, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { exec, execFileSync, execSync, spawn } from 'child_process';
-import { openDb, attachCommitToTaskBySlot, resetMetricCount } from './db.js';
+import { openDb, attachCommitToTaskBySlot } from './db.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { parseRoleFile } from './roles.js';
 import { resolveModelForRole, resolveAllModels, resolveFamily, isFamily } from './models.js';
@@ -768,7 +768,7 @@ program
     if (options.taskId !== undefined) {
       // Single-task mode: fetch, score, persist, print
       const taskId = parseInt(options.taskId, 10);
-      const { writeEvalResults, checkAndResetMetricThreshold } = await import('./db.js');
+      const { writeEvalResults } = await import('./db.js');
       process.stdout.write(`Evaluating task #${taskId}...\n`);
       const singleCases = extractCases(dbPath, casesDir, 1, taskId);
       if (singleCases.length === 0) {
@@ -789,14 +789,6 @@ program
         { metric: 'has_commit',   passed: !result.failures.some((f: any) => f.metric === 'has_commit'),         value: null },
       ];
       writeEvalResults(taskId, evalRows, true, (result as any).role ?? null, primaryAgentId);
-      for (const r of evalRows) {
-        if (!r.passed) {
-          const triggered = checkAndResetMetricThreshold(r.metric);
-          if (triggered) {
-            process.stdout.write(`  ⚠ threshold reached for metric: ${r.metric} — click "Generate proposal" in S-Deck Eval tab\n`);
-          }
-        }
-      }
       process.stdout.write(`Task #${taskId}: ${result.pass ? 'PASS' : 'FAIL'}\n`);
       if (!result.pass) {
         result.failures.forEach((f: any) => process.stdout.write(`  - [${f.role}/${f.agent_id}] ${f.metric}=${f.value} (max ${f.threshold})\n`));
@@ -1033,63 +1025,6 @@ program
     })();
     writeFileSync(outPath, report);
     process.stderr.write(`\nReport written to ${outPath}\n`);
-  });
-
-program
-  .command('eval-apply <proposal-file>')
-  .description('Apply a gate-approved proposal patch to the target rule file, commit, and reset the failure counter')
-  .action((proposalFile: string) => {
-    const proposalPath = resolve(proposalFile);
-    if (!existsSync(proposalPath)) {
-      process.stderr.write(`error: proposal file not found: ${proposalPath}\n`);
-      process.exit(1);
-    }
-
-    let content = readFileSync(proposalPath, 'utf8');
-    const targetMatch = content.match(/^Target-file:\s*(.+)$/im);
-    const changeMatch = content.match(/^##\s*Proposed rule change\s*\n([\s\S]*?)(?=\n##|$)/im);
-    const metricMatch = basename(proposalPath).match(/^\d+-(\w+)\.md$/);
-
-    if (!targetMatch) {
-      process.stderr.write(`error: no Target-file field found in proposal\n`);
-      process.exit(1);
-    }
-
-    const targetFile = join(process.cwd(), targetMatch[1].trim());
-    const proposedChange = changeMatch ? changeMatch[1].trim() : '';
-    const metric = metricMatch ? metricMatch[1] : '';
-
-    if (proposedChange && existsSync(targetFile)) {
-      const existing = readFileSync(targetFile, 'utf8');
-      writeFileSync(targetFile, existing.trimEnd() + '\n\n' + proposedChange + '\n', 'utf8');
-      process.stdout.write(`Appended proposed change to ${targetMatch[1].trim()}\n`);
-    } else if (!existsSync(targetFile)) {
-      process.stderr.write(`warning: target file not found: ${targetFile}\n`);
-    }
-
-    try {
-      execSync('synapse update .', { cwd: process.cwd(), stdio: 'pipe' });
-      process.stdout.write(`Ran synapse update .\n`);
-    } catch { /* best-effort */ }
-
-    const commitMsg = metric
-      ? `fix(${metric}): apply rule patch from proposal ${basename(proposalPath)}`
-      : `deploy proposal: ${basename(proposalPath)}`;
-    try {
-      execSync(`git add "${targetFile}" && git commit -m ${JSON.stringify(commitMsg)}`, {
-        cwd: process.cwd(), stdio: 'pipe',
-      });
-      process.stdout.write(`Committed: ${commitMsg}\n`);
-    } catch { process.stdout.write(`Nothing to commit (target file unchanged or already staged)\n`); }
-
-    if (metric) {
-      resetMetricCount(metric);
-      process.stdout.write(`Reset failure counter for metric: ${metric}\n`);
-    }
-
-    content = content.replace(/^Status:\s*.+$/im, 'Status: deployed');
-    writeFileSync(proposalPath, content, 'utf8');
-    process.stdout.write(`Marked proposal as deployed: ${basename(proposalPath)}\n`);
   });
 
 program

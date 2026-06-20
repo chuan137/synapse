@@ -1,6 +1,6 @@
 # Synapse Eval
 
-The eval pipeline extracts trajectory data from completed Synapse tasks, evaluates agent behavior against per-role thresholds, and proposes rule patches when patterns of failure emerge.
+The eval pipeline extracts trajectory data from completed Synapse tasks and evaluates agent behavior against per-role thresholds.
 
 ---
 

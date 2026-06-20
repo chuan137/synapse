@@ -59,7 +59,7 @@ Then send one-line summary to operator via `send_message` (`type: finding`, prio
 
 | Category | What it means | Who acts |
 |---|---|---|
-| `protocol_patch` | A specific line to add/change in a SYNAPSE*.md | Operator reviews, applies via `synapse eval-apply` |
+| `protocol_patch` | A specific line to add/change in a SYNAPSE*.md | Operator reviews and applies manually |
 | `new_skill` | A new slash-command skill needed | Operator decides to build it |
 | `threshold_adjustment` | Calibration drift detected — thresholds need recalibration | Run `synapse eval --calibrate` after curator's approval |
 | `role_tweak` | Worker role rules need adjustment | Operator reviews, adjusts role templates |
