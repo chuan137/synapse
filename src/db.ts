@@ -1133,12 +1133,12 @@ export function getAgentState(agentId: string): string | null {
   return row?.state ?? null;
 }
 
-/** Mark a worker as ready (handshake delivered). Idempotent — only sets if not already set. */
+/** Mark a worker as ready (set at spawn time). Idempotent — only sets if not already set. */
 export function setAgentReady(agentId: string): void {
   db.prepare(`UPDATE agent_status SET ready_at = ? WHERE agent_id = ? AND ready_at IS NULL`).run(Date.now(), agentId);
 }
 
-/** Returns the epoch-ms timestamp when the agent acknowledged the handshake, or null. */
+/** Returns the epoch-ms timestamp when the agent was marked ready, or null if not yet ready. */
 export function getAgentReady(agentId: string): number | null {
   const row = db.prepare(`SELECT ready_at FROM agent_status WHERE agent_id = ?`).get(agentId) as any;
   return row?.ready_at ?? null;

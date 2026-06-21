@@ -7,7 +7,7 @@ import {
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, setAgentName, getMostRecentInProgressTask, getAgentState, setAgentReady } from './db.js';
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, setAgentName, getMostRecentInProgressTask, getAgentState } from './db.js';
 
 // Checks if a message body looks like a numbered or bulleted option list.
 // Used to enforce request_options when send_message targets 'human' with needs_approval.
@@ -49,10 +49,12 @@ if (slot === 0) {
   setAgentName(AGENT_ID, 'orchestrator');
 }
 
-// Write agent ID so `synapse task/worker/decision/approve/history/done` CLI
-// subcommands (run via this agent's own Bash tool) know who is calling —
-// see resolveSelfAgentId() in agent-actions.ts.
-writeFileSync(join(SYNAPSE_DIR, 'agent.env'), `SYNAPSE_AGENT_ID=${AGENT_ID}\n`, 'utf8');
+// Inject agent ID in-process so CLI subcommands invoked via Bash resolve identity
+// without reading a shared file. Also write a per-slot file for cross-process reads
+// (e.g. shell prompts). Each slot writes its own file — workers no longer overwrite
+// the orchestrator's identity file.
+process.env.SYNAPSE_AGENT_ID = AGENT_ID;
+writeFileSync(join(SYNAPSE_DIR, `agent-${slot}.env`), `SYNAPSE_AGENT_ID=${AGENT_ID}\n`, 'utf8');
 
 if (isFirstInit) {
   process.stderr.write(`[Synapse] Project initialized (${settings.projectId}). You are :${slot}. Run \`synapse dash\` to open S-Deck.\n`);
@@ -223,13 +225,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const senderStr = senders.length === 1 ? senders[0] : senders.slice(0, 2).join(', ') + (senders.length > 2 ? ', …' : '');
       updateStatus(AGENT_ID, 'working', `reading ${msgs.length} message${msgs.length === 1 ? '' : 's'} from ${senderStr}`, null, null);
     }
-
-    // Server-side spawn ACK: if any delivered message is a handshake, mark this worker as ready.
-    // This is idempotent — setAgentReady only writes once (when ready_at IS NULL).
-    const hasHandshake = msgs.some(m => {
-      try { return (JSON.parse(m.content as string) as any)?.type === 'handshake'; } catch { return false; }
-    });
-    if (hasHandshake) setAgentReady(AGENT_ID);
 
     const array = msgs.map((m) => ({
       id: m.id,

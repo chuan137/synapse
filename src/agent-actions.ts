@@ -57,23 +57,28 @@ const err = (text: string): ActionResult => ({ text, isError: true });
 
 /**
  * Resolve "who am I" for a CLI subcommand running inside an agent's own Bash
- * tool call. mcp-server.ts writes `.synapse/agent.env` with this agent's ID on
- * every boot/reconnect — reuse that instead of re-deriving via claimAgentSlot,
- * which would be wrong here (claimAgentSlot is for claiming a NEW session row,
- * not looking up the existing one for the session that's already running).
+ * tool call. Resolution order:
+ *   1. process.env.SYNAPSE_AGENT_ID — set by mcp-server.ts on startup (in-process)
+ *   2. .synapse/agent-<slot>.env — per-slot file for cross-process reads
  */
 export function resolveSelfAgentId(cwd: string = process.cwd()): string {
-  const envPath = join(cwd, '.synapse', 'agent.env');
-  if (!existsSync(envPath)) {
-    throw new Error(
-      `.synapse/agent.env not found — is the synapse-bus MCP server connected in this session? ` +
-      `(it writes that file on connect, and these commands need it to know which agent is calling)`
-    );
+  // 1. In-process env var (set by mcp-server.ts on startup)
+  if (process.env.SYNAPSE_AGENT_ID) return process.env.SYNAPSE_AGENT_ID;
+
+  // 2. Per-slot file (cross-process reads; SYNAPSE_SLOT set by synapse run --slot N)
+  const slotStr = process.env.SYNAPSE_SLOT;
+  if (slotStr !== undefined) {
+    const slotPath = join(cwd, '.synapse', `agent-${slotStr}.env`);
+    if (existsSync(slotPath)) {
+      const m = readFileSync(slotPath, 'utf8').match(/^SYNAPSE_AGENT_ID=(.+)$/m);
+      if (m) return m[1].trim();
+    }
   }
-  const raw = readFileSync(envPath, 'utf8');
-  const m = raw.match(/^SYNAPSE_AGENT_ID=(.+)$/m);
-  if (!m) throw new Error(`.synapse/agent.env did not contain SYNAPSE_AGENT_ID`);
-  return m[1].trim();
+
+  throw new Error(
+    `Agent identity not found — expected SYNAPSE_AGENT_ID env var or .synapse/agent-<slot>.env. ` +
+    `Is the synapse-bus MCP server connected in this session?`
+  );
 }
 
 export function listAvailableRolesText(): string {
@@ -127,17 +132,11 @@ export function spawnAgentAction(
   }
 
   recordSpawnIntent(worker.agent_id, taskWithOrch, callerAgentId);
-  sendMessage(
-    callerAgentId,
-    worker.agent_id,
-    JSON.stringify({ type: 'handshake', orchestrator_id: callerAgentId, worker_id: worker.agent_id }),
-    5,
-  );
 
   return ok(
     `Spawned agent ${worker.agent_id} (slot :${worker.slot}, role: ${workerRole}) in tmux window "${windowName}". ` +
     `Send it messages using to_id = "${worker.agent_id}". ` +
-    `Worker is not ready until it has read the handshake message — check \`synapse worker list\` before delegating.`
+    `Worker is ready — delegate immediately with \`synapse task delegate --to ${worker.agent_id} ...\`.`
   );
 }
 

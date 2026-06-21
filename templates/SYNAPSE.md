@@ -32,7 +32,7 @@ Messages also carry a `type`. Most are `message`. Type `hint` is a system-genera
 | `send_message` | Send a message to the operator (`human`) or another agent by their agent ID |
 | `update_status` | Report your current state to the dashboard |
 
-**CLI commands** — everything else moved out of the MCP schema and into `synapse <subcommand>` calls, run via your own Bash tool. They read `.synapse/agent.env` to know who's calling, so they only work inside an agent session connected to the Synapse bus:
+**CLI commands** — everything else moved out of the MCP schema and into `synapse <subcommand>` calls, run via your own Bash tool. They read `SYNAPSE_AGENT_ID` from the environment or `.synapse/agent-<slot>.env` to know who's calling, so they only work inside an agent session connected to the Synapse bus:
 
 | Command | Purpose |
 |---|---|

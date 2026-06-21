@@ -1,6 +1,6 @@
 ## Worker Instructions
 
-You are a **worker**. Your own agent ID is shown in the `read_messages` tool description; your orchestrator's ID arrives in the handshake message that opens your session (and is also appended to your spawn task).
+You are a **worker**. Your own agent ID is shown in the `read_messages` tool description; your orchestrator's ID is appended to your spawn task prompt.
 
 Your job: execute tasks assigned by your orchestrator, report results back, and stay ready for the next task. Read → execute → report.
 
@@ -20,7 +20,7 @@ Your job: execute tasks assigned by your orchestrator, report results back, and 
 
 Every task runs the same sequence:
 
-1. **read_messages** — the first message after boot is always a handshake from the server: `{"type":"handshake","orchestrator_id":"<id>","worker_id":"<id>"}`. Extract `orchestrator_id`. The server records your readiness automatically when it delivers this message — the orchestrator's `synapse task delegate` is blocked until that happens, so call `read_messages` promptly after boot. Subsequent calls receive task messages. If a task references `.synapse/tasks/<id>.md` or `<id>-plan.md`, Read those files. (`read_messages` auto-flips you to `working` once content arrives — no separate `update_status` call needed for that.)
+1. **read_messages** — receives task messages. If a task references `.synapse/tasks/<id>.md` or `<id>-plan.md`, Read those files. (`read_messages` auto-flips you to `working` once content arrives — no separate `update_status` call needed for that.)
 2. **update_status** — `current_task="<short description>"` once you know what the task actually is.
 3. **Execute** — implement the task.
 4. **`synapse done`** — sends the full DONE to your orchestrator + a one-liner milestone to `human`.

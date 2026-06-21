@@ -3,7 +3,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdtempSync } from 'fs';
 import { execSync, execFileSync, spawnSync } from 'child_process';
-import { getLatestAgent, getAgentBySlot, setAgentRole, setAgentName } from './db.js';
+import { getLatestAgent, getAgentBySlot, setAgentRole, setAgentName, setAgentReady } from './db.js';
 
 export interface SpawnWorkerOptions {
   role: string;
@@ -74,6 +74,7 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
     // can find the new agent by role.
     setAgentRole(worker.agent_id, role);
     setAgentName(worker.agent_id, role);
+    setAgentReady(worker.agent_id);
 
     // Rename the tmux window to <Role>--<slot> now that we know the slot.
     // Disable automatic-rename so tmux doesn't overwrite with the process name.
