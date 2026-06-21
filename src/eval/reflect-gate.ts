@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
+
 import { db, DB_PATH, sendHint, getAgentState } from '../db.js';
 
 // ── reflect-gate ────────────────────────────────────────────────────────────
@@ -242,7 +243,19 @@ function nudgeOrchestrator(taskId: number, orchAgentId: string, trip: GateTrip):
   );
 }
 
+function isReflectEnabled(): boolean {
+  try {
+    const settingsPath = join(process.cwd(), '.synapse', 'settings.json');
+    const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
+    return settings?.reflect?.enabled !== false;
+  } catch {
+    return true;
+  }
+}
+
 export async function runReflectGate(taskId: number): Promise<void> {
+  if (!isReflectEnabled()) return;
+
   const orchAgentId = findOrchestrator();
   if (!orchAgentId) return; // no live orchestrator to nudge
 
