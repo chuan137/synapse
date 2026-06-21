@@ -414,9 +414,9 @@ taskCmd
   .description('Send a task message to a worker — call after `task start`, does NOT open a task record')
   .requiredOption('--to <agent_id>', 'Worker agent_id, e.g. cec50b17:3')
   .requiredOption('--title <title>', 'One-line task title (visible in S-Deck Tasks tab)')
-  .requiredOption('--content <content>', 'Full task message body sent to the worker')
+  .option('--content <content>', 'Full task message body sent to the worker (required unless --task-file is set)')
   .option('--priority <n>', '0 = urgent, 5 = normal', '5')
-  .option('--task-file', 'Write content to .synapse/tasks/<taskId>.md and send a short reference instead of inline')
+  .option('--task-file', 'Synthesize a pointer message and read .synapse/tasks/<taskId>.md — do NOT pass --content (omit it to avoid overwriting your spec)')
   .option('--task-id <id>', 'The task_id from `task start` — required when --task-file is set')
   .action((opts) => {
     const callerAgentId = resolveSelfAgentId();
@@ -424,7 +424,7 @@ taskCmd
     const result = delegateTaskAction(callerAgentId, {
       toId: opts.to,
       title: opts.title,
-      content: opts.content,
+      content: opts.content as string | undefined,
       priority: optInt(opts.priority),
       taskFile: !!opts.taskFile,
       taskId: optInt(opts.taskId),

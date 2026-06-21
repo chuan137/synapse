@@ -295,7 +295,7 @@ export function logDecisionAction(
 
 export function delegateTaskAction(
   callerAgentId: string,
-  opts: { toId: string; title: string; content: string; priority?: number; taskFile?: boolean; taskId?: number },
+  opts: { toId: string; title: string; content?: string; priority?: number; taskFile?: boolean; taskId?: number },
 ): ActionResult {
   const { toId, content, priority = 5, taskFile = false, taskId } = opts;
 
@@ -303,15 +303,29 @@ export function delegateTaskAction(
     return err(`Worker ${toId} has not acknowledged yet — check \`synapse worker list\` and retry once it shows ready.`);
   }
 
-  let outboundContent = content;
+  if (!taskFile && !content) {
+    return err(`--content is required when --task-file is not set.`);
+  }
+
+  let outboundContent: string;
   if (taskFile) {
-    const fileId = taskId ?? Date.now();
+    if (content !== undefined) {
+      return err(
+        `--content is incompatible with --task-file — write your brief to .synapse/tasks/<id>.md first, then omit --content. ` +
+        `(Passing both would silently overwrite your spec file.)`
+      );
+    }
+    if (taskId === undefined) {
+      return err(`--task-id is required when --task-file is set (needed to locate .synapse/tasks/<taskId>.md).`);
+    }
     const tasksDir = join(process.cwd(), '.synapse', 'tasks');
-    mkdirSync(tasksDir, { recursive: true });
-    writeFileSync(join(tasksDir, `${fileId}.md`), content, 'utf8');
-    const lines = content.split('\n');
-    const preview = lines.slice(0, 3).join('\n');
-    outboundContent = `Task brief at .synapse/tasks/${fileId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
+    const taskFilePath = join(tasksDir, `${taskId}.md`);
+    if (!existsSync(taskFilePath)) {
+      return err(`Task file ${taskFilePath} not found — write your brief there before calling delegate with --task-file.`);
+    }
+    outboundContent = `Task brief at .synapse/tasks/${taskId}.md`;
+  } else {
+    outboundContent = content!;
   }
 
   const messageId = sendMessage(callerAgentId, toId, outboundContent, priority, false, undefined, taskId ?? null);
