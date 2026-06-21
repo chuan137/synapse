@@ -8,6 +8,8 @@
       --text:    #c8c8ca;
       --muted:   #78787e;
       --accent:  #7091f5;
+      --tooltip-bg:   rgba(240, 240, 240, 0.95);
+      --tooltip-text: #111;
     }
 
     :root.bright {
@@ -27,6 +29,8 @@
       --p0-text: #921818;
       --warn:    #b86000;
       --hover-soft: rgba(0,0,0,0.03);
+      --tooltip-bg:   rgba(30, 30, 30, 0.92);
+      --tooltip-text: #fff;
     }
 
     :root {
@@ -1027,12 +1031,12 @@
       bottom: calc(100% + 5px);
       left: 50%;
       transform: translateX(-50%);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 10px;
-      padding: 3px 8px;
-      border-radius: 5px;
+      background: var(--tooltip-bg);
+      border: 1px solid rgba(128,128,128,0.2);
+      color: var(--tooltip-text);
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
       white-space: pre;
       pointer-events: none;
       opacity: 0;
