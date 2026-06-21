@@ -664,25 +664,29 @@ function worktreeDirty(wtPath: string): boolean {
 }
 
 /**
- * Return the branch checked out at `absPath` according to `git worktree list`,
- * or null if the path is not a registered worktree.
+ * Return the branch checked out at `absPath` according to `git worktree list`.
+ * - Returns the branch name (e.g. "synapse/foo") if found and on a named branch.
+ * - Returns '' (empty string) if found but HEAD is detached.
+ * - Returns null if the path is not a registered worktree at all.
  */
 function registeredWorktreeBranch(root: string, absPath: string): string | null {
   const out = execFileSync('git', ['worktree', 'list', '--porcelain'], {
     cwd: root, encoding: 'utf8',
   });
   // Each stanza: "worktree <path>\nHEAD <sha>\nbranch refs/heads/<branch>\n"
+  // Detached-HEAD stanzas emit "detached" instead of a branch line.
   const stanzas = out.trim().split(/\n\n+/);
   for (const stanza of stanzas) {
     const lines = stanza.split('\n');
     const pathLine = lines.find(l => l.startsWith('worktree '));
-    const branchLine = lines.find(l => l.startsWith('branch '));
     if (!pathLine) continue;
     if (pathLine.slice('worktree '.length).trim() === absPath) {
-      return branchLine ? branchLine.slice('branch refs/heads/'.length).trim() : null;
+      const branchLine = lines.find(l => l.startsWith('branch '));
+      if (!branchLine) return ''; // detached HEAD — registered but no branch name
+      return branchLine.replace(/^branch refs\/heads\//, '').trim();
     }
   }
-  return null;
+  return null; // not a registered worktree
 }
 
 /** Parse the worker slot from a slug of the form `<role>-<slot>-<task>` or `<role>-<slot>`. */
@@ -740,6 +744,14 @@ worktree
         );
         process.exit(1);
       }
+      if (actualBranch === '') {
+        // Registered worktree but HEAD is detached — not safe to reuse.
+        process.stderr.write(
+          `error: worktree at ${wtPath} has a detached HEAD\n` +
+          `  Run \`synapse worktree prune ${name}\` to remove it, then retry.\n`
+        );
+        process.exit(1);
+      }
       if (actualBranch !== branch) {
         // Registered worktree but on the wrong branch — likely a slug collision.
         process.stderr.write(
@@ -749,7 +761,8 @@ worktree
         process.exit(1);
       }
       // Already the correct worktree on the correct branch — reuse it.
-      process.stdout.write(`reusing existing worktree at ${wtPath}\n`);
+      // Deliberately not checking for dirty state; caller may be re-entering an in-progress task.
+      process.stderr.write(`reusing existing worktree at ${wtPath}\n`);
       process.stdout.write(`${wtPath}\n`);
       return;
     }
