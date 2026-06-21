@@ -663,6 +663,28 @@ function worktreeDirty(wtPath: string): boolean {
   return out.trim().length > 0;
 }
 
+/**
+ * Return the branch checked out at `absPath` according to `git worktree list`,
+ * or null if the path is not a registered worktree.
+ */
+function registeredWorktreeBranch(root: string, absPath: string): string | null {
+  const out = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd: root, encoding: 'utf8',
+  });
+  // Each stanza: "worktree <path>\nHEAD <sha>\nbranch refs/heads/<branch>\n"
+  const stanzas = out.trim().split(/\n\n+/);
+  for (const stanza of stanzas) {
+    const lines = stanza.split('\n');
+    const pathLine = lines.find(l => l.startsWith('worktree '));
+    const branchLine = lines.find(l => l.startsWith('branch '));
+    if (!pathLine) continue;
+    if (pathLine.slice('worktree '.length).trim() === absPath) {
+      return branchLine ? branchLine.slice('branch refs/heads/'.length).trim() : null;
+    }
+  }
+  return null;
+}
+
 /** Parse the worker slot from a slug of the form `<role>-<slot>-<task>` or `<role>-<slot>`. */
 function slotFromSlug(name: string): number | null {
   // Non-greedy match on the role (may contain hyphens, e.g. "code-reviewer"),
@@ -709,14 +731,36 @@ worktree
     const branch = branchName(name);
 
     if (existsSync(wtPath)) {
-      process.stderr.write(`error: worktree path already exists: ${wtPath}\n`);
-      process.exit(1);
+      const actualBranch = registeredWorktreeBranch(root, wtPath);
+      if (actualBranch === null) {
+        // Directory exists but is not a registered git worktree — orphan dir.
+        process.stderr.write(
+          `error: path exists but is not a registered worktree: ${wtPath}\n` +
+          `  Run \`synapse worktree prune ${name}\` to clean it up, then retry.\n`
+        );
+        process.exit(1);
+      }
+      if (actualBranch !== branch) {
+        // Registered worktree but on the wrong branch — likely a slug collision.
+        process.stderr.write(
+          `error: worktree at ${wtPath} is on branch '${actualBranch}', expected '${branch}'\n` +
+          `  Run \`synapse worktree prune ${name}\` to remove it, then retry.\n`
+        );
+        process.exit(1);
+      }
+      // Already the correct worktree on the correct branch — reuse it.
+      process.stdout.write(`reusing existing worktree at ${wtPath}\n`);
+      process.stdout.write(`${wtPath}\n`);
+      return;
     }
 
-    // Verify branch doesn't already exist
+    // Verify branch doesn't already exist (stale branch with no directory)
     try {
       execFileSync('git', ['rev-parse', '--verify', branch], { cwd: root, stdio: 'pipe' });
-      process.stderr.write(`error: branch already exists: ${branch}\n`);
+      process.stderr.write(
+        `error: branch '${branch}' already exists but the worktree directory is missing\n` +
+        `  Run \`synapse worktree prune ${name}\` to clean up the stale branch, then retry.\n`
+      );
       process.exit(1);
     } catch { /* branch absent — good */ }
 
