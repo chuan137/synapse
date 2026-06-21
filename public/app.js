@@ -609,7 +609,7 @@
           ? r.input_tokens + r.output_tokens + r.cache_creation_input_tokens + r.cache_read_input_tokens
           : null;
         const tokenChip = totalTokens != null
-          ? `<span class="eval-chip eval-chip-tokens">${formatTokenCount(totalTokens)}</span>`
+          ? `<span class="eval-chip eval-chip-tokens" data-tip="Input: ${formatTokenCount(r.input_tokens)}&#10;Output: ${formatTokenCount(r.output_tokens)}&#10;Cache write: ${formatTokenCount(r.cache_creation_input_tokens)}&#10;Cache read: ${formatTokenCount(r.cache_read_input_tokens)}">${formatTokenCount(totalTokens)}</span>`
           : '';
         return `<div class="eval-row ${r.pass ? 'eval-pass' : 'eval-fail'} eval-clickable" data-task-id="${r.task_id}" style="cursor:pointer">
           <div class="eval-row-header">
@@ -725,7 +725,7 @@
           a.tool_calls > 0 ? `<span class="task-chip">${a.tool_calls} calls</span>` : '',
           sha,
           (a.input_tokens != null)
-            ? `<span class="task-chip task-chip-tokens">${formatTokenCount(a.input_tokens + a.output_tokens + a.cache_creation_input_tokens + a.cache_read_input_tokens)}</span>`
+            ? `<span class="task-chip task-chip-tokens" data-tip="Input: ${formatTokenCount(a.input_tokens)}&#10;Output: ${formatTokenCount(a.output_tokens)}&#10;Cache write: ${formatTokenCount(a.cache_creation_input_tokens)}&#10;Cache read: ${formatTokenCount(a.cache_read_input_tokens)}">${formatTokenCount(a.input_tokens + a.output_tokens + a.cache_creation_input_tokens + a.cache_read_input_tokens)}</span>`
             : '',
         ].filter(Boolean).join('');
         const sourceMsgAgent = a.source_msg_to_id ?? '';
