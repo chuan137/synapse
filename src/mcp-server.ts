@@ -4,39 +4,15 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { randomBytes } from 'crypto';
-import { spawnSync, spawn } from 'child_process';
-import { readMessages, sendMessage, updateStatus, claimAgentSlot, createApprovalRequest, pollApproval, getAgentHistory, listLiveWorkers, reapGhostAgents, purgeStaleAgents, setAgentName, startTask, finishTask, getMostRecentInProgressTask, recordSpawnIntent, countCompletedTasksForAgent, getAgentSessionStart, readSynapseSettings, setCurrentTaskId, clearCurrentTaskId, clearCurrentTaskIdForTask, getAgentState, setAgentReady, getAgentReady, DB_PATH, logDecision } from './db.js';
-import { spawnWorker } from './spawn.js';
-
-const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
+import { readMessages, sendMessage, updateStatus, claimAgentSlot, setAgentName, getMostRecentInProgressTask, getAgentState, setAgentReady } from './db.js';
 
 // Checks if a message body looks like a numbered or bulleted option list.
 // Used to enforce request_options when send_message targets 'human' with needs_approval.
 function looksLikeOptionList(content: string): boolean {
   return /^\s*\d+[.)]/m.test(content) || /^[-•]\s/m.test(content);
-}
-
-function listAvailableRoles(): string {
-  const rolesDir = join(TEMPLATES_DIR, 'roles');
-  if (!existsSync(rolesDir)) return 'No roles defined yet.';
-  const roles = readdirSync(rolesDir)
-    .filter(f => f.endsWith('.md'))
-    .map(f => {
-      const content = readFileSync(join(rolesDir, f), 'utf8');
-      const match = content.match(/^---\n([\s\S]*?)\n---/);
-      if (!match) return null;
-      const block = match[1];
-      const role = (block.match(/^role:\s*(.+)$/m) ?? [])[1]?.trim() ?? f.replace('.md', '');
-      const description = (block.match(/^description:\s*(.+)$/m) ?? [])[1]?.trim() ?? '';
-      return `- **${role}**: ${description}`;
-    })
-    .filter(Boolean)
-    .join('\n');
-  return roles || 'No roles defined yet.';
 }
 
 // ── Agent identity ─────────────────────────────────────────────────────────
@@ -73,7 +49,9 @@ if (slot === 0) {
   setAgentName(AGENT_ID, 'orchestrator');
 }
 
-// Write agent ID so the PostToolUse hook can look up unread messages.
+// Write agent ID so `synapse task/worker/decision/approve/history/done` CLI
+// subcommands (run via this agent's own Bash tool) know who is calling —
+// see resolveSelfAgentId() in agent-actions.ts.
 writeFileSync(join(SYNAPSE_DIR, 'agent.env'), `SYNAPSE_AGENT_ID=${AGENT_ID}\n`, 'utf8');
 
 if (isFirstInit) {
@@ -89,28 +67,46 @@ const server = new Server(
 
 // ── Tool definitions ───────────────────────────────────────────────────────
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+// Only the three highest-frequency, called-every-turn actions remain MCP tools.
+// Everything else (spawn_agent, list_workers, request_approval, get_history,
+// start_task, finish_task, delegate_task, log_decision, report_done) moved to
+// `synapse <subcommand>` CLI calls — see agent-actions.ts and index.ts. That
+// shrinks the per-turn tool-schema every agent pays for on every API call,
+// regardless of whether a tool is actually invoked that turn.
+const ORCH_ONLY_TOOLS = new Set<string>([]);
+const WORKER_ONLY_TOOLS = new Set<string>([]);
+
+const ALL_TOOLS = [
     {
       name: 'read_messages',
       description:
-        `Check for instructions from the human operator. Your agent ID is "${AGENT_ID}". ` +
-        'Call this at the START of every turn before doing anything else. ' +
-        'Returns unread messages addressed to you, ordered by priority (0 = urgent). ' +
-        'When there are messages, the first content block is a JSON array where each element has: ' +
-        '{ id: number, from: string, priority: 0|5, at: string (ISO timestamp), content: string }. ' +
-        'Use the `id` field as `source_msg_id` when calling `start_task`.',
-      inputSchema: { type: 'object', properties: {}, required: [] },
+        `Call at the START of every turn. Your agent ID is "${AGENT_ID}". ` +
+        'Returns unread messages addressed to you, ordered by priority (0=urgent). ' +
+        'Each element: { id, from, priority: 0|5, at, content }. Use `id` as `source_msg_id` in start_task. ' +
+        'Pass state/current_task to report your status in the same call instead of a separate update_status — ' +
+        'use this when you\'re reporting idle/blocked and immediately waiting for the next message (saves a round-trip).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          state: {
+            type: 'string',
+            enum: ['idle', 'working', 'error'],
+            description: 'Optional: report this status before checking messages (e.g. "idle" when entering a wait loop).',
+          },
+          current_task: {
+            type: 'string',
+            description: 'Optional, paired with state — short description (e.g. "awaiting worker X on task N").',
+          },
+        },
+        required: [],
+      },
     },
     {
       name: 'send_message',
       description:
-        'Send a message to the human operator or another agent. ' +
-        'To reach the human operator, set to_id = "human" (this is the correct value, not "synapse" or anything else). ' +
-        'To message another agent, use their agent_id. ' +
-        'Keep messages short — the operator is watching multiple agents. ' +
-        'Set needs_approval: true to show an Approve button to the operator on S-Deck. ' +
-        'Use request_options to present clickable choices when the operator must pick one of several options (requires needs_approval: true).',
+        'Send a message to "human" (the operator) or another agent\'s agent_id. Keep it short. ' +
+        'needs_approval: true shows an Approve button on S-Deck. ' +
+        'request_options presents clickable choices (requires needs_approval: true).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -179,236 +175,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['state'],
       },
     },
-    {
-      name: 'spawn_agent',
-      description:
-        'Spawn a new long-lived Claude worker agent in a tmux window. ' +
-        'The agent will register itself in Synapse and you can message it via its returned agent_id. ' +
-        'Every worker should have a role — check the pool for an idle matching worker before spawning. ' +
-        `Available roles:\n${listAvailableRoles()}\n` +
-        'If no role fits, ask the human to define one before spawning.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          task: {
-            type: 'string',
-            description: 'The task instructions to give the new agent. Be specific — this is its entire context.',
-          },
-          name: {
-            type: 'string',
-            description: 'Short human-readable name for this agent, e.g. "backend-reviewer".',
-          },
-          role: {
-            type: 'string',
-            description: 'Worker role to load. Use "worker" for generic, or a named role like "code-reviewer". Named roles load templates/roles/<name>.md on top of the base worker instructions.',
-          },
-          slot: {
-            type: 'number',
-            description: 'Optional slot number to assign to this agent. If omitted, the next available slot is used.',
-          },
-        },
-        required: ['task'],
-      },
-    },
-    {
-      name: 'list_workers',
-      description:
-        'List live worker agents in the pool. Filter by role and/or state. ' +
-        'Use this BEFORE spawning a new worker — if an idle worker with the matching role exists, message it instead of spawning.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          role: {
-            type: 'string',
-            description: 'Only list workers with this role.',
-          },
-          state: {
-            type: 'string',
-            enum: ['idle', 'working', 'blocked', 'error'],
-            description: 'Only list workers in this state.',
-          },
-        },
-        required: [],
-      },
-    },
-    {
-      name: 'request_approval',
-      description:
-        'Ask the human operator for approval before proceeding. ' +
-        'This blocks until the operator approves or rejects via S-Deck. ' +
-        'Use for destructive actions, irreversible changes, or when you genuinely cannot decide.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          question: {
-            type: 'string',
-            description: 'The yes/no question for the operator. Be specific.',
-          },
-          context: {
-            type: 'string',
-            description: 'Additional context to help the operator decide.',
-          },
-        },
-        required: ['question'],
-      },
-    },
-    {
-      name: 'get_history',
-      description:
-        'Retrieve recent message history for this agent (both sent and received). ' +
-        'Use this to recall context from earlier in the session when messages have already been read.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: {
-            type: 'number',
-            description: 'Maximum number of messages to return (default: 10, max: 50).',
-          },
-        },
-        required: [],
-      },
-    },
-    {
-      name: 'start_task',
-      description:
-        'Begin tracking a task you\'ve taken on. Call this when you receive a substantive task assignment ' +
-        'from your orchestrator (or, for orchestrators, from the human). The Task will appear in the ' +
-        'operator\'s S-Deck Tasks panel for this agent. Returns a task_id you must pass to ' +
-        'finish_task when done. Skip for trivial back-and-forth — only use for tasks worth a recap entry.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Short description of the task (e.g. "Implement worktree CLI subcommands").',
-          },
-          trigger_msg_id: {
-            oneOf: [{ type: 'number' }, { type: 'null' }],
-            description: 'Required. Message id of the task assignment that triggered this task (the immediate trigger this turn). Pass null if the orchestrator self-initiated this task. Omitting this field is an error.',
-          },
-          source_msg_id: {
-            oneOf: [{ type: 'number' }, { type: 'null' }],
-            description: 'Required. The ID of the human→orchestrator message that is the root cause of this work chain — often several tasks back (e.g. the original operator request that set everything in motion). Distinct from trigger_msg_id which is the immediate trigger this turn. Get the ID from the `[id=N]` tag in `read_messages` or `get_history` output. Pass null if the orchestrator self-initiated this work. Omitting this field is an error.',
-          },
-          agent_id: {
-            type: 'string',
-            description: 'The agent this task is for. Defaults to the calling agent (self-driven). Orchestrators pass the worker agent_id when assigning a task.',
-          },
-        },
-        required: ['title'],
-      },
-    },
-    {
-      name: 'finish_task',
-      description:
-        'Mark a task as done. Pass the task_id from start_task, status=\'completed\' or \'aborted\', ' +
-        'and result_msg_id (required — the message id of your DONE/result message — links the task to its ' +
-        'resolution in the UI).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          task_id: {
-            type: 'number',
-            description: 'The id returned by start_task.',
-          },
-          status: {
-            type: 'string',
-            enum: ['completed', 'aborted'],
-            description: '\'completed\' if the task succeeded, \'aborted\' if it was cancelled or failed.',
-          },
-          result_msg_id: {
-            type: 'number',
-            description: 'Required. Message id of your DONE/result message — links the task to its resolution in the UI. Pass null if no closing message exists (rare — task was a single no-op). Omitting this field is an error.',
-          },
-          commit_sha: {
-            type: 'string',
-            description: 'Short commit SHA if this task produced a commit (optional — set automatically by the hook if omitted).',
-          },
-        },
-        required: ['task_id', 'status'],
-      },
-    },
-    {
-      name: 'log_decision',
-      description:
-        'Record an orchestrator routing/process decision for eval and retro. ' +
-        'Use for non-trivial decisions like whether to invoke code-review/test, which worker to route to, ' +
-        'whether to delegate or self-handle, whether to spawn a new worker, whether to split a task. ' +
-        'Skip for trivial flow (every message); only log decisions worth a recap entry.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          kind: {
-            type: 'string',
-            description: 'Decision category. Common values: "route", "review", "test", "worktree", "spawn", "split", "escalate", "self_handle". Free-form string allowed.',
-          },
-          value: {
-            type: 'string',
-            description: 'Decision outcome. For boolean decisions: "yes" | "no" | "skipped:<reason>". For routing: worker agent_id or literal "self". For spawn: role name. Free-form string.',
-          },
-          why: {
-            type: 'string',
-            description: 'One-line rationale for the decision. Optional but strongly encouraged.',
-          },
-          related_task_id: {
-            type: 'number',
-            description: 'Task id this decision relates to (from start_task). Optional.',
-          },
-          related_msg_id: {
-            type: 'number',
-            description: 'Message id that triggered this decision (from read_messages). Optional.',
-          },
-        },
-        required: ['kind', 'value'],
-      },
-    },
-    {
-      name: 'delegate_task',
-      description:
-        'Send a task to a worker. Call this after start_task — the task record must already exist. ' +
-        'Returns { message_id }. Skip for trivial messages (clarifications, status checks).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          to_id: { type: 'string', description: 'Worker agent_id (e.g. cec50b17:3)' },
-          title: { type: 'string', description: 'One-line task title (visible in S-Deck Tasks tab)' },
-          content: { type: 'string', description: 'The full task message body sent to the worker' },
-          priority: { type: 'number', enum: [0, 5], default: 5, description: '0 = urgent, 5 = normal' },
-          task_file: {
-            type: 'boolean',
-            description: 'If true, write the task content to .synapse/tasks/<taskId>.md and send a short reference message instead of the full content inline. Use for large task specs (>~300 tokens).',
-            default: false,
-          },
-          task_id: {
-            type: 'number',
-            description: 'The task_id returned by start_task. Required when task_file is true (used as the filename).',
-          },
-        },
-        required: ['to_id', 'title', 'content'],
-      },
-    },
-    {
-      name: 'report_done',
-      description:
-        'Wrap up a task you finished. Sends the full DONE message to the orchestrator and posts a one-liner milestone to human. ' +
-        'The orchestrator closes the task via finish_task after committing. ' +
-        'Replaces the previous send_message + send_message sequence.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          orchestrator_id: { type: 'string', description: 'Your orchestrator agent_id (usually <projectId>:0)' },
-          content: { type: 'string', description: 'Full DONE report — files changed, results, caveats. Sent to orchestrator.' },
-          milestone: { type: 'string', description: 'Optional one-line milestone for the human bus. Defaults to a truncation of content.' },
-          report_file: {
-            type: 'boolean',
-            description: 'If true, write the full DONE report to .synapse/reports/<timestamp>-<slug>.md and send a short summary with file path to the human instead of the full content.',
-            default: false,
-          },
-        },
-        required: ['orchestrator_id', 'content'],
-      },
-    },
-  ],
+];
+
+const IS_ORCHESTRATOR = slot === 0;
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: ALL_TOOLS.filter((t) => {
+    if (ORCH_ONLY_TOOLS.has(t.name)) return IS_ORCHESTRATOR;
+    if (WORKER_ONLY_TOOLS.has(t.name)) return !IS_ORCHESTRATOR;
+    return true;
+  }),
 }));
 
 // ── Tool handlers ──────────────────────────────────────────────────────────
@@ -416,7 +192,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
+  // Defense in depth: a role-mismatched tool is no longer advertised in ListTools,
+  // but guard the call path too in case a stale client cache or hallucinated call
+  // slips through.
+  if (ORCH_ONLY_TOOLS.has(name) && !IS_ORCHESTRATOR) {
+    return { content: [{ type: 'text', text: `${name} is orchestrator-only — workers never call it.` }], isError: true };
+  }
+  if (WORKER_ONLY_TOOLS.has(name) && IS_ORCHESTRATOR) {
+    return { content: [{ type: 'text', text: `${name} is worker-only — the orchestrator never calls it.` }], isError: true };
+  }
+
   if (name === 'read_messages') {
+    const { state, current_task } = (args ?? {}) as { state?: 'idle' | 'working' | 'error'; current_task?: string };
+    if (state) {
+      updateStatus(AGENT_ID, state, current_task ?? null, null, null);
+    }
+
     const msgs = readMessages(AGENT_ID);
 
     const reminder = '\n\n[Synapse] Now call update_status to report your current state.';
@@ -516,289 +307,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         },
       ],
     };
-  }
-
-  if (name === 'spawn_agent') {
-    const { task, name: workerName, role: workerRole = 'worker', slot: forcedSlot } = args as { task: string; name?: string; role?: string; slot?: number };
-
-    // Reap ghost agents (pane gone without graceful end) then purge retired rows
-    // so stale slot numbers are freed before we claim a new one.
-    const reaped = reapGhostAgents();
-    const purged = purgeStaleAgents();
-    if (reaped > 0 || purged > 0) {
-      console.log(`[spawn_agent] ghost reap: ${reaped} marked ended, ${purged} purged`);
-    }
-
-    const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
-    const windowName = (workerName ?? workerRole).replace(/[^a-zA-Z0-9_-]/g, '-');
-
-    const taskWithOrch = task + `\nYour orchestrator is ${AGENT_ID}.`;
-    const worker = spawnWorker({
-      role: workerRole,
-      name: workerName,
-      slot: forcedSlot,
-      task: taskWithOrch,
-      projectDir: process.cwd(),
-      dbPath,
-    });
-
-    if (!worker) {
-      return { content: [{ type: 'text', text: `Worker spawned in tmux window "${windowName}" but has not registered yet. Check S-Deck.` }] };
-    }
-
-    recordSpawnIntent(worker.agent_id, taskWithOrch, AGENT_ID);
-    sendMessage(
-      AGENT_ID,
-      worker.agent_id,
-      JSON.stringify({ type: 'handshake', orchestrator_id: AGENT_ID, worker_id: worker.agent_id }),
-      5,
-    );
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Spawned agent ${worker.agent_id} (slot :${worker.slot}, role: ${workerRole}) in tmux window "${windowName}". ` +
-                `Send it messages using to_id = "${worker.agent_id}". ` +
-                `Worker is not ready until it has read the handshake message — check list_workers before delegating.`,
-        },
-      ],
-    };
-  }
-
-  if (name === 'list_workers') {
-    const { role, state } = args as { role?: string; state?: 'idle' | 'working' | 'blocked' | 'error' };
-    const workers = listLiveWorkers({ role, state });
-
-    if (workers.length === 0) {
-      return { content: [{ type: 'text', text: 'No live workers match.' }] };
-    }
-
-    const fmtAge = (ms: number) => {
-      const s = Math.round(ms / 1000);
-      return s < 60 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
-    };
-
-    const rows = workers.map((w) =>
-      `:${w.slot}\t${w.agent_id}\t${w.role ?? '-'}\t${w.name || '-'}\t${w.state}\t${w.current_task ?? '-'}\t${fmtAge(w.last_seen_ms_ago)}\t${w.ready_age}`
-    );
-    const header = 'slot\tagent_id\trole\tname\tstate\tcurrent_task\tlast_seen\tready';
-    const text = `${workers.length} live worker(s):\n\n${header}\n${rows.join('\n')}`;
-
-    return { content: [{ type: 'text', text }] };
-  }
-
-  if (name === 'request_approval') {
-    const { question, context } = args as { question: string; context?: string };
-
-    const id = createApprovalRequest(AGENT_ID, question, context ?? null);
-
-    // Notify operator via message
-    sendMessage(AGENT_ID, 'human', `[Approval needed] ${question}${context ? `\n\nContext: ${context}` : ''}`, 0);
-
-    // Poll until resolved (max 10 min)
-    const deadline = Date.now() + 10 * 60 * 1000;
-    while (Date.now() < deadline) {
-      spawnSync('sleep', ['3']);
-      const req = pollApproval(id);
-      if (req && req.status !== 'pending') {
-        const approved = req.status === 'approved';
-        return {
-          content: [{
-            type: 'text',
-            text: `${approved ? '✓ Approved' : '✗ Rejected'}${req.comment ? `: ${req.comment}` : ''}`
-          }],
-        };
-      }
-    }
-
-    return {
-      content: [{ type: 'text', text: 'Approval request timed out after 10 minutes. Treat as rejected.' }],
-    };
-  }
-
-  if (name === 'get_history') {
-    const { limit = 10 } = args as { limit?: number };
-    const clampedLimit = Math.min(Math.max(1, limit), 50);
-    const msgs = getAgentHistory(AGENT_ID, clampedLimit);
-
-    if (msgs.length === 0) {
-      return { content: [{ type: 'text', text: 'No message history found.' }] };
-    }
-
-    const formatted = msgs
-      .map((m) => {
-        const ts = new Date(m.created_at).toISOString();
-        const direction = m.from_id === AGENT_ID ? `→ ${m.to_id}` : `← ${m.from_id}`;
-        const label = m.priority === 0 ? '[P0]' : '[P5]';
-        const readMark = m.read_at ? '' : ' [unread]';
-        return `${label} ${direction} at ${ts}${readMark}\n${m.content}`;
-      })
-      .join('\n\n---\n\n');
-
-    return { content: [{ type: 'text', text: `${msgs.length} message(s):\n\n${formatted}` }] };
-  }
-
-  if (name === 'start_task') {
-    const { title, trigger_msg_id, source_msg_id, agent_id } = args as { title: string; trigger_msg_id?: number; source_msg_id?: number; agent_id?: string };
-    if (!('trigger_msg_id' in (args as object))) {
-      return { content: [{ type: 'text', text: 'trigger_msg_id is required on start_task. Pass trigger_msg_id: <message_id> if a specific message triggered this task (get the ID from read_messages), or trigger_msg_id: null if the orchestrator self-initiated this task. This field is required for task traceability.' }], isError: true };
-    }
-    if (!('source_msg_id' in (args as object))) {
-      return { content: [{ type: 'text', text: 'source_msg_id is required on start_task. Pass source_msg_id: <message_id> if a specific operator message originated this task chain (often several tasks back — find the root cause msg via read_messages or get_history), or source_msg_id: null if the orchestrator self-initiated this work. This field is required for task traceability.' }], isError: true };
-    }
-    const taskId = startTask(agent_id ?? AGENT_ID, title, trigger_msg_id ?? null, source_msg_id ?? null);
-    return { content: [{ type: 'text', text: `Task started (id: ${taskId}).` }] };
-  }
-
-  if (name === 'finish_task') {
-    const { task_id, status, result_msg_id, commit_sha } = args as {
-      task_id: number;
-      status: 'completed' | 'aborted';
-      result_msg_id?: number;
-      commit_sha?: string;
-    };
-    if (!('result_msg_id' in (args as object))) {
-      return { content: [{ type: 'text', text: 'result_msg_id is required on finish_task. Pass result_msg_id: <message_id> if a specific message (worker DONE, your own done broadcast, blocked report) closed this task (get the ID from read_messages or your own send_message return), or result_msg_id: null if no closing message exists (rare — task was a single no-op). This field is required for task traceability.' }], isError: true };
-    }
-    const ok = finishTask(task_id, status, result_msg_id ?? null, commit_sha ?? null);
-    // Safety net: clear cookie from any worker still attributed to this task
-    clearCurrentTaskIdForTask(task_id);
-    if (ok && status === 'completed') {
-      // `eval --task-id` extracts the case file AND evaluates/persists/threshold-checks it —
-      // no separate extractCases() call needed here (that was duplicate work).
-      const indexJs = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
-      const child = spawn(process.execPath, [indexJs, 'eval', '--task-id', String(task_id)], {
-        detached: true,
-        stdio: 'ignore',
-        env: { ...process.env },
-      });
-      child.unref();
-    } else {
-      // Aborted tasks aren't evaluated (no pass/fail thresholds apply), but still get a case
-      // file extracted for the record.
-      setImmediate(async () => {
-        try {
-          const { extractCases } = await import('./eval/extract.js');
-          const evalDir = join(dirname(DB_PATH), 'evaluations');
-          extractCases(DB_PATH, evalDir, 1, task_id);
-        } catch (err: any) {
-          console.warn(`[finish_task] auto-extract failed for task ${task_id}:`, err?.message ?? err);
-        }
-      });
-    }
-    if (ok) {
-      // reflect-gate: per-task execution reflection, distinct from /retro (periodic,
-      // routing-focused). Single detached process owns all 3 gate conditions, including
-      // its own internal idle-timer sleep — see src/eval/reflect-gate.ts header comment.
-      const reflectGateJs = join(dirname(fileURLToPath(import.meta.url)), 'eval', 'reflect-gate.js');
-      const reflectChild = spawn(process.execPath, [reflectGateJs, String(task_id)], {
-        detached: true,
-        stdio: 'ignore',
-        env: { ...process.env },
-      });
-      reflectChild.unref();
-    }
-    // Auto-restart after AUTO_RESTART_AFTER_TASKS completed tasks
-    const settings = readSynapseSettings();
-    const AUTO_RESTART_AFTER_TASKS = typeof settings.autoRestartTasks === 'number' ? settings.autoRestartTasks : 5;
-    if (AUTO_RESTART_AFTER_TASKS > 0 && status === 'completed') {
-      const sessionStart = getAgentSessionStart(AGENT_ID);
-      if (sessionStart) {
-        const completedCount = countCompletedTasksForAgent(AGENT_ID, sessionStart);
-        if (completedCount >= AUTO_RESTART_AFTER_TASKS) {
-          const deckPort = process.env.SYNAPSE_DECK_PORT ?? '3001';
-          const http = await import('http');
-          const req = http.request(`http://127.0.0.1:${deckPort}/api/agents/${encodeURIComponent(AGENT_ID)}/restart`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          req.on('error', () => {}); // ignore — best-effort
-          req.end();
-        }
-      }
-    }
-    return { content: [{ type: 'text', text: ok ? `Task ${task_id} marked ${status}.` : `Task ${task_id} not found or already finished.` }] };
-  }
-
-  if (name === 'log_decision') {
-    const { kind, value, why, related_task_id, related_msg_id } = args as {
-      kind: string;
-      value: string;
-      why?: string;
-      related_task_id?: number;
-      related_msg_id?: number;
-    };
-    const id = logDecision(AGENT_ID, kind, value, why ?? null, related_task_id ?? null, related_msg_id ?? null);
-    return { content: [{ type: 'text', text: `Decision logged (id: ${id}).` }] };
-  }
-
-  if (name === 'delegate_task') {
-    const { to_id, title, content, priority = 5, task_file = false, task_id } = args as {
-      to_id: string;
-      title: string;
-      content: string;
-      priority?: number;
-      task_file?: boolean;
-      task_id?: number;
-    };
-
-    if ('source_msg_id' in (args as object)) {
-      return { content: [{ type: 'text', text: 'source_msg_id has moved to start_task. Pass it there instead. Calling delegate_task with source_msg_id is no longer supported.' }], isError: true };
-    }
-
-    // Spawn ACK gate: reject if the target worker has not yet read its handshake message.
-    if (getAgentReady(to_id) === null) {
-      return { content: [{ type: 'text', text: `Worker ${to_id} has not acknowledged yet — check list_workers and retry once it shows ready.` }], isError: true };
-    }
-    let outboundContent = content;
-    if (task_file) {
-      const fileId = task_id ?? Date.now();
-      const tasksDir = join(process.cwd(), '.synapse', 'tasks');
-      mkdirSync(tasksDir, { recursive: true });
-      writeFileSync(join(tasksDir, `${fileId}.md`), content, 'utf8');
-      const lines = content.split('\n');
-      const preview = lines.slice(0, 3).join('\n');
-      outboundContent = `Task brief at .synapse/tasks/${fileId}.md\n\n${preview}${lines.length > 3 ? '\n…' : ''}`;
-    }
-    const messageId = sendMessage(AGENT_ID, to_id, outboundContent, priority, false, undefined, task_id ?? null);
-    // Set worker cookie: attribute subsequent tool_metrics rows to this task.
-    // Only set when task_id is known; orchestrators never receive a cookie.
-    if (task_id !== undefined) {
-      setCurrentTaskId(to_id, task_id);
-    }
-    return { content: [{ type: 'text', text: `Delegated to ${to_id}: message_id=${messageId}` }] };
-  }
-
-  if (name === 'report_done') {
-    const { orchestrator_id, content, milestone, report_file = false } = args as {
-      orchestrator_id: string;
-      content: string;
-      milestone?: string;
-      report_file?: boolean;
-    };
-    // Full content always goes to orchestrator
-    const orchMsgId = sendMessage(AGENT_ID, orchestrator_id, content, 5);
-    // Clear worker cookie — this worker's task is done
-    clearCurrentTaskId(AGENT_ID);
-    // Human message: file it or summarize inline
-    let humanMsg: string;
-    if (report_file) {
-      const reportsDir = join(process.cwd(), '.synapse', 'reports');
-      mkdirSync(reportsDir, { recursive: true });
-      const slug = content.split('\n')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
-      const filename = `${Date.now()}-${slug}.md`;
-      writeFileSync(join(reportsDir, filename), content, 'utf8');
-      const lines = content.split('\n');
-      const preview = lines.slice(0, 5).join('\n');
-      humanMsg = milestone ?? `DONE — ${preview}${lines.length > 5 ? '\n…' : ''}\n\n[Full report: .synapse/reports/${filename}]`;
-    } else {
-      humanMsg = milestone ?? (content.length > 200
-        ? `DONE — ${content.slice(0, 200).split('\n')[0]}`
-        : `DONE — ${content.split('\n')[0]}`);
-    }
-    sendMessage(AGENT_ID, 'human', humanMsg, 5);
-    return { content: [{ type: 'text', text: `Reported done. orch_msg=${orchMsgId}` }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);

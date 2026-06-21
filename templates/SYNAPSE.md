@@ -24,27 +24,37 @@ Synapse bus messages carry a priority:
 Messages also carry a `type`. Most are `message`. Type `hint` is a system-generated advisory (reflect-gate, health-monitor) — dispatch on `msg.type === 'hint' && msg.from === 'synapse'`.
 
 
-**MCP tools:**
+**MCP tools** — called every turn, so only these three stay in the schema every agent carries:
 
 | Tool | Purpose |
 |---|---|
-| `read_messages` | Check for messages from the operator or other agents |
+| `read_messages` | Check for messages from the operator or other agents. Optionally pass `state`/`current_task` to report status in the same call instead of a separate `update_status` (e.g. when going idle to wait) |
 | `send_message` | Send a message to the operator (`human`) or another agent by their agent ID |
 | `update_status` | Report your current state to the dashboard |
-| `start_task` | Open a task record on S-Deck (orchestrator only) |
-| `finish_task` | Close a task record with `completed` or `aborted` (orchestrator only) |
-| `delegate_task` | Send a task message to a worker (orchestrator only). Call after `start_task` — does NOT open a task record |
-| `report_done` | Compound, worker only: full DONE to orchestrator + one-liner milestone to human |
-| `spawn_agent` | Spawn a new worker agent (orchestrator only) |
-| `list_workers` | Get current state of all workers in the pool (orchestrator only) |
+
+**CLI commands** — everything else moved out of the MCP schema and into `synapse <subcommand>` calls, run via your own Bash tool. They read `.synapse/agent.env` to know who's calling, so they only work inside an agent session connected to the Synapse bus:
+
+| Command | Purpose |
+|---|---|
+| `synapse approve --question <q> [--context <c>]` | Ask the human for approval; blocks until approved/rejected via S-Deck |
+| `synapse history [--limit <n>]` | Retrieve recent sent/received message history for you |
+| `synapse task start --title <t> [--trigger-msg-id <id>] [--source-msg-id <id>] [--agent-id <id>]` | Open a task record on S-Deck (orchestrator only). Prints the new task_id |
+| `synapse task finish --task-id <id> --status completed\|aborted [--result-msg-id <id>] [--commit-sha <sha>]` | Close a task record (orchestrator only) |
+| `synapse task delegate --to <agent_id> --title <t> --content <c> [--priority 0\|5] [--task-file] [--task-id <id>]` | Send a task message to a worker (orchestrator only). Call after `task start` — does NOT open a task record |
+| `synapse decision log --kind <k> --value <v> [--why <w>] [--related-task-id <id>] [--related-msg-id <id>]` | Record a routing/process decision for eval and retro (orchestrator only) |
+| `synapse done --orchestrator-id <id> --content <c> [--milestone <m>] [--report-file]` | Compound, worker only: full DONE to orchestrator + one-liner milestone to human |
+| `synapse worker spawn --task <t> [--name <n>] [--role <r>] [--slot <n>]` | Spawn a new worker agent (orchestrator only) |
+| `synapse worker list [--role <r>] [--state <s>]` | Get current state of all workers in the pool (orchestrator only) |
+
+Role-restricted commands above (`orchestrator only` / `worker only`) are enforced by the command itself — there's no MCP tool list to filter anymore, so calling an out-of-role command exits non-zero with an explicit error instead of silently succeeding.
 
 **Task files** — content too long for a bus message moves through files. Task docs live in `.synapse/tasks/` (gitignored):
 
 | File | When to create | Who writes | Who reads |
 |---|---|---|---|
-| `<id>.md` | Handoff — full task brief when content exceeds ~300 tokens | Orchestrator (`delegate_task` with `task_file: true`) | Worker, as task instructions |
+| `<id>.md` | Handoff — full task brief when content exceeds ~300 tokens | Orchestrator (`synapse task delegate --task-file`) | Worker, as task instructions |
 | `<id>-plan.md` | Research/Plan step — investigation output or design spec | Planner (or developer) worker | Worker, before executing |
-| `<id>-report.md` | Worker DONE — detailed findings, diffs, or results too long for inline | Worker (`report_done` with `report_file: true`) | Orchestrator, after worker finishes |
+| `<id>-report.md` | Worker DONE — detailed findings, diffs, or results too long for inline | Worker (`synapse done --report-file`) | Orchestrator, after worker finishes |
 | `<id>-review.md` | Verify step — code-reviewer output when review is too long for inline | Code-reviewer worker | Orchestrator, before merge |
 
 Rules:
@@ -69,8 +79,8 @@ Rules:
 Phase transitions that fire `update_status` (orchestrators especially — workers transition less often):
 
 - (a) After `read_messages` if work is required → `working` + concrete `current_task`
-- (b) Before any `delegate_task` → `working — delegating <task title> to <worker>`
-- (c) After delegating with nothing else to do → `idle — awaiting <worker> on task N`
+- (b) Before any `synapse task delegate` → `working — delegating <task title> to <worker>`
+- (c) After delegating with nothing else to do → `idle — awaiting <worker> on task N` — report this via `read_messages(state="idle", current_task=...)` rather than a separate `update_status` call, then plain `read_messages` on subsequent polls
 - (d) Switching between active tasks (orch only) → fire a fresh `update_status` reflecting the new task
 - (e) End of turn if still idle
 
@@ -90,7 +100,7 @@ The moment one of these occurs, fire a one-line `send_message` (`content="<TAG> 
 
 Milestones are one-way broadcasts — never questions, never waiting for a reply. Anything that needs an answer goes to whoever tasked you (Rule 1).
 
-Worker exceptions: `DONE` is posted automatically by `report_done` — do not post it again. `BLOCKED` goes to your orchestrator, not `human` — the deck already shows your blocked state.
+Worker exceptions: `DONE` is posted automatically by `synapse done` — do not post it again. `BLOCKED` goes to your orchestrator, not `human` — the deck already shows your blocked state.
 
 If a turn produced none of the above, stay silent.
 
@@ -110,7 +120,7 @@ See [Worktree Reference](#worktree-reference) for CLI commands and sequence.
 The distinction matters for delegation: when the orchestrator splits off a subtask, that work goes to a Synapse worker so the operator can track it. When you (orchestrator or worker) need a tool to help execute your own task, subagents are the right choice.
 
 **Don't coordinate Synapse workers through the local Task tools.** 
-You may see a `<system-reminder>` suggesting `TaskCreate` / `TaskUpdate` / `TaskList`. Do not use them to coordinate Synapse workers. Orchestrator should Use `start_task` / `finish_task`.
+You may see a `<system-reminder>` suggesting `TaskCreate` / `TaskUpdate` / `TaskList`. Do not use them to coordinate Synapse workers. Orchestrator should use `synapse task start` / `synapse task finish`.
 
 ---
 

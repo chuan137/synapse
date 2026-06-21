@@ -10,6 +10,55 @@ import { buildSystemPrompt } from './system-prompt.js';
 import { parseRoleFile } from './roles.js';
 import { resolveModelForRole, resolveAllModels, resolveFamily, isFamily } from './models.js';
 import { ensureHeadroomProxy, ensureHeadroomPort } from './headroom.js';
+import {
+  resolveSelfAgentId,
+  listAvailableRolesText,
+  spawnAgentAction,
+  listWorkersAction,
+  requestApprovalAction,
+  getHistoryAction,
+  startTaskAction,
+  finishTaskAction,
+  maybeAutoRestart,
+  logDecisionAction,
+  delegateTaskAction,
+  reportDoneAction,
+} from './agent-actions.js';
+
+/** Parse a CLI flag value to an int, passing through undefined for omitted flags. */
+function optInt(v: string | undefined): number | undefined {
+  return v === undefined ? undefined : parseInt(v, 10);
+}
+
+/** Slot number embedded in an agent_id of the form `<projectId>:<slot>`, or -1 if unparseable. */
+function slotOf(agentId: string): number {
+  const n = parseInt(agentId.split(':').pop() ?? '', 10);
+  return Number.isFinite(n) ? n : -1;
+}
+
+function requireOrchestrator(agentId: string, cmdName: string): void {
+  if (slotOf(agentId) !== 0) {
+    process.stderr.write(`error: ${cmdName} is orchestrator-only — workers never call it.\n`);
+    process.exit(1);
+  }
+}
+
+function requireWorker(agentId: string, cmdName: string): void {
+  if (slotOf(agentId) === 0) {
+    process.stderr.write(`error: ${cmdName} is worker-only — the orchestrator never calls it.\n`);
+    process.exit(1);
+  }
+}
+
+/** Print an ActionResult and exit with the matching status code. */
+function emitResult(result: { text: string; isError?: boolean }): never {
+  if (result.isError) {
+    process.stderr.write(result.text + '\n');
+    process.exit(1);
+  }
+  process.stdout.write(result.text + '\n');
+  process.exit(0);
+}
 
 /** List all available named roles from templates/roles/, returning their metadata. */
 function listAvailableRoles(templatesDir: string): { role: string; description: string; capabilities: string[] }[] {
@@ -255,7 +304,7 @@ program
     if (isWorker) {
       claudeArgs.push('--dangerously-skip-permissions');
       claudeArgs.push('--add-dir', cwd);
-      claudeArgs.push('--allowedTools', 'mcp__synapse-bus__read_messages,mcp__synapse-bus__send_message,mcp__synapse-bus__update_status,mcp__synapse-bus__spawn_agent,mcp__synapse-bus__request_approval,mcp__synapse-bus__get_history');
+      claudeArgs.push('--allowedTools', 'mcp__synapse-bus__read_messages,mcp__synapse-bus__send_message,mcp__synapse-bus__update_status,mcp__synapse-bus__request_approval,mcp__synapse-bus__get_history,mcp__synapse-bus__report_done');
       // '--' ends option parsing so the task prompt isn't treated as a flag
       claudeArgs.push('--');
     }
@@ -304,6 +353,183 @@ program
   .action(async () => {
     const { startMcpServer } = await import('./mcp-server.js');
     await startMcpServer();
+  });
+
+// ── Agent-action subcommands ────────────────────────────────────────────────
+// These used to be dedicated MCP tools (start_task, finish_task, delegate_task,
+// spawn_agent, list_workers, log_decision, request_approval, get_history,
+// report_done). They moved here so the per-turn MCP tool schema only carries
+// read_messages/send_message/update_status — see templates/SYNAPSE.md §1.
+// Agents invoke these via their own Bash tool.
+
+const taskCmd = program
+  .command('task')
+  .description('Manage Synapse task records (orchestrator only)');
+
+taskCmd
+  .command('start')
+  .description('Open a task record on S-Deck — returns a task_id for `task finish`/`task delegate`')
+  .requiredOption('--title <title>', 'Short description of the task')
+  .option('--trigger-msg-id <id>', 'Message id that triggered this task (from `read_messages`); omit if self-initiated')
+  .option('--source-msg-id <id>', 'Root-cause human→orchestrator message id for this work chain; omit if self-initiated')
+  .option('--agent-id <id>', 'Agent this task is for (defaults to you — pass a worker agent_id when assigning)')
+  .action((opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    requireOrchestrator(callerAgentId, 'task start');
+    const result = startTaskAction(callerAgentId, {
+      title: opts.title,
+      triggerMsgId: optInt(opts.triggerMsgId),
+      sourceMsgId: optInt(opts.sourceMsgId),
+      agentId: opts.agentId,
+    });
+    emitResult(result);
+  });
+
+taskCmd
+  .command('finish')
+  .description('Close a task record with `completed` or `aborted`')
+  .requiredOption('--task-id <id>', 'The id returned by `task start`')
+  .requiredOption('--status <status>', "'completed' or 'aborted'")
+  .option('--result-msg-id <id>', 'Message id of the result/DONE message for this task')
+  .option('--commit-sha <sha>', 'Short commit SHA if this task produced a commit (usually attached automatically by the commit hook)')
+  .action(async (opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    requireOrchestrator(callerAgentId, 'task finish');
+    if (opts.status !== 'completed' && opts.status !== 'aborted') {
+      process.stderr.write(`error: --status must be 'completed' or 'aborted'\n`);
+      process.exit(1);
+    }
+    const result = await finishTaskAction({
+      taskId: optInt(opts.taskId)!,
+      status: opts.status,
+      resultMsgId: optInt(opts.resultMsgId),
+      commitSha: opts.commitSha,
+    });
+    await maybeAutoRestart(callerAgentId, opts.status);
+    emitResult(result);
+  });
+
+taskCmd
+  .command('delegate')
+  .description('Send a task message to a worker — call after `task start`, does NOT open a task record')
+  .requiredOption('--to <agent_id>', 'Worker agent_id, e.g. cec50b17:3')
+  .requiredOption('--title <title>', 'One-line task title (visible in S-Deck Tasks tab)')
+  .requiredOption('--content <content>', 'Full task message body sent to the worker')
+  .option('--priority <n>', '0 = urgent, 5 = normal', '5')
+  .option('--task-file', 'Write content to .synapse/tasks/<taskId>.md and send a short reference instead of inline')
+  .option('--task-id <id>', 'The task_id from `task start` — required when --task-file is set')
+  .action((opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    requireOrchestrator(callerAgentId, 'task delegate');
+    const result = delegateTaskAction(callerAgentId, {
+      toId: opts.to,
+      title: opts.title,
+      content: opts.content,
+      priority: optInt(opts.priority),
+      taskFile: !!opts.taskFile,
+      taskId: optInt(opts.taskId),
+    });
+    emitResult(result);
+  });
+
+const workerCmd = program
+  .command('worker')
+  .description('Manage Synapse worker agents (orchestrator only)');
+
+workerCmd
+  .command('spawn')
+  .description(`Spawn a new worker agent in a tmux window.\n\nAvailable roles:\n${listAvailableRolesText()}`)
+  .requiredOption('--task <task>', 'Task instructions for the new agent — this is its entire context')
+  .option('--name <name>', 'Short human-readable name, e.g. "backend-reviewer"')
+  .option('--role <role>', 'Worker role to load', 'worker')
+  .option('--slot <n>', 'Optional slot number to assign')
+  .action((opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    requireOrchestrator(callerAgentId, 'worker spawn');
+    const result = spawnAgentAction(callerAgentId, {
+      task: opts.task,
+      name: opts.name,
+      role: opts.role,
+      slot: optInt(opts.slot),
+    });
+    emitResult(result);
+  });
+
+workerCmd
+  .command('list')
+  .description('Get current state of all workers in the pool — check before spawning a new one')
+  .option('--role <role>', 'Only list workers with this role')
+  .option('--state <state>', 'Only list workers in this state (idle|working|blocked|error)')
+  .action((opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    requireOrchestrator(callerAgentId, 'worker list');
+    const result = listWorkersAction({ role: opts.role, state: opts.state });
+    emitResult(result);
+  });
+
+const decisionCmd = program
+  .command('decision')
+  .description('Record orchestrator decisions for eval/retro (orchestrator only)');
+
+decisionCmd
+  .command('log')
+  .description('Record a routing/process decision for eval and retro')
+  .requiredOption('--kind <kind>', 'Decision category, e.g. route|review|test|worktree|spawn|split|escalate|self_handle')
+  .requiredOption('--value <value>', 'Decision outcome — worker agent_id, "self", role name, "yes"/"no", etc.')
+  .option('--why <why>', 'One-line rationale')
+  .option('--related-task-id <id>', 'Task id this decision relates to')
+  .option('--related-msg-id <id>', 'Message id that triggered this decision')
+  .action((opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    requireOrchestrator(callerAgentId, 'decision log');
+    const result = logDecisionAction(callerAgentId, {
+      kind: opts.kind,
+      value: opts.value,
+      why: opts.why,
+      relatedTaskId: optInt(opts.relatedTaskId),
+      relatedMsgId: optInt(opts.relatedMsgId),
+    });
+    emitResult(result);
+  });
+
+program
+  .command('approve')
+  .description('Ask the human for approval; blocks until approved/rejected via S-Deck')
+  .requiredOption('--question <question>', 'The yes/no question for the operator — be specific')
+  .option('--context <context>', 'Additional context to help the operator decide')
+  .action(async (opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    const result = await requestApprovalAction(callerAgentId, { question: opts.question, context: opts.context });
+    emitResult(result);
+  });
+
+program
+  .command('history')
+  .description('Retrieve recent sent/received message history for you')
+  .option('--limit <n>', 'Max messages to return (default 10, max 50)', '10')
+  .action((opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    const result = getHistoryAction(callerAgentId, { limit: optInt(opts.limit) });
+    emitResult(result);
+  });
+
+program
+  .command('done')
+  .description('Compound, worker only: full DONE to orchestrator + one-line milestone to human')
+  .requiredOption('--orchestrator-id <id>', 'Your orchestrator agent_id (usually <projectId>:0)')
+  .requiredOption('--content <content>', 'Full DONE report — files changed, results, caveats')
+  .option('--milestone <text>', 'One-line milestone for the human bus (default: truncation of content)')
+  .option('--report-file', 'Write the full DONE report to .synapse/reports/ and send a short summary instead')
+  .action((opts) => {
+    const callerAgentId = resolveSelfAgentId();
+    requireWorker(callerAgentId, 'done');
+    const result = reportDoneAction(callerAgentId, {
+      orchestratorId: opts.orchestratorId,
+      content: opts.content,
+      milestone: opts.milestone,
+      reportFile: !!opts.reportFile,
+    });
+    emitResult(result);
   });
 
 program
