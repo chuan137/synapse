@@ -578,6 +578,12 @@
     await Promise.all([renderEvalSection(el), renderRetroSection(el)]);
   }
 
+  function formatTokenCount(n) {
+    if (n >= 1_000_000) return `${(Math.round(n / 100_000) / 10).toFixed(1)}M tok`;
+    if (n >= 1_000) return `${(Math.round(n / 100) / 10).toFixed(1)}k tok`;
+    return `${n} tok`;
+  }
+
   async function renderEvalSection(insightsEl) {
     const sectionEl = insightsEl.querySelector('[data-section="eval"] .insights-section-body');
     if (!sectionEl) return;
@@ -599,6 +605,12 @@
       ? '<div style="color:var(--muted);font-size:11px;text-align:center;padding:12px 0">No failures yet.</div>'
       : visibleRows.map(r => {
         const failedMetrics = r.metrics.filter(m => !m.passed);
+        const totalTokens = r.input_tokens != null
+          ? r.input_tokens + r.output_tokens + r.cache_creation_input_tokens + r.cache_read_input_tokens
+          : null;
+        const tokenChip = totalTokens != null
+          ? `<span class="eval-chip eval-chip-tokens">${formatTokenCount(totalTokens)}</span>`
+          : '';
         return `<div class="eval-row ${r.pass ? 'eval-pass' : 'eval-fail'} eval-clickable" data-task-id="${r.task_id}" style="cursor:pointer">
           <div class="eval-row-header">
             <span class="eval-id">#${r.task_id}</span>
@@ -606,9 +618,9 @@
             <span style="font-size:9px;color:var(--muted)">${relTime(r.created_at)}</span>
           </div>
           <div class="eval-title">${esc(r.title.slice(0, 55))}</div>
-          ${failedMetrics.length ? `<div class="eval-failures">${failedMetrics.map(m =>
+          ${failedMetrics.length || tokenChip ? `<div class="eval-failures">${failedMetrics.map(m =>
             `<span class="eval-chip">${esc(m.metric)}=${m.value ?? '✗'}</span>`
-          ).join('')}</div>` : ''}
+          ).join('')}${tokenChip}</div>` : ''}
         </div>`;
       }).join('');
 

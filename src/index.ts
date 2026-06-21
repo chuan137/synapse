@@ -789,6 +789,32 @@ program
         { metric: 'has_commit',   passed: !result.failures.some((f: any) => f.metric === 'has_commit'),         value: null },
       ];
       writeEvalResults(taskId, evalRows, true, (result as any).role ?? null, primaryAgentId);
+
+      // Read token usage from JSONL files and persist
+      const task = singleCases[0]?.task as { agent_id?: string; started_at?: number; finished_at?: number } | undefined;
+      if (task?.started_at != null && task?.finished_at != null) {
+        const { readTaskTokens } = await import('./eval/tokens.js');
+        const { writeTokenUsage } = await import('./db.js');
+        const db2 = openDb(dbPath);
+        const workerRows = db2.prepare(`
+          SELECT DISTINCT a.session_id
+          FROM tool_metrics tm
+          JOIN agent_status a ON a.agent_id = tm.synapse_agent_id
+          WHERE tm.task_id = ? AND a.session_id IS NOT NULL
+        `).all(taskId) as { session_id: string }[];
+        const orchRow = task.agent_id
+          ? db2.prepare(`SELECT session_id FROM agent_status WHERE agent_id = ? AND session_id IS NOT NULL`).get(task.agent_id) as { session_id: string } | undefined
+          : undefined;
+        db2.close();
+        const sessionIds = [...new Set([
+          ...workerRows.map((r: { session_id: string }) => r.session_id),
+          ...(orchRow ? [orchRow.session_id] : []),
+        ])];
+        if (sessionIds.length === 0) return;
+        const usage = await readTaskTokens(sessionIds, task.started_at, task.finished_at, process.cwd());
+        writeTokenUsage(taskId, usage);
+      }
+
       process.stdout.write(`Task #${taskId}: ${result.pass ? 'PASS' : 'FAIL'}\n`);
       if (!result.pass) {
         result.failures.forEach((f: any) => process.stdout.write(`  - [${f.role}/${f.agent_id}] ${f.metric}=${f.value} (max ${f.threshold})\n`));

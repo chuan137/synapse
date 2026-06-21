@@ -109,6 +109,15 @@ export function openDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_eval_results_task ON eval_results(task_id);
 
+    CREATE TABLE IF NOT EXISTS eval_token_usage (
+      task_id                     INTEGER PRIMARY KEY REFERENCES tasks(id),
+      input_tokens                INTEGER NOT NULL DEFAULT 0,
+      output_tokens               INTEGER NOT NULL DEFAULT 0,
+      cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_input_tokens     INTEGER NOT NULL DEFAULT 0,
+      created_at                  INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS metric_failure_counts (
       metric        TEXT    PRIMARY KEY,
       count         INTEGER NOT NULL DEFAULT 0,
@@ -1157,12 +1166,16 @@ export function getAllEvalResults(): {
   task_id: number; title: string; agent_id: string;
   metrics: { metric: string; passed: boolean; value: number | null; role: string | null; agent_id: string | null }[];
   pass: boolean; created_at: number;
+  input_tokens: number | null; output_tokens: number | null;
+  cache_creation_input_tokens: number | null; cache_read_input_tokens: number | null;
 }[] {
   const rows = db.prepare(`
     SELECT t.id as task_id, t.title, t.agent_id,
-           er.metric, er.passed, er.value, er.created_at, er.role as er_role, er.agent_id as er_agent_id
+           er.metric, er.passed, er.value, er.created_at, er.role as er_role, er.agent_id as er_agent_id,
+           etu.input_tokens, etu.output_tokens, etu.cache_creation_input_tokens, etu.cache_read_input_tokens
     FROM eval_results er
     JOIN tasks t ON t.id = er.task_id
+    LEFT JOIN eval_token_usage etu ON etu.task_id = t.id
     WHERE t.id IN (
       SELECT DISTINCT task_id FROM eval_results
       ORDER BY task_id DESC
@@ -1175,6 +1188,8 @@ export function getAllEvalResults(): {
     task_id: number; title: string; agent_id: string;
     metrics: { metric: string; passed: boolean; value: number | null; role: string | null; agent_id: string | null }[];
     created_at: number;
+    input_tokens: number | null; output_tokens: number | null;
+    cache_creation_input_tokens: number | null; cache_read_input_tokens: number | null;
   }>();
 
   for (const r of rows) {
@@ -1185,6 +1200,10 @@ export function getAllEvalResults(): {
         agent_id: r.agent_id,
         metrics: [],
         created_at: r.created_at,
+        input_tokens: r.input_tokens ?? null,
+        output_tokens: r.output_tokens ?? null,
+        cache_creation_input_tokens: r.cache_creation_input_tokens ?? null,
+        cache_read_input_tokens: r.cache_read_input_tokens ?? null,
       });
     }
     byTask.get(r.task_id)!.metrics.push({
@@ -1200,6 +1219,36 @@ export function getAllEvalResults(): {
     ...t,
     pass: t.metrics.every(m => m.passed),
   }));
+}
+
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+}
+
+export function writeTokenUsage(taskId: number, usage: TokenUsage): void {
+  db.prepare(`
+    INSERT OR REPLACE INTO eval_token_usage
+      (task_id, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(taskId, usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens, Date.now());
+}
+
+export function getTokenUsageForTasks(taskIds: number[]): Map<number, TokenUsage> {
+  if (taskIds.length === 0) return new Map();
+  const placeholders = taskIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT task_id, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens
+    FROM eval_token_usage WHERE task_id IN (${placeholders})
+  `).all(...taskIds) as (TokenUsage & { task_id: number })[];
+  return new Map(rows.map(r => [r.task_id, {
+    input_tokens: r.input_tokens,
+    output_tokens: r.output_tokens,
+    cache_creation_input_tokens: r.cache_creation_input_tokens,
+    cache_read_input_tokens: r.cache_read_input_tokens,
+  }]));
 }
 
 export function getMetricFailureCounts(): Record<string, number> {
