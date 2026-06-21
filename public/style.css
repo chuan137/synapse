@@ -945,6 +945,7 @@
       background: color-mix(in srgb, var(--muted) 8%, transparent);
       color: var(--muted);
     }
+    .task-chip-tokens { opacity: 0.7; }
     .task-sha {
       font-family: inherit;
       font-size: 9px;

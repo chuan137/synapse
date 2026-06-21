@@ -623,6 +623,10 @@ export interface Task {
   tool_calls: number;
   source_msg_to_id: string | null;
   eval_failed: number; // 1 if any eval metric failed, 0 otherwise
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_creation_input_tokens: number | null;
+  cache_read_input_tokens: number | null;
 }
 
 export function startTask(
@@ -752,9 +756,12 @@ export function listAllTasks(limit = 200): Task[] {
            m.to_id AS source_msg_to_id,
            EXISTS(
              SELECT 1 FROM eval_results er WHERE er.task_id = t.id AND er.passed = 0
-           ) AS eval_failed
+           ) AS eval_failed,
+           etu.input_tokens, etu.output_tokens,
+           etu.cache_creation_input_tokens, etu.cache_read_input_tokens
     FROM tasks t
     LEFT JOIN messages m ON t.source_msg_id = m.id
+    LEFT JOIN eval_token_usage etu ON etu.task_id = t.id
     ORDER BY t.started_at DESC
     LIMIT ?
   `).all(limit);

@@ -724,6 +724,9 @@
         const chipsHtml = [
           a.tool_calls > 0 ? `<span class="task-chip">${a.tool_calls} calls</span>` : '',
           sha,
+          (a.input_tokens != null)
+            ? `<span class="task-chip task-chip-tokens">${formatTokenCount(a.input_tokens + a.output_tokens + a.cache_creation_input_tokens + a.cache_read_input_tokens)}</span>`
+            : '',
         ].filter(Boolean).join('');
         const sourceMsgAgent = a.source_msg_to_id ?? '';
         return `<div class="task-row ${clickable}" id="act-${a.id}" ${dataJump} data-agent-id="${esc(a.agent_id ?? '')}" data-source-msg-agent="${esc(sourceMsgAgent)}" data-trigger-msg="${a.trigger_msg_id ?? ''}" data-source-msg="${a.source_msg_id ?? ''}">
