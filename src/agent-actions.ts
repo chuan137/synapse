@@ -21,6 +21,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync, spawn } from 'child_process';
 import {
+  db,
   sendMessage,
   createApprovalRequest,
   pollApproval,
@@ -60,6 +61,8 @@ const err = (text: string): ActionResult => ({ text, isError: true });
  * tool call. Resolution order:
  *   1. process.env.SYNAPSE_AGENT_ID — set by mcp-server.ts on startup (in-process)
  *   2. .synapse/agent-<slot>.env — per-slot file for cross-process reads
+ *   3. DB lookup by CLAUDE_CODE_SESSION_ID — universal fallback when neither env
+ *      var propagated (e.g. workers spawned without --slot)
  */
 export function resolveSelfAgentId(cwd: string = process.cwd()): string {
   // 1. In-process env var (set by mcp-server.ts on startup)
@@ -73,6 +76,15 @@ export function resolveSelfAgentId(cwd: string = process.cwd()): string {
       const m = readFileSync(slotPath, 'utf8').match(/^SYNAPSE_AGENT_ID=(.+)$/m);
       if (m) return m[1].trim();
     }
+  }
+
+  // 3. DB lookup by CLAUDE_CODE_SESSION_ID (always present in Claude Code's Bash tool env)
+  const sessionId = process.env.CLAUDE_CODE_SESSION_ID;
+  if (sessionId) {
+    const row = db.prepare(
+      `SELECT agent_id FROM agent_status WHERE session_id = ? AND ended_at IS NULL`
+    ).get(sessionId) as { agent_id: string } | undefined;
+    if (row?.agent_id) return row.agent_id;
   }
 
   throw new Error(

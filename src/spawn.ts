@@ -85,6 +85,8 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
       try {
         execFileSync('tmux', ['rename-window', '-t', tmuxPane, newName]);
         execFileSync('tmux', ['set-window-option', '-t', tmuxPane, 'automatic-rename', 'off']);
+        // Best-effort: write slot into tmux window env for shell prompts (does not reach running processes).
+        execFileSync('tmux', ['set-environment', '-t', tmuxPane, 'SYNAPSE_SLOT', String(worker.slot)]);
       } catch (e) {
         process.stderr.write(`[spawnWorker] rename failed for pane ${tmuxPane}: ${e}\n`);
       }
