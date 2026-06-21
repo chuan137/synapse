@@ -399,7 +399,11 @@ program
 /** Return the main (primary) git worktree root — never a secondary worktree path. */
 function gitRoot(): string {
   // `git worktree list --porcelain` lists the main worktree first.
-  const out = execFileSync('git', ['worktree', 'list', '--porcelain'], { encoding: 'utf8' });
+  const dbPath = process.env.SYNAPSE_DB_PATH ?? join(process.cwd(), '.synapse', 'synapse.db');
+  const out = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+    encoding: 'utf8',
+    cwd: dirname(dbPath),
+  });
   const firstLine = out.split('\n').find(l => l.startsWith('worktree '));
   if (!firstLine) throw new Error('Could not determine git repo root');
   return firstLine.slice('worktree '.length).trim();
