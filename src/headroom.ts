@@ -27,6 +27,19 @@ function printDashboardUrl(port: number): void {
   process.stderr.write(`[headroom] dashboard: http://localhost:${port}/dashboard\n`);
 }
 
+function ensureHeadroomPortFromSettings(cwd: string, settings: any): number | null {
+  const h = settings.headroom ?? {};
+  if (h.enabled !== true) return null;
+
+  if (typeof h.port === 'number') return h.port;
+
+  const port = pickRandomPort();
+  settings.headroom = { ...h, port };
+  writeSettings(cwd, settings);
+  process.stderr.write(`[Synapse] headroom proxy port assigned: ${port} (saved to .synapse/settings.json)\n`);
+  return port;
+}
+
 /**
  * Read `headroom.port` from settings.json, minting and persisting a random one the
  * first time headroom is enabled without an explicit port. Persisting (instead of
@@ -38,17 +51,7 @@ function printDashboardUrl(port: number): void {
  * Returns null if headroom isn't enabled. Safe to call repeatedly — only writes once.
  */
 export function ensureHeadroomPort(cwd: string): number | null {
-  const settings = readSettings(cwd);
-  const h = settings.headroom ?? {};
-  if (h.enabled !== true) return null;
-
-  if (typeof h.port === 'number') return h.port;
-
-  const port = pickRandomPort();
-  settings.headroom = { ...h, port };
-  writeSettings(cwd, settings);
-  process.stderr.write(`[Synapse] headroom proxy port assigned: ${port} (saved to .synapse/settings.json)\n`);
-  return port;
+  return ensureHeadroomPortFromSettings(cwd, readSettings(cwd));
 }
 
 async function isProxyHealthy(port: number): Promise<boolean> {
@@ -100,7 +103,8 @@ function spawnProxy(port: number, logFile: string, extraEnv: Record<string, stri
  * returns null so agent startup is never blocked by this.
  */
 export async function ensureHeadroomProxy(cwd: string): Promise<{ baseUrl: string } | null> {
-  const port = ensureHeadroomPort(cwd);
+  const settings = readSettings(cwd);
+  const port = ensureHeadroomPortFromSettings(cwd, settings);
   if (port === null) return null;
 
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -110,7 +114,6 @@ export async function ensureHeadroomProxy(cwd: string): Promise<{ baseUrl: strin
     return { baseUrl };
   }
 
-  const settings = readSettings(cwd);
   const extraEnv: Record<string, string> = settings.headroom?.env ?? {};
   const logFile = join(cwd, '.synapse', 'headroom.jsonl');
   spawnProxy(port, logFile, extraEnv);
