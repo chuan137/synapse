@@ -573,7 +573,7 @@ program
       process.stderr.write('[Synapse] Orchestrator (slot :0) already running — starting dashboard only.\n');
     } else {
       // Spawn the orchestrator in the operator's current tmux session (not the hidden
-      // synapse-workers session used for workers) so the operator can see it.
+      // per-project worker session) so the operator can see it.
       if (!process.env.TMUX) {
         process.stderr.write(
           '[Synapse] error: not inside a tmux session. Run `synapse start` from within tmux so the orchestrator window is visible.\n'

@@ -1,9 +1,20 @@
-import { writeFileSync, chmodSync } from 'fs';
-import { join } from 'path';
+import { writeFileSync, chmodSync, realpathSync } from 'fs';
+import { join, basename } from 'path';
 import { tmpdir } from 'os';
 import { mkdtempSync } from 'fs';
 import { execSync, execFileSync, spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import { getLatestAgent, getAgentBySlot, setAgentRole, setAgentName, setAgentReady } from './db.js';
+
+/** Derive a stable, human-readable tmux session name for this project.
+ * Format: synapse-<basename>-<8 hex chars of SHA-256(realpath)>
+ * Stable across restarts; unique across projects with the same basename. */
+export function projectTmuxSession(projectDir: string): string {
+  const real = realpathSync(projectDir);
+  const hash = createHash('sha256').update(real).digest('hex').slice(0, 8);
+  const slug = basename(real).replace(/[^a-zA-Z0-9]/g, '-').slice(0, 20);
+  return `synapse-${slug}-${hash}`;
+}
 
 export interface SpawnWorkerOptions {
   role: string;
@@ -46,8 +57,8 @@ export function spawnWorker(opts: SpawnWorkerOptions): SpawnedWorker | null {
   ].join('\n') + '\n', 'utf8');
   chmodSync(launchScript, 0o755);
 
-  execSync('tmux new-session -d -s synapse-workers 2>/dev/null || true');
-  execSync(`tmux new-window -d -t synapse-workers -n ${JSON.stringify(windowName)} ${JSON.stringify(launchScript)}`);
+  execSync(`tmux new-session -d -s ${JSON.stringify(projectTmuxSession(projectDir))} 2>/dev/null || true`);
+  execSync(`tmux new-window -d -t ${JSON.stringify(projectTmuxSession(projectDir))} -n ${JSON.stringify(windowName)} ${JSON.stringify(launchScript)}`);
 
   // Poll until the worker claims its slot (max 60s)
   let worker: SpawnedWorker | null = null;
