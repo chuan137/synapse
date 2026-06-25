@@ -2,58 +2,20 @@
 /**
  * synapse — CLI for the Claude Team Synapse message bus.
  *
- * Implements, per synapse-spec.md section "Execution plan / Phase 0":
+ * Commands:
+ *   synapse init
  *   synapse register <name> <role> [session_id]
  *   synapse send <to> <type> <body> [--from NAME] [--ref-id N]
  *   synapse log <agent> <type> <summary>
  *   synapse status
- *
- * Phase 1 (manual delivery loop, no monitor):
- *   synapse pending [agent]      list pending messages, optionally filtered
- *   synapse deliver <id>         mark a message delivered (after manual send-keys)
- *
- * Phase 2 (idle detection + automated delivery, see synapse-spec.md sections
- * 3 and 4, and "Execution plan / Phase 2"):
+ *   synapse pending [agent]
+ *   synapse deliver <id>
  *   synapse monitor [--session NAME] [--interval MS] [--debounce MS] [--once]
- *     Classifies every registered, non-stopped agent's Claude Code session
- *     transcript idle/busy (last assistant `stop_reason`, debounced against
- *     transcript activity) and on an idle transition with pending mail
- *     delivers the oldest pending message via `tmux send-keys`, marking it
- *     delivered (or failed if the tmux target is gone).
  *
- *     The long-lived loop (no `--once`) is event-driven per
- *     synapse-spec.md section 3's "tail -f or inotify watch" — it uses
- *     `fs.watch` on each agent's transcript and reacts to writes instead of
- *     re-reading every agent's (potentially large, ever-growing) transcript
- *     on a fixed timer. `--debounce` is the idle-confirmation window (must
- *     be quiet this long after an `end_turn` before delivering); `--interval`
- *     is a separate, much cheaper periodic sweep that only touches the
- *     `agents`/`messages` tables, not the filesystem — it picks up agents
- *     registered after the monitor started, attaches a watcher once a
- *     transcript that didn't exist yet appears, and re-checks pending mail
- *     for an agent that was already idle (a message arriving via
- *     `synapse send` produces no transcript write for the watcher to react
- *     to, so something still has to poll the mailbox itself — just not the
- *     transcripts). `--once` runs a single synchronous snapshot instead of
- *     starting any of that — used by the monitor's own tests and for manual
- *     one-shot delivery.
+ * DB location: $SYNAPSE_DB, else ./.synapse/synapse.db
+ * Transcript root: $CLAUDE_PROJECTS_DIR, else ~/.claude/projects
  *
- * Transcript location is resolved by globbing
- * `$CLAUDE_PROJECTS_DIR/*<sessionId>.jsonl` (default
- * `$CLAUDE_PROJECTS_DIR/<project-slug>/<sessionId>.jsonl`, falling back to
- * `~/.claude/projects`) rather than reconstructing the project-slug encoding
- * of cwd — the session id is already a unique filename, so this is more
- * robust to slug-encoding edge cases and lets tests point at a throwaway
- * directory via the env var.
- *
- * No tmux automation for anything other than `monitor`'s delivery step —
- * the rest only talks to SQLite. Run `synapse init` once to create the DB
- * before anything else.
- *
- * DB location: $SYNAPSE_DB env var, else ./.synapse/synapse.db relative to cwd.
- *
- * Run with `bun src/synapse.ts <command> ...`, or compile a standalone binary:
- *   bun build src/synapse.ts --compile --outfile synapse
+ * Build: bun build src/synapse.ts --compile --outfile synapse
  */
 import { Database } from "bun:sqlite";
 import {
@@ -67,26 +29,18 @@ import {
 } from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
-// Imported as text (not read from disk at runtime) so this also works from
-// a `bun build --compile` standalone binary, which has no schema.sql beside it.
+// Bundled as text so it's available inside a --compile binary with no schema.sql beside it.
 import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 
-// Closed vocab per synapse-spec.md sections 2 and 5.
 const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO"]);
 const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
 
-// Phase 2 (monitor) defaults — synapse-spec.md sections 3, 4 and "Execution
-// plan / Phase 2". All overridable via CLI flags.
 const DEFAULT_TMUX_SESSION = "team";
-// Cheap mailbox/roster sweep only (no transcript reads) — see header comment.
-// Idle detection itself is event-driven, not on this timer.
+// Cheap mailbox/roster sweep — idle detection is event-driven, not on this timer.
 const DEFAULT_SWEEP_INTERVAL_MS = 200;
 const DEFAULT_DEBOUNCE_MS = 2000;
 
-// Bumped whenever the schema changes in a way that needs a migration check
-// on `init`. Stored in the DB's own `PRAGMA user_version` (a free integer
-// SQLite reserves for exactly this) rather than a table, so detection works
-// even before any table exists.
+// Stored in PRAGMA user_version so detection works before any table exists.
 const SCHEMA_VERSION = 1;
 
 function dbPath(): string {
@@ -120,10 +74,7 @@ function fail(msg: string): never {
 
 // ---------- commands ----------
 
-// Returns the schema version of an already-open DB (0 if never set — either
-// a brand-new empty file, or a pre-versioning DB from before this check
-// existed) and whether it actually has tables yet (distinguishes those two
-// "version 0" cases).
+// Returns schema version (0 = never set) and whether tables exist.
 function probeSchema(db: Database): { version: number; hasTables: boolean } {
   const version = (db.query("PRAGMA user_version").get() as any).user_version as number;
   const hasTables = !!db
@@ -147,23 +98,18 @@ function cmdInit() {
       );
     }
     if (hasTables && version < SCHEMA_VERSION) {
-      // Move the whole data directory aside, not just the DB file — it may
-      // also hold audit logs etc. (see synapse-spec.md section 5) that
-      // belong with that old DB, not mixed into the fresh one below.
+      // Move the whole data directory aside — it may also hold audit logs that
+      // belong with the old DB, not mixed into the fresh one.
       const backupDir = `${dataDir}.v${version}.bak-${Date.now()}`;
       renameSync(dataDir, backupDir);
       console.log(
         `synapse: found pre-v${SCHEMA_VERSION} data (schema v${version}) at ${dataDir} — moved entire folder to ${backupDir}`
       );
     }
-    // hasTables===false (untouched empty file) or already current version:
-    // fall through, schema creation below is idempotent.
+    // hasTables===false or already current version: fall through, schema creation is idempotent.
   }
 
-  mkdirSync(dataDir, { recursive: true });
-  const db = new Database(path);
-  db.exec("PRAGMA journal_mode=WAL;");
-  db.exec("PRAGMA foreign_keys=ON;");
+  const db = connect(true);
   db.exec(SCHEMA_SQL);
   db.exec(`PRAGMA user_version=${SCHEMA_VERSION};`);
   console.log(`synapse: initialized ${path} (schema v${SCHEMA_VERSION})`);
@@ -307,12 +253,12 @@ function cmdDeliver(id: number) {
   console.log(`synapse: message ${id} marked delivered`);
 }
 
-// ---------- monitor (Phase 2) ----------
+// ---------- monitor ----------
 
 type IdleState = "idle" | "busy" | "unknown";
 
-// Locates the jsonl transcript for a Claude Code session id without
-// reconstructing the project-slug encoding of cwd — see header comment.
+// Globs $CLAUDE_PROJECTS_DIR for the session's .jsonl instead of
+// reconstructing the project-slug encoding — session id is unique enough.
 function findTranscriptPath(sessionId: string): string | null {
   const root = process.env.CLAUDE_PROJECTS_DIR ?? join(homedir(), ".claude", "projects");
   if (!existsSync(root)) return null;
@@ -329,11 +275,15 @@ function findTranscriptPath(sessionId: string): string | null {
   return null;
 }
 
-// Scans backward (transcripts are append-only, so the answer is near the
-// end) for the last well-formed `assistant` entry's `message.stop_reason`.
-// Tolerates a partially-written final line (the writer may be mid-append).
+// Scans backward for the last well-formed assistant entry's stop_reason.
+// Tolerates a partially-written final line.
 function lastAssistantStopReason(path: string): string | null {
-  const lines = readFileSync(path, "utf8").split("\n");
+  let lines: string[];
+  try {
+    lines = readFileSync(path, "utf8").split("\n");
+  } catch {
+    return null;
+  }
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
     if (!line) continue;
@@ -350,9 +300,7 @@ function lastAssistantStopReason(path: string): string | null {
   return null;
 }
 
-// Idle = last assistant entry has stop_reason "end_turn" AND no new jsonl
-// lines for `debounceMs` (synapse-spec.md section 3). Anything else
-// (tool_use, no transcript yet, no assistant turn yet) is not idle.
+// Idle = last stop_reason is "end_turn" AND transcript has been quiet for debounceMs.
 function readIdleState(
   sessionId: string,
   debounceMs: number
@@ -367,7 +315,12 @@ function readIdleState(
     return { state: "busy", detail: `stop_reason=${stopReason}` };
   }
 
-  const ageMs = Date.now() - statSync(path).mtimeMs;
+  let ageMs: number;
+  try {
+    ageMs = Date.now() - statSync(path).mtimeMs;
+  } catch {
+    return { state: "unknown", detail: "transcript unreadable" };
+  }
   if (ageMs < debounceMs) {
     return { state: "busy", detail: `end_turn, debouncing (${Math.round(ageMs)}ms)` };
   }
@@ -380,12 +333,8 @@ function tmuxSendKeys(
   body: string
 ): { ok: boolean; error?: string } {
   const target = `${session}:${window}`;
-  // -l forces literal interpretation of `body`, and `--` stops option
-  // parsing so a body starting with "-" isn't mistaken for a flag. Verified
-  // against a real tmux pane: without -l, a body that happens to exactly
-  // match a key name (e.g. a message body of literally "Enter") gets
-  // swallowed as that keypress instead of typed out as text. Enter itself
-  // is sent as a separate call so it's interpreted as the actual key.
+  // -l forces literal text; without it a body that matches a key name (e.g. "Enter") gets
+  // consumed as that keypress. Enter is sent separately so it's always a real keypress.
   let result = Bun.spawnSync(["tmux", "send-keys", "-t", target, "-l", "--", body]);
   if (result.exitCode !== 0) {
     const stderr = result.stderr?.toString().trim();
@@ -419,9 +368,7 @@ function deliverDirect(
   }
 }
 
-// Delivers the oldest pending direct (non-broadcast) message addressed to
-// `windowName`, if any. Shared by the --once snapshot path and the live
-// loop's cheap mail sweep.
+// Delivers the oldest pending direct message for windowName, if any.
 function deliverPendingDirect(
   db: Database,
   tmuxSession: string,
@@ -437,12 +384,8 @@ function deliverPendingDirect(
   if (msg) deliverDirect(db, tmuxSession, windowName, msg, log);
 }
 
-// Broadcasts are a known simplification (see synapse-spec.md open questions
-// on broadcast fan-out): a single `messages` row can't represent "delivered
-// to A, not yet to B", so a broadcast only fires once every other live,
-// non-sender agent is observed idle *at the same instant this runs*; until
-// then nothing goes out to anyone, rather than risk silently skipping a busy
-// recipient. Called after any agent's idle state may have changed.
+// Broadcasts fire only when every non-sender agent is idle simultaneously —
+// a single row can't track partial delivery, so it's all-or-nothing.
 function checkBroadcasts(
   db: Database,
   tmuxSession: string,
@@ -476,13 +419,9 @@ function checkBroadcasts(
   }
 }
 
-// Classifies one agent's current transcript state, persists the transition,
-// and — on an idle result — delivers its oldest pending direct message.
-// `idleStates` doubles as "previous state" for transition logging (falling
-// back to the DB row's `status` the first time an agent is seen) and as the
-// snapshot `checkBroadcasts` reads, so callers update it before consulting
-// broadcasts. Shared by the --once snapshot and every live-loop evaluation —
-// there is exactly one place that decides idle/busy.
+// Classifies one agent's transcript state, persists the transition, and
+// delivers its oldest pending direct message on idle.
+// idleStates acts as both prev-state tracker and the snapshot checkBroadcasts reads.
 function evaluateAgentOnce(
   db: Database,
   tmuxSession: string,
@@ -510,9 +449,7 @@ function evaluateAgentOnce(
   if (state === "idle") deliverPendingDirect(db, tmuxSession, agent.window_name, log);
 }
 
-// `--once`: a single synchronous snapshot — evaluate every live agent, then
-// check broadcasts once. Used by tests and manual one-off delivery, where
-// there's nothing to wait for in a one-shot invocation.
+// Single synchronous snapshot — evaluate every live agent then check broadcasts.
 function pollOnce(
   db: Database,
   tmuxSession: string,
@@ -529,16 +466,10 @@ function pollOnce(
   checkBroadcasts(db, tmuxSession, agents, idleStates, log);
 }
 
-// Generic "reliably tell me when one of these named files changes" pool —
-// deliberately knows nothing about agents, idle states, or delivery. It
-// exists because raw fs.watch turned out not to be trustworthy on its own:
-// confirmed empirically (see tests/monitor.test.ts's live-loop describe
-// block) that it silently drops events on some filesystems/mounts. So each
-// watched key gets both an fs.watch listener (fast path) and is eligible for
-// recheckAll()'s metadata-only staleness check (reliability backstop) — a
-// caller just gets one onChange(key, path) callback either way and never
-// has to know which path fired it. Centralizing this here is what let
-// runLiveMonitor drop three of its four bookkeeping maps.
+// fs.watch isn't fully reliable — it can silently drop events on some mounts.
+// Each watched key therefore gets both an fs.watch listener (fast path) and
+// a mtime-staleness check in recheckAll() (reliability backstop). Callers
+// get a single onChange(key, path) callback and never care which path fired it.
 class FileWatchPool {
   private watchers = new Map<string, ReturnType<typeof fsWatch>>();
   private paths = new Map<string, string>();
@@ -546,10 +477,8 @@ class FileWatchPool {
 
   constructor(private onChange: (key: string, path: string) => void) {}
 
-  // No-op if `key` is already watched (idempotent re-attach attempts, e.g.
-  // from a sweep that hasn't learned a watcher already exists, are safe).
-  // Fires onChange once immediately so callers don't need a separate
-  // "evaluate the initial state" step before/around watch().
+  // Idempotent. Fires onChange immediately so callers don't need a separate
+  // initial-evaluation step.
   watch(key: string, path: string): void {
     if (this.watchers.has(key)) return;
     this.paths.set(key, path);
@@ -572,10 +501,7 @@ class FileWatchPool {
     return this.watchers.has(key);
   }
 
-  // Metadata-only (no transcript content read) staleness check across every
-  // watched key — safe to call on every sweep tick regardless of how large
-  // the underlying files are. Fires onChange for any key whose mtime moved
-  // since it was last recorded without fs.watch already having reported it.
+  // Metadata-only staleness check — safe on every sweep regardless of file size.
   recheckAll(): void {
     for (const [key, path] of this.paths) {
       let mtime: number;
@@ -603,18 +529,13 @@ class FileWatchPool {
     try {
       this.mtimes.set(key, statSync(path).mtimeMs);
     } catch {
-      // File briefly unreadable (mid-write/rotate) — the next real event
-      // or recheckAll() will retry.
+      // Mid-write/rotate — next event or recheckAll() will retry.
     }
   }
 }
 
-// The long-lived monitor loop: event-driven idle detection (synapse-spec.md
-// section 3's "tail -f or inotify watch") via FileWatchPool, plus a cheap
-// periodic sweep for the things a file watch can't tell us — see header
-// comment for the split between debounceMs (idle confirmation) and sweepMs
-// (mailbox/roster polling + the watch pool's reliability backstop, both
-// deliberately cheap since neither reads a transcript).
+// Event-driven idle detection via FileWatchPool, plus a cheap periodic sweep
+// for roster changes and pending mail (things a file watch can't signal).
 function runLiveMonitor(
   db: Database,
   tmuxSession: string,
@@ -635,20 +556,18 @@ function runLiveMonitor(
   };
 
   const evaluate = (windowName: string) => {
+    refreshAgents();
     const agent = agentsByWindow.get(windowName);
-    if (!agent) return; // deregistered/stopped between the event firing and now
+    if (!agent) return; // deregistered/stopped between event and evaluation
     evaluateAgentOnce(db, tmuxSession, debounceMs, agent, idleStates, log);
     if (idleStates.get(windowName) === "idle") {
       checkBroadcasts(db, tmuxSession, agents, idleStates, log);
     }
   };
 
-  // (Re)arms the idle-confirmation timer for debounceMs of quiet measured
-  // from the transcript's own mtime — not just "debounceMs from whenever
-  // this happened to be called" — so a burst of rapid writes collapses into
-  // one evaluation instead of restarting a full debounceMs on every event,
-  // and the very first arm-up after a watch attaches correctly accounts for
-  // time the transcript already sat quiet before the watcher existed.
+  // Arms the idle-confirmation timer based on the transcript's own mtime, not
+  // the wall-clock moment of the call — so rapid bursts collapse into one
+  // evaluation and a pre-existing quiet period is accounted for immediately.
   const scheduleConfirm = (windowName: string, transcriptPath: string) => {
     const existing = debounceTimers.get(windowName);
     if (existing) clearTimeout(existing);
@@ -656,8 +575,7 @@ function runLiveMonitor(
     try {
       ageMs = Date.now() - statSync(transcriptPath).mtimeMs;
     } catch {
-      // Transcript briefly unreadable (rotated mid-write?) — the next
-      // change event or sweep will re-evaluate.
+      // Transcript briefly unreadable — next event or sweep will re-evaluate.
     }
     const remaining = Math.max(0, debounceMs - ageMs);
     debounceTimers.set(
@@ -688,19 +606,14 @@ function runLiveMonitor(
     }
     for (const agent of agents) {
       if (pool.isWatching(agent.window_name)) continue;
-      // No watcher yet, either because the agent was just registered or
-      // because its transcript hadn't been written yet last sweep —
-      // fs.watch needs an existing path, so this existence check (cheap:
-      // a directory listing, not a file read) is the bridge until then.
+      // fs.watch needs an existing path — poll until the transcript appears.
       const path = findTranscriptPath(agent.session_id);
       if (path) {
         pool.watch(agent.window_name, path);
         log(`  ${agent.window_name}: watching ${path}`);
       }
     }
-    // fs.watch backstop: catches any change the watchers above missed (see
-    // FileWatchPool's header comment) — metadata-only, so this stays cheap
-    // regardless of transcript size.
+    // Reliability backstop for dropped fs.watch events — metadata-only, stays cheap.
     pool.recheckAll();
     for (const agent of agents) {
       if (idleStates.get(agent.window_name) === "idle") {
@@ -757,9 +670,7 @@ function parseFlags(args: string[]) {
     if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = args[i + 1];
-      // Boolean flag (e.g. --once): no value, or the next token is itself a
-      // flag. Value-taking flags (--from NAME, --ref-id N, ...) are
-      // unaffected since their values never start with "--".
+      // Boolean flag (--once): treat as true when no value follows or next is also a flag.
       if (next === undefined || next.startsWith("--")) {
         flags[key] = "true";
       } else {

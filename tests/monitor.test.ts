@@ -431,6 +431,28 @@ describe("monitor: live event-driven loop (no --once)", () => {
     expect(tmuxLogContents()).toContain("hello while idle");
   }, 15000);
 
+  test("a watcher event after an agent is stopped does not revive or deliver to it", async () => {
+    run(["send", "coder-1", "TASK", "do not deliver", "--from", "planner"]);
+    writeTranscript("sess-coder", "tool_use");
+    proc = spawnLiveMonitor(["--debounce", "40", "--interval", "5000"]);
+    const out = collectStream(proc.stdout);
+    await waitFor(() => out.text().includes("watching tmux session"));
+    await waitFor(() => out.text().includes("watching") && out.text().includes("sess-coder"));
+
+    const db = new Database(dbFile);
+    db.run("UPDATE agents SET status='stopped' WHERE window_name='coder-1'");
+    db.close();
+
+    writeTranscript("sess-coder", "end_turn", 0);
+    await sleep(200);
+
+    const row = openDb().query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
+    const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(row.status).toBe("stopped");
+    expect(msg.status).toBe("pending");
+    expect(tmuxLogContents()).toBe("");
+  }, 15000);
+
   test("shuts down cleanly on SIGTERM", async () => {
     proc = spawnLiveMonitor(["--debounce", "80", "--interval", "30"]);
     const out = collectStream(proc.stdout);
