@@ -37,7 +37,7 @@ const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
 
 const DEFAULT_TMUX_SESSION = "team";
 // Cheap mailbox/roster sweep — idle detection is event-driven, not on this timer.
-const DEFAULT_SWEEP_INTERVAL_MS = 200;
+const DEFAULT_SWEEP_INTERVAL_MS = 1000;
 const DEFAULT_DEBOUNCE_MS = 2000;
 
 // Stored in PRAGMA user_version so detection works before any table exists.
@@ -592,6 +592,27 @@ function runLiveMonitor(
     scheduleConfirm(windowName, path);
   });
 
+  let sweepTimer: ReturnType<typeof setInterval> | undefined;
+  let stopping = false;
+  const shutdown = () => {
+    if (stopping) return;
+    stopping = true;
+    if (sweepTimer) clearInterval(sweepTimer);
+    for (const t of debounceTimers.values()) clearTimeout(t);
+    pool.closeAll();
+    log("synapse monitor: stopped");
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  log(
+    `synapse monitor: watching tmux session '${tmuxSession}' via fs.watch (debounce=${debounceMs}ms, mail-sweep=${sweepMs}ms)`
+  );
+
+  // Sweep reconciles watcher/timer state with the live roster, retries pending
+  // delivery for agents already idle, and checks broadcasts. Acts as a
+  // reliability backstop for dropped fs.watch events and roster changes.
   const sweep = () => {
     refreshAgents();
     const liveNames = new Set(agents.map((a) => a.window_name));
@@ -624,20 +645,7 @@ function runLiveMonitor(
   };
 
   sweep();
-  const sweepTimer = setInterval(sweep, sweepMs);
-
-  let stopping = false;
-  const shutdown = () => {
-    if (stopping) return;
-    stopping = true;
-    clearInterval(sweepTimer);
-    for (const t of debounceTimers.values()) clearTimeout(t);
-    pool.closeAll();
-    log("synapse monitor: stopped");
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  sweepTimer = setInterval(sweep, sweepMs);
 }
 
 function cmdMonitor(flags: Record<string, string>) {
@@ -654,9 +662,6 @@ function cmdMonitor(flags: Record<string, string>) {
     return;
   }
 
-  log(
-    `synapse monitor: watching tmux session '${tmuxSession}' via fs.watch (debounce=${debounceMs}ms, mail-sweep=${sweepMs}ms)`
-  );
   runLiveMonitor(db, tmuxSession, debounceMs, sweepMs, log);
 }
 
