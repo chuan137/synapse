@@ -256,6 +256,11 @@ function cmdDeliver(id: number) {
 // ---------- monitor ----------
 
 type IdleState = "idle" | "busy" | "unknown";
+type IdleStateResult = {
+  state: IdleState;
+  detail: string;
+  recheckAfterMs?: number;
+};
 
 // Globs $CLAUDE_PROJECTS_DIR for the session's .jsonl instead of
 // reconstructing the project-slug encoding — session id is unique enough.
@@ -300,11 +305,11 @@ function lastAssistantStopReason(path: string): string | null {
   return null;
 }
 
-// Idle = last stop_reason is "end_turn" AND transcript has been quiet for debounceMs.
-function readIdleState(
+// Idle is derived from the transcript's latest assistant stop_reason plus file quiet time.
+function deriveIdleStateFromTranscript(
   sessionId: string,
   debounceMs: number
-): { state: IdleState; detail: string } {
+): IdleStateResult {
   const path = findTranscriptPath(sessionId);
   if (!path) return { state: "unknown", detail: "no transcript found yet" };
 
@@ -322,7 +327,11 @@ function readIdleState(
     return { state: "unknown", detail: "transcript unreadable" };
   }
   if (ageMs < debounceMs) {
-    return { state: "busy", detail: `end_turn, debouncing (${Math.round(ageMs)}ms)` };
+    return {
+      state: "busy",
+      detail: `end_turn, debouncing (${Math.round(ageMs)}ms)`,
+      recheckAfterMs: debounceMs - ageMs,
+    };
   }
   return { state: "idle", detail: `end_turn, quiet for ${Math.round(ageMs)}ms` };
 }
@@ -348,7 +357,7 @@ function tmuxSendKeys(
   return { ok: true };
 }
 
-function deliverDirect(
+function dispatchDirectMessage(
   db: Database,
   tmuxSession: string,
   windowName: string,
@@ -363,13 +372,15 @@ function deliverDirect(
     ]);
     log(`  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) delivered`);
   } else {
+    // Delivery failures are terminal in v1. Operators can inspect failed rows;
+    // automatic retry would need retry_count/next_retry_at plus a redelivery path.
     db.run("UPDATE messages SET status='failed' WHERE id=?", [msg.id]);
     log(`  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) FAILED: ${res.error}`);
   }
 }
 
-// Delivers the oldest pending direct message for windowName, if any.
-function deliverPendingDirect(
+// Dispatches the oldest pending direct message for windowName, if any.
+function dispatchNextDirectMessage(
   db: Database,
   tmuxSession: string,
   windowName: string,
@@ -381,12 +392,21 @@ function deliverPendingDirect(
        ORDER BY created_at LIMIT 1`
     )
     .get(windowName) as any;
-  if (msg) deliverDirect(db, tmuxSession, windowName, msg, log);
+  if (msg) dispatchDirectMessage(db, tmuxSession, windowName, msg, log);
+}
+
+function hasPendingDirectMessageForWindow(db: Database, windowName: string): boolean {
+  const row = db
+    .query(
+      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? LIMIT 1`
+    )
+    .get(windowName);
+  return !!row;
 }
 
 // Broadcasts fire only when every non-sender agent is idle simultaneously —
 // a single row can't track partial delivery, so it's all-or-nothing.
-function checkBroadcasts(
+function broadcastReadyMessages(
   db: Database,
   tmuxSession: string,
   agents: any[],
@@ -419,37 +439,41 @@ function checkBroadcasts(
   }
 }
 
-// Classifies one agent's transcript state, persists the transition, and
-// delivers its oldest pending direct message on idle.
-// idleStates acts as both prev-state tracker and the snapshot checkBroadcasts reads.
-function evaluateAgentOnce(
+// Evaluates one agent's transcript-derived readiness and persists the transition.
+// idleStates acts as both prev-state tracker and the snapshot broadcastReadyMessages reads.
+function evaluateAgentReadiness(
   db: Database,
-  tmuxSession: string,
   debounceMs: number,
   agent: any,
   idleStates: Map<string, IdleState>,
   log: (s: string) => void
-) {
-  const { state, detail } = readIdleState(agent.session_id, debounceMs);
+): IdleStateResult | null {
+  const result = deriveIdleStateFromTranscript(agent.session_id, debounceMs);
+  const { state, detail } = result;
   const prev = idleStates.get(agent.window_name) ?? agent.status;
   idleStates.set(agent.window_name, state);
   if (state === "unknown") {
     log(`  ${agent.window_name}: unknown (${detail})`);
-    return;
+    return result;
   }
   if (state !== prev) {
     log(`  ${agent.window_name}: ${prev} -> ${state} (${detail})`);
   }
-  db.run("UPDATE agents SET status=?, last_seen_at=? WHERE window_name=?", [
-    state,
-    nowIso(),
-    agent.window_name,
-  ]);
+  // Guarded so a concurrent deregister wins — don't resurrect a stopped row.
+  const update = db.run(
+    "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND status != 'stopped'",
+    [state, nowIso(), agent.window_name]
+  );
+  if (update.changes === 0) {
+    idleStates.delete(agent.window_name);
+    log(`  ${agent.window_name}: stopped before readiness update`);
+    return null;
+  }
 
-  if (state === "idle") deliverPendingDirect(db, tmuxSession, agent.window_name, log);
+  return result;
 }
 
-// Single synchronous snapshot — evaluate every live agent then check broadcasts.
+// Single synchronous snapshot — evaluate every live agent, then broadcast if ready.
 function pollOnce(
   db: Database,
   tmuxSession: string,
@@ -461,15 +485,22 @@ function pollOnce(
     .all() as any[];
   const idleStates = new Map<string, IdleState>();
   for (const agent of agents) {
-    evaluateAgentOnce(db, tmuxSession, debounceMs, agent, idleStates, log);
+    const result = evaluateAgentReadiness(
+      db,
+      debounceMs,
+      agent,
+      idleStates,
+      log
+    );
+    if (result?.state === "idle") {
+      dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
+    }
   }
-  checkBroadcasts(db, tmuxSession, agents, idleStates, log);
+  broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
 }
 
-// fs.watch isn't fully reliable — it can silently drop events on some mounts.
-// Each watched key therefore gets both an fs.watch listener (fast path) and
-// a mtime-staleness check in recheckAll() (reliability backstop). Callers
-// get a single onChange(key, path) callback and never care which path fired it.
+// Callers get a single onChange(key, path) callback for each fs.watch event,
+// initial watch registration, and mtime-based recheck.
 class FileWatchPool {
   private watchers = new Map<string, ReturnType<typeof fsWatch>>();
   private paths = new Map<string, string>();
@@ -485,7 +516,7 @@ class FileWatchPool {
     this.recordMtime(key, path);
     this.watchers.set(
       key,
-      fsWatch(path, () => this.fire(key))
+      fsWatch(path, () => this.emitChange(key))
     );
     this.onChange(key, path);
   }
@@ -501,24 +532,27 @@ class FileWatchPool {
     return this.watchers.has(key);
   }
 
-  // Metadata-only staleness check — safe on every sweep regardless of file size.
-  recheckAll(): void {
-    for (const [key, path] of this.paths) {
-      let mtime: number;
-      try {
-        mtime = statSync(path).mtimeMs;
-      } catch {
-        continue;
-      }
-      if (mtime !== this.mtimes.get(key)) this.fire(key);
+  watchedKeys(): IterableIterator<string> {
+    return this.watchers.keys();
+  }
+
+  checkAndEmitChange(key: string): void {
+    const path = this.paths.get(key);
+    if (!path) return;
+    let mtime: number;
+    try {
+      mtime = statSync(path).mtimeMs;
+    } catch {
+      return;
     }
+    if (mtime !== this.mtimes.get(key)) this.emitChange(key);
   }
 
   closeAll(): void {
     for (const key of [...this.watchers.keys()]) this.unwatch(key);
   }
 
-  private fire(key: string): void {
+  private emitChange(key: string): void {
     const path = this.paths.get(key);
     if (!path) return;
     this.recordMtime(key, path);
@@ -529,7 +563,7 @@ class FileWatchPool {
     try {
       this.mtimes.set(key, statSync(path).mtimeMs);
     } catch {
-      // Mid-write/rotate — next event or recheckAll() will retry.
+      // Mid-write/rotate — next fs.watch event or sweep mtime check will retry.
     }
   }
 }
@@ -555,42 +589,53 @@ function runLiveMonitor(
     agentsByWindow = new Map(agents.map((a) => [a.window_name, a]));
   };
 
-  const evaluate = (windowName: string) => {
-    refreshAgents();
+  const evaluateWindowReadiness = (windowName: string) => {
     const agent = agentsByWindow.get(windowName);
-    if (!agent) return; // deregistered/stopped between event and evaluation
-    evaluateAgentOnce(db, tmuxSession, debounceMs, agent, idleStates, log);
-    if (idleStates.get(windowName) === "idle") {
-      checkBroadcasts(db, tmuxSession, agents, idleStates, log);
+    if (!agent) return null; // deregistered/stopped between event and update
+    return evaluateAgentReadiness(
+      db,
+      debounceMs,
+      agent,
+      idleStates,
+      log
+    );
+  };
+
+  const attemptDelivery = (windowName: string) => {
+    const result = evaluateWindowReadiness(windowName);
+    if (result?.state === "idle") {
+      dispatchNextDirectMessage(db, tmuxSession, windowName, log);
+      broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
+    } else if (
+      result?.recheckAfterMs !== undefined &&
+      hasPendingDirectMessageForWindow(db, windowName)
+    ) {
+      scheduleDeliveryAttempt(windowName, result.recheckAfterMs);
     }
   };
 
-  // Arms the idle-confirmation timer based on the transcript's own mtime, not
-  // the wall-clock moment of the call — so rapid bursts collapse into one
-  // evaluation and a pre-existing quiet period is accounted for immediately.
-  const scheduleConfirm = (windowName: string, transcriptPath: string) => {
+  const cancelScheduledDeliveryAttempt = (windowName: string) => {
     const existing = debounceTimers.get(windowName);
     if (existing) clearTimeout(existing);
-    let ageMs = 0;
-    try {
-      ageMs = Date.now() - statSync(transcriptPath).mtimeMs;
-    } catch {
-      // Transcript briefly unreadable — next event or sweep will re-evaluate.
-    }
-    const remaining = Math.max(0, debounceMs - ageMs);
+    debounceTimers.delete(windowName);
+  };
+
+  const scheduleDeliveryAttempt = (windowName: string, delayMs: number) => {
     debounceTimers.set(
       windowName,
       setTimeout(() => {
         debounceTimers.delete(windowName);
-        evaluate(windowName);
-      }, remaining)
+        attemptDelivery(windowName);
+      }, Math.max(0, delayMs))
     );
   };
 
-  const pool = new FileWatchPool((windowName, path) => {
-    evaluate(windowName);
-    scheduleConfirm(windowName, path);
-  });
+  const onTranscriptActivity = (windowName: string) => {
+    cancelScheduledDeliveryAttempt(windowName);
+    attemptDelivery(windowName);
+  };
+
+  const pool = new FileWatchPool((windowName) => onTranscriptActivity(windowName));
 
   let sweepTimer: ReturnType<typeof setInterval> | undefined;
   let stopping = false;
@@ -610,38 +655,42 @@ function runLiveMonitor(
     `synapse monitor: watching tmux session '${tmuxSession}' via fs.watch (debounce=${debounceMs}ms, mail-sweep=${sweepMs}ms)`
   );
 
-  // Sweep reconciles watcher/timer state with the live roster, retries pending
-  // delivery for agents already idle, and checks broadcasts. Acts as a
-  // reliability backstop for dropped fs.watch events and roster changes.
+  // Sweep syncs watcher/timer state with the live roster, cleans up stopped
+  // agents, retries pending delivery for agents already idle, and broadcasts
+  // ready messages.
   const sweep = () => {
     refreshAgents();
     const liveNames = new Set(agents.map((a) => a.window_name));
-    for (const name of idleStates.keys()) {
+    const trackedNames = new Set([
+      ...idleStates.keys(),
+      ...pool.watchedKeys(),
+      ...debounceTimers.keys(),
+    ]);
+    // Clean up stopped agents
+    for (const name of trackedNames) {
       if (liveNames.has(name)) continue;
       pool.unwatch(name);
       idleStates.delete(name);
-      const t = debounceTimers.get(name);
-      if (t) clearTimeout(t);
-      debounceTimers.delete(name);
-      log(`  ${name}: stopped, watcher closed`);
+      cancelScheduledDeliveryAttempt(name);
+      log(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
-      if (pool.isWatching(agent.window_name)) continue;
-      // fs.watch needs an existing path — poll until the transcript appears.
-      const path = findTranscriptPath(agent.session_id);
-      if (path) {
-        pool.watch(agent.window_name, path);
-        log(`  ${agent.window_name}: watching ${path}`);
-      }
-    }
-    // Reliability backstop for dropped fs.watch events — metadata-only, stays cheap.
-    pool.recheckAll();
-    for (const agent of agents) {
+      // Mail can arrive without transcript activity.
       if (idleStates.get(agent.window_name) === "idle") {
-        deliverPendingDirect(db, tmuxSession, agent.window_name, log);
+        dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
+      }
+      if (pool.isWatching(agent.window_name)) {
+        pool.checkAndEmitChange(agent.window_name);
+      } else {
+        // fs.watch needs an existing path — poll until the transcript appears.
+        const path = findTranscriptPath(agent.session_id);
+        if (path) {
+          pool.watch(agent.window_name, path);
+          log(`  ${agent.window_name}: watching ${path}`);
+        }
       }
     }
-    checkBroadcasts(db, tmuxSession, agents, idleStates, log);
+    broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
   };
 
   sweep();

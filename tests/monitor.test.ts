@@ -227,7 +227,7 @@ describe("monitor: direct delivery", () => {
     expect(status.ref_id).toBe(task.id);
   });
 
-  test("marks the message failed (not delivered) when the tmux window is gone", () => {
+  test("marks the message failed terminally when the tmux window is gone", () => {
     writeFileSync(join(fakeBinDir, "tmux"), `#!/bin/sh\necho "no such window" >&2\nexit 1\n`);
     chmodSync(join(fakeBinDir, "tmux"), 0o755);
 
@@ -237,6 +237,17 @@ describe("monitor: direct delivery", () => {
 
     const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
     expect(msg.status).toBe("failed");
+
+    writeFileSync(
+      join(fakeBinDir, "tmux"),
+      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\nexit 0\n`
+    );
+    chmodSync(join(fakeBinDir, "tmux"), 0o755);
+
+    run(["monitor", "--once", "--debounce", "100"]);
+    const after = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(after.status).toBe("failed");
+    expect(tmuxLogContents()).toBe("");
   });
 
   test("delivers at most one pending message per agent per tick, oldest first", () => {
@@ -298,8 +309,8 @@ describe("monitor: broadcast delivery", () => {
   });
 });
 
-// --once exercises the snapshot path (readIdleState / evaluateAgentOnce /
-// checkBroadcasts) synchronously and deterministically; these tests instead
+// --once exercises the snapshot path (deriveIdleStateFromTranscript / evaluateAgentReadiness /
+// broadcastReadyMessages) synchronously and deterministically; these tests instead
 // run the real long-lived loop (no --once) as a background process to
 // exercise the fs.watch + debounce-timer + cheap-sweep machinery in
 // runLiveMonitor that --once never touches. Async/real-timer based by
@@ -429,6 +440,29 @@ describe("monitor: live event-driven loop (no --once)", () => {
 
     expect(msg.status).toBe("delivered");
     expect(tmuxLogContents()).toContain("hello while idle");
+  }, 15000);
+
+  test("end_turn with no pending direct mail does not leave a debounce recheck timer", async () => {
+    writeTranscript("sess-coder", "end_turn", 0);
+    proc = spawnLiveMonitor(["--debounce", "120", "--interval", "5000"]);
+    const out = collectStream(proc.stdout);
+    await waitFor(() => out.text().includes("watching tmux session"));
+    await waitFor(() => out.text().includes("watching") && out.text().includes("sess-coder"));
+
+    await waitFor(() => {
+      const row = openDb().query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
+      return row?.status === "busy";
+    });
+
+    // With no queued direct mail, attemptDelivery should not schedule the
+    // debounce timer. The sweep interval is intentionally much longer than
+    // this sleep, so a transition to idle here would come from a dangling
+    // recheck timer rather than the periodic sweep.
+    await sleep(250);
+
+    const row = openDb().query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(row.status).toBe("busy");
+    expect(tmuxLogContents()).toBe("");
   }, 15000);
 
   test("a watcher event after an agent is stopped does not revive or deliver to it", async () => {

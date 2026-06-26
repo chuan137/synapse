@@ -123,8 +123,10 @@ polling.
   `read` status is aspirational (would require the agent to ack — out of
   scope for v1, see Open Questions).
 - Failure handling: if `send-keys` targets a dead/closed window, mark the
-  row with an error state rather than silently dropping it (exact column
-  TBD — maybe reuse `status = 'failed'`).
+  row `status = 'failed'`. This is terminal in v1; the monitor does not
+  automatically retry failed rows. Retrying transient tmux failures would
+  require explicit retry state such as `retry_count` / `next_retry_at` and
+  a redelivery command or scheduler policy.
 
 ### 5. Audit pipeline
 
