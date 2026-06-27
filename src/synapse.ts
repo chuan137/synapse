@@ -57,7 +57,7 @@ function connect(createParent = false): Database {
     mkdirSync(dirname(path), { recursive: true });
   } else if (!existsSync(path)) {
     console.error(
-      `synapse: no DB at ${path} — run \`synapse init\` first (or set SYNAPSE_DB).`
+      `synapse: no DB at ${path} — run \`synapse init\` first (or set SYNAPSE_DB).`,
     );
     process.exit(1);
   }
@@ -77,15 +77,22 @@ function fail(msg: string): never {
 }
 
 const c = {
-  reset:  "\x1b[0m",
-  dim:    "\x1b[2m",
-  blue:   "\x1b[34m",
+  reset: "\x1b[0m",
+  dim: "\x1b[2m",
+  blue: "\x1b[34m",
   yellow: "\x1b[33m",
-  green:  "\x1b[32m",
-  cyan:   "\x1b[36m",
+  green: "\x1b[32m",
+  cyan: "\x1b[36m",
 };
 function colorType(t: string): string {
-  const color = t === "TASK" ? c.blue : t === "REVIEW" ? c.yellow : t === "STATUS" ? c.green : c.cyan;
+  const color =
+    t === "TASK"
+      ? c.blue
+      : t === "REVIEW"
+        ? c.yellow
+        : t === "STATUS"
+          ? c.green
+          : c.cyan;
   return `${color}${t}${c.reset}`;
 }
 
@@ -93,7 +100,8 @@ function colorType(t: string): string {
 
 // Returns schema version (0 = never set) and whether tables exist.
 function probeSchema(db: Database): { version: number; hasTables: boolean } {
-  const version = (db.query("PRAGMA user_version").get() as any).user_version as number;
+  const version = (db.query("PRAGMA user_version").get() as any)
+    .user_version as number;
   const hasTables = !!db
     .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agents'")
     .get();
@@ -111,7 +119,7 @@ function cmdInit() {
 
     if (version > SCHEMA_VERSION) {
       fail(
-        `DB at ${path} is schema v${version}, newer than this binary supports (v${SCHEMA_VERSION}). Upgrade synapse before running init.`
+        `DB at ${path} is schema v${version}, newer than this binary supports (v${SCHEMA_VERSION}). Upgrade synapse before running init.`,
       );
     }
     if (hasTables && version < SCHEMA_VERSION) {
@@ -120,7 +128,7 @@ function cmdInit() {
       const backupDir = `${dataDir}.v${version}.bak-${Date.now()}`;
       renameSync(dataDir, backupDir);
       console.log(
-        `synapse: found pre-v${SCHEMA_VERSION} data (schema v${version}) at ${dataDir} — moved entire folder to ${backupDir}`
+        `synapse: found pre-v${SCHEMA_VERSION} data (schema v${version}) at ${dataDir} — moved entire folder to ${backupDir}`,
       );
     }
     // hasTables===false or already current version: fall through, schema creation is idempotent.
@@ -141,10 +149,10 @@ function cmdRegister(name: string, role: string, sessionId: string | null) {
        role=excluded.role,
        session_id=excluded.session_id,
        last_seen_at=excluded.last_seen_at`,
-    [name, role, sessionId, nowIso()]
+    [name, role, sessionId, nowIso()],
   );
   console.log(
-    `synapse: registered '${name}' (role=${role}, session_id=${sessionId ?? "-"})`
+    `synapse: registered '${name}' (role=${role}, session_id=${sessionId ?? "-"})`,
   );
 }
 
@@ -159,7 +167,7 @@ function cmdSend(
   type: string,
   body: string,
   from: string | null,
-  refId: number | null
+  refId: number | null,
 ) {
   if (!MESSAGE_TYPES.has(type)) {
     fail(`type must be one of ${[...MESSAGE_TYPES].sort()}, got '${type}'`);
@@ -170,19 +178,19 @@ function cmdSend(
     const known = db.query("SELECT 1 FROM agents WHERE window_name=?").get(to);
     if (!known) {
       console.error(
-        `synapse: warning — '${to}' not in agents registry yet (sending anyway)`
+        `synapse: warning — '${to}' not in agents registry yet (sending anyway)`,
       );
     }
   }
   const result = db.run(
     `INSERT INTO messages (from_agent, to_agent, type, ref_id, body)
      VALUES (?, ?, ?, ?, ?)`,
-    [frm, to, type, refId, body]
+    [frm, to, type, refId, body],
   );
   console.log(
     `synapse: message ${result.lastInsertRowid} queued (${frm} -> ${to}, ${type}${
       refId ? ", ref=" + refId : ""
-    })`
+    })`,
   );
 }
 
@@ -191,15 +199,17 @@ function cmdLog(agent: string, type: string, summary: string) {
     console.error(
       `synapse: warning — '${type}' is outside the suggested vocab ${[
         ...EVENT_TYPES,
-      ].sort()} (logging anyway)`
+      ].sort()} (logging anyway)`,
     );
   }
   const db = connect();
   const result = db.run(
     "INSERT INTO events (agent, type, summary) VALUES (?, ?, ?)",
-    [agent, type, summary]
+    [agent, type, summary],
   );
-  console.log(`synapse: event ${result.lastInsertRowid} logged (${agent}, ${type})`);
+  console.log(
+    `synapse: event ${result.lastInsertRowid} logged (${agent}, ${type})`,
+  );
 }
 
 function cmdStatus() {
@@ -213,9 +223,16 @@ function cmdStatus() {
   }
   const pendingStmt = db.query(
     `SELECT COUNT(*) AS n FROM messages WHERE status='pending'
-     AND (to_agent=? OR to_agent='broadcast')`
+     AND (to_agent=? OR to_agent='broadcast')`,
   );
-  const headers = ["WINDOW", "ROLE", "STATUS", "SESSION_ID", "LAST_SEEN", "PENDING"];
+  const headers = [
+    "WINDOW",
+    "ROLE",
+    "STATUS",
+    "SESSION_ID",
+    "LAST_SEEN",
+    "PENDING",
+  ];
   const rows = agents.map((a) => {
     const pending = (pendingStmt.get(a.window_name) as any).n;
     return [
@@ -228,7 +245,7 @@ function cmdStatus() {
     ];
   });
   const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map((r) => r[i].length))
+    Math.max(h.length, ...rows.map((r) => r[i].length)),
   );
   const fmt = (cols: string[]) =>
     cols.map((c, i) => c.padEnd(widths[i])).join("  ");
@@ -242,26 +259,34 @@ function cmdPending(agent: string | null) {
     ? (db
         .query(
           `SELECT * FROM messages WHERE status='pending'
-           AND (to_agent=? OR to_agent='broadcast') ORDER BY created_at`
+           AND (to_agent=? OR to_agent='broadcast') ORDER BY created_at`,
         )
         .all(agent) as any[])
     : (db
-        .query("SELECT * FROM messages WHERE status='pending' ORDER BY created_at")
+        .query(
+          "SELECT * FROM messages WHERE status='pending' ORDER BY created_at",
+        )
         .all() as any[]);
   if (rows.length === 0) {
     console.log("synapse: no pending messages");
     return;
   }
-  const agentW = Math.max(...rows.flatMap(r => [r.from_agent.length, r.to_agent.length]));
-  const typeW  = Math.max(...rows.map(r => r.type.length));
-  const refW   = Math.max(...rows.map(r => r.ref_id ? `ref:#${r.ref_id}`.length : 0));
+  const agentW = Math.max(
+    ...rows.flatMap((r) => [r.from_agent.length, r.to_agent.length]),
+  );
+  const typeW = Math.max(...rows.map((r) => r.type.length));
+  const refW = Math.max(
+    ...rows.map((r) => (r.ref_id ? `ref:#${r.ref_id}`.length : 0)),
+  );
   for (const r of rows) {
     const route = `${r.from_agent.padEnd(agentW)} → ${r.to_agent.padEnd(agentW)}`;
-    const type  = colorType(r.type) + " ".repeat(typeW - r.type.length);
+    const type = colorType(r.type) + " ".repeat(typeW - r.type.length);
     const refRaw = r.ref_id ? `ref:#${r.ref_id}` : "";
-    const ref   = refRaw ? `${c.dim}${refRaw}${c.reset}` + " ".repeat(refW - refRaw.length) : " ".repeat(refW);
-    const ts    = `${c.dim}${r.created_at.slice(0, 16)}${c.reset}`;
-    const id    = `${c.dim}#${String(r.id).padStart(2)}${c.reset}`;
+    const ref = refRaw
+      ? `${c.dim}${refRaw}${c.reset}` + " ".repeat(refW - refRaw.length)
+      : " ".repeat(refW);
+    const ts = `${c.dim}${r.created_at.slice(0, 16)}${c.reset}`;
+    const id = `${c.dim}#${String(r.id).padStart(2)}${c.reset}`;
     console.log(`${id}  ${route}  ${type}  ${ref}  ${ts}`);
     console.log(`      ${r.body}`);
     console.log();
@@ -272,7 +297,7 @@ function cmdDeliver(id: number) {
   const db = connect();
   const result = db.run(
     "UPDATE messages SET status='delivered', delivered_at=? WHERE id=? AND status='pending'",
-    [nowIso(), id]
+    [nowIso(), id],
   );
   if (result.changes === 0) fail(`no pending message with id=${id}`);
   console.log(`synapse: message ${id} marked delivered`);
@@ -284,13 +309,14 @@ type IdleState = "idle" | "busy" | "unknown";
 type IdleStateResult = {
   state: IdleState;
   detail: string;
-  recheckAfterMs?: number;
+  remainingDebounceMs?: number;
 };
 
 // Globs $CLAUDE_PROJECTS_DIR for the session's .jsonl instead of
 // reconstructing the project-slug encoding — session id is unique enough.
 function findTranscriptPath(sessionId: string): string | null {
-  const root = process.env.CLAUDE_PROJECTS_DIR ?? join(homedir(), ".claude", "projects");
+  const root =
+    process.env.CLAUDE_PROJECTS_DIR ?? join(homedir(), ".claude", "projects");
   if (!existsSync(root)) return null;
   let entries: string[];
   try {
@@ -331,9 +357,9 @@ function lastAssistantStopReason(path: string): string | null {
 }
 
 // Idle is derived from the transcript's latest assistant stop_reason plus file quiet time.
-function deriveIdleStateFromTranscript(
+function readTranscriptState(
   sessionId: string,
-  debounceMs: number
+  debounceMs: number,
 ): IdleStateResult {
   const path = findTranscriptPath(sessionId);
   if (!path) return { state: "unknown", detail: "no transcript found yet" };
@@ -355,29 +381,46 @@ function deriveIdleStateFromTranscript(
     return {
       state: "busy",
       detail: `end_turn, debouncing (${Math.round(ageMs)}ms)`,
-      recheckAfterMs: debounceMs - ageMs,
+      remainingDebounceMs: debounceMs - ageMs,
     };
   }
-  return { state: "idle", detail: `end_turn, quiet for ${Math.round(ageMs)}ms` };
+  return {
+    state: "idle",
+    detail: `end_turn, quiet for ${Math.round(ageMs)}ms`,
+  };
 }
 
 function tmuxSendKeys(
   session: string,
   window: string,
-  body: string
+  body: string,
 ): { ok: boolean; error?: string } {
   const target = `${session}:${window}`;
   // -l forces literal text; without it a body that matches a key name (e.g. "Enter") gets
   // consumed as that keypress. Enter is sent separately so it's always a real keypress.
-  let result = Bun.spawnSync(["tmux", "send-keys", "-t", target, "-l", "--", body]);
+  let result = Bun.spawnSync([
+    "tmux",
+    "send-keys",
+    "-t",
+    target,
+    "-l",
+    "--",
+    body,
+  ]);
   if (result.exitCode !== 0) {
     const stderr = result.stderr?.toString().trim();
-    return { ok: false, error: stderr || `tmux send-keys exited ${result.exitCode}` };
+    return {
+      ok: false,
+      error: stderr || `tmux send-keys exited ${result.exitCode}`,
+    };
   }
   result = Bun.spawnSync(["tmux", "send-keys", "-t", target, "Enter"]);
   if (result.exitCode !== 0) {
     const stderr = result.stderr?.toString().trim();
-    return { ok: false, error: stderr || `tmux send-keys (Enter) exited ${result.exitCode}` };
+    return {
+      ok: false,
+      error: stderr || `tmux send-keys (Enter) exited ${result.exitCode}`,
+    };
   }
   return { ok: true };
 }
@@ -387,20 +430,24 @@ function dispatchDirectMessage(
   tmuxSession: string,
   windowName: string,
   msg: any,
-  log: (s: string) => void
+  log: (s: string) => void,
 ) {
   const res = tmuxSendKeys(tmuxSession, windowName, msg.body);
   if (res.ok) {
-    db.run("UPDATE messages SET status='delivered', delivered_at=? WHERE id=?", [
-      nowIso(),
-      msg.id,
-    ]);
-    log(`  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) delivered`);
+    db.run(
+      "UPDATE messages SET status='delivered', delivered_at=? WHERE id=?",
+      [nowIso(), msg.id],
+    );
+    log(
+      `  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) delivered`,
+    );
   } else {
     // Delivery failures are terminal in v1. Operators can inspect failed rows;
     // automatic retry would need retry_count/next_retry_at plus a redelivery path.
     db.run("UPDATE messages SET status='failed' WHERE id=?", [msg.id]);
-    log(`  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) FAILED: ${res.error}`);
+    log(
+      `  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) FAILED: ${res.error}`,
+    );
   }
 }
 
@@ -409,21 +456,24 @@ function dispatchNextDirectMessage(
   db: Database,
   tmuxSession: string,
   windowName: string,
-  log: (s: string) => void
+  log: (s: string) => void,
 ) {
   const msg = db
     .query(
       `SELECT * FROM messages WHERE status='pending' AND to_agent=?
-       ORDER BY created_at LIMIT 1`
+       ORDER BY created_at LIMIT 1`,
     )
     .get(windowName) as any;
   if (msg) dispatchDirectMessage(db, tmuxSession, windowName, msg, log);
 }
 
-function hasPendingDirectMessageForWindow(db: Database, windowName: string): boolean {
+function hasPendingDirectMessageForWindow(
+  db: Database,
+  windowName: string,
+): boolean {
   const row = db
     .query(
-      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? LIMIT 1`
+      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? LIMIT 1`,
     )
     .get(windowName);
   return !!row;
@@ -436,15 +486,19 @@ function broadcastReadyMessages(
   tmuxSession: string,
   agents: any[],
   idleStates: Map<string, IdleState>,
-  log: (s: string) => void
+  log: (s: string) => void,
 ) {
   const broadcasts = db
-    .query(`SELECT * FROM messages WHERE status='pending' AND to_agent='broadcast' ORDER BY created_at`)
+    .query(
+      `SELECT * FROM messages WHERE status='pending' AND to_agent='broadcast' ORDER BY created_at`,
+    )
     .all() as any[];
   for (const msg of broadcasts) {
     const recipients = agents.filter((a) => a.window_name !== msg.from_agent);
     if (recipients.length === 0) continue;
-    const allIdle = recipients.every((a) => idleStates.get(a.window_name) === "idle");
+    const allIdle = recipients.every(
+      (a) => idleStates.get(a.window_name) === "idle",
+    );
     if (!allIdle) continue;
     let allOk = true;
     for (const r of recipients) {
@@ -452,7 +506,7 @@ function broadcastReadyMessages(
       log(
         `  broadcast[${msg.id}] ${msg.from_agent} -> ${r.window_name}: ${
           res.ok ? "delivered" : "FAILED: " + res.error
-        }`
+        }`,
       );
       if (!res.ok) allOk = false;
     }
@@ -464,16 +518,34 @@ function broadcastReadyMessages(
   }
 }
 
-// Evaluates one agent's transcript-derived readiness and persists the transition.
+function readTmuxPaneState(tmuxSession: string, windowName: string): IdleStateResult {
+  const pane = Bun.spawnSync([
+    "tmux", "capture-pane", "-t", `${tmuxSession}:${windowName}`, "-p",
+  ]);
+  const paneText = pane.stdout.toString();
+  const isIdle = /[❯$#]\s*$/.test(paneText.trimEnd());
+  return { state: isIdle ? "idle" : "busy", detail: "tmux-pane-fallback" };
+}
+
+// Reads agent state from transcript (or tmux pane fallback) and persists any transition.
 // idleStates acts as both prev-state tracker and the snapshot broadcastReadyMessages reads.
-function evaluateAgentReadiness(
+function updateAgentState(
   db: Database,
   debounceMs: number,
   agent: any,
   idleStates: Map<string, IdleState>,
-  log: (s: string) => void
+  log: (s: string) => void,
+  tmuxSession?: string,
 ): IdleStateResult | null {
-  const result = deriveIdleStateFromTranscript(agent.session_id, debounceMs);
+  let result: IdleStateResult;
+  if (agent.session_id && agent.session_id !== "-") {
+    result = readTranscriptState(agent.session_id, debounceMs);
+  } else if (tmuxSession) {
+    result = readTmuxPaneState(tmuxSession, agent.window_name);
+  } else {
+    return null;
+  }
+
   const { state, detail } = result;
   const prev = idleStates.get(agent.window_name) ?? agent.status;
   idleStates.set(agent.window_name, state);
@@ -486,7 +558,7 @@ function evaluateAgentReadiness(
     // Guarded so a concurrent deregister wins — don't resurrect a stopped row.
     const update = db.run(
       "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND status != 'stopped'",
-      [state, nowIso(), agent.window_name]
+      [state, nowIso(), agent.window_name],
     );
     if (update.changes === 0) {
       idleStates.delete(agent.window_name);
@@ -503,7 +575,7 @@ function pollOnce(
   db: Database,
   tmuxSession: string,
   debounceMs: number,
-  log: (s: string) => void
+  log: (s: string) => void,
 ) {
   const agents = db
     .query("SELECT * FROM agents WHERE status != 'stopped'")
@@ -511,28 +583,7 @@ function pollOnce(
   const idleStates = new Map<string, IdleState>();
   for (const agent of agents) {
     if (agent.window_name === "operator") continue;
-
-    let result: IdleStateResult | null = null;
-
-    if (agent.session_id && agent.session_id !== "-") {
-      // Normal path: jsonl-based idle detection
-      result = evaluateAgentReadiness(db, debounceMs, agent, idleStates, log);
-    } else {
-      // Fallback: check tmux pane for shell prompt (❯ or $) = idle
-      const pane = Bun.spawnSync([
-        "tmux", "capture-pane", "-t", `${tmuxSession}:${agent.window_name}`, "-p",
-      ]);
-      const paneText = pane.stdout.toString();
-      const isIdle = /[❯$#]\s*$/.test(paneText.trimEnd());
-      const state: IdleState = isIdle ? "idle" : "busy";
-      idleStates.set(agent.window_name, state);
-      db.run(
-        "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND status != 'stopped'",
-        [state, nowIso(), agent.window_name]
-      );
-      result = { state, detail: "tmux-pane-fallback" };
-    }
-
+    const result = updateAgentState(db, debounceMs, agent, idleStates, log, tmuxSession);
     if (result?.state === "idle") {
       dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
     }
@@ -557,7 +608,7 @@ class FileWatchPool {
     this.recordMtime(key, path);
     this.watchers.set(
       key,
-      fsWatch(path, () => this.emitChange(key))
+      fsWatch(path, () => this.emitChange(key)),
     );
     this.onChange(key, path);
   }
@@ -577,7 +628,7 @@ class FileWatchPool {
     return this.watchers.keys();
   }
 
-  checkAndEmitChange(key: string): void {
+  emitOnTranscriptChange(key: string): void {
     const path = this.paths.get(key);
     if (!path) return;
     let mtime: number;
@@ -616,7 +667,7 @@ function runLiveMonitor(
   tmuxSession: string,
   debounceMs: number,
   sweepMs: number,
-  log: (s: string) => void
+  log: (s: string) => void,
 ) {
   const idleStates = new Map<string, IdleState>();
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -625,7 +676,9 @@ function runLiveMonitor(
 
   const refreshAgents = () => {
     agents = db
-      .query("SELECT * FROM agents WHERE status != 'stopped' AND session_id IS NOT NULL")
+      .query(
+        "SELECT * FROM agents WHERE status != 'stopped' AND session_id IS NOT NULL",
+      )
       .all() as any[];
     agentsByWindow = new Map(agents.map((a) => [a.window_name, a]));
   };
@@ -633,47 +686,46 @@ function runLiveMonitor(
   const evaluateWindowReadiness = (windowName: string) => {
     const agent = agentsByWindow.get(windowName);
     if (!agent) return null; // deregistered/stopped between event and update
-    return evaluateAgentReadiness(
-      db,
-      debounceMs,
-      agent,
-      idleStates,
-      log
-    );
+    return updateAgentState(db, debounceMs, agent, idleStates, log);
   };
 
-  const attemptDelivery = (windowName: string) => {
+  const deliverIfIdle = (windowName: string) => {
     const result = evaluateWindowReadiness(windowName);
     if (result?.state === "idle") {
       dispatchNextDirectMessage(db, tmuxSession, windowName, log);
       broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
-    } else if (result?.recheckAfterMs !== undefined) {
-      scheduleDeliveryAttempt(windowName, result.recheckAfterMs);
+    } else if (result?.remainingDebounceMs !== undefined) {
+      scheduleDelivery(windowName, result.remainingDebounceMs);
     }
   };
 
-  const cancelScheduledDeliveryAttempt = (windowName: string) => {
+  const cancelScheduledDelivery = (windowName: string) => {
     const existing = debounceTimers.get(windowName);
     if (existing) clearTimeout(existing);
     debounceTimers.delete(windowName);
   };
 
-  const scheduleDeliveryAttempt = (windowName: string, delayMs: number) => {
+  const scheduleDelivery = (windowName: string, delayMs: number) => {
     debounceTimers.set(
       windowName,
-      setTimeout(() => {
-        debounceTimers.delete(windowName);
-        attemptDelivery(windowName);
-      }, Math.max(0, delayMs))
+      setTimeout(
+        () => {
+          debounceTimers.delete(windowName);
+          deliverIfIdle(windowName);
+        },
+        Math.max(0, delayMs),
+      ),
     );
   };
 
   const onTranscriptActivity = (windowName: string) => {
-    cancelScheduledDeliveryAttempt(windowName);
-    attemptDelivery(windowName);
+    cancelScheduledDelivery(windowName);
+    deliverIfIdle(windowName);
   };
 
-  const pool = new FileWatchPool((windowName) => onTranscriptActivity(windowName));
+  const pool = new FileWatchPool((windowName) =>
+    onTranscriptActivity(windowName),
+  );
 
   let sweepTimer: ReturnType<typeof setInterval> | undefined;
   let stopping = false;
@@ -690,7 +742,7 @@ function runLiveMonitor(
   process.on("SIGTERM", shutdown);
 
   log(
-    `synapse monitor: watching tmux session '${tmuxSession}' via fs.watch (debounce=${debounceMs}ms, mail-sweep=${sweepMs}ms)`
+    `synapse monitor: watching tmux session '${tmuxSession}' via fs.watch (debounce=${debounceMs}ms, mail-sweep=${sweepMs}ms)`,
   );
 
   // Sweep syncs watcher/timer state with the live roster, cleans up stopped
@@ -709,19 +761,18 @@ function runLiveMonitor(
       if (liveNames.has(name)) continue;
       pool.unwatch(name);
       idleStates.delete(name);
-      cancelScheduledDeliveryAttempt(name);
+      cancelScheduledDelivery(name);
       log(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
+      const result = evaluateWindowReadiness(agent.window_name);
+
       // Mail can arrive without transcript activity.
-      if (idleStates.get(agent.window_name) === "idle") {
+      if (result?.state === "idle") {
         dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
       }
       if (pool.isWatching(agent.window_name)) {
-        pool.checkAndEmitChange(agent.window_name);
-        if (idleStates.get(agent.window_name) !== "idle") {
-          evaluateWindowReadiness(agent.window_name);
-        }
+        pool.emitOnTranscriptChange(agent.window_name);
       } else {
         // fs.watch needs an existing path — poll until the transcript appears.
         const path = findTranscriptPath(agent.session_id);
@@ -771,7 +822,8 @@ function parseTeamYaml(text: string): TeamConfig {
       continue;
     }
     if (/^\s+-\s+name:\s/.test(line)) {
-      if (current && current.name && current.role && current.cwd) agents.push(current as AgentConfig);
+      if (current && current.name && current.role && current.cwd)
+        agents.push(current as AgentConfig);
       current = { name: line.replace(/^\s+-\s+name:\s+/, "").trim() };
       continue;
     }
@@ -784,7 +836,8 @@ function parseTeamYaml(text: string): TeamConfig {
       continue;
     }
   }
-  if (current && current.name && current.role && current.cwd) agents.push(current as AgentConfig);
+  if (current && current.name && current.role && current.cwd)
+    agents.push(current as AgentConfig);
 
   if (!session) fail("team.yaml: missing 'session' field");
   if (agents.length === 0) fail("team.yaml: no agents defined");
@@ -792,7 +845,9 @@ function parseTeamYaml(text: string): TeamConfig {
 }
 
 function claudeProjectsRoot(): string {
-  return process.env.CLAUDE_PROJECTS_DIR ?? join(homedir(), ".claude", "projects");
+  return (
+    process.env.CLAUDE_PROJECTS_DIR ?? join(homedir(), ".claude", "projects")
+  );
 }
 
 function listClaudeSessionIdsForCwd(absCwd: string): Set<string> {
@@ -813,12 +868,20 @@ function listClaudeSessionIdsForCwd(absCwd: string): Set<string> {
   return ids;
 }
 
-function findNewClaudeSessionIdForCwd(absCwd: string, before: Set<string>, launchTime: number): string | null {
+function findNewClaudeSessionIdForCwd(
+  absCwd: string,
+  before: Set<string>,
+  launchTime: number,
+): string | null {
   const slug = cwdToProjectSlug(absCwd);
   const dir = join(claudeProjectsRoot(), slug);
   if (!existsSync(dir)) return null;
   let entries: string[];
-  try { entries = readdirSync(dir); } catch { return null; }
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return null;
+  }
   for (const entry of entries) {
     if (!entry.endsWith(".jsonl")) continue;
     const id = entry.slice(0, -".jsonl".length);
@@ -842,24 +905,38 @@ function waitForSessionId(
   timeoutMs: number,
   tmuxSession: string,
   windowName: string,
-  intervalMs = 500
+  intervalMs = 500,
 ): string | null {
   const deadline = Date.now() + timeoutMs;
   const absCwd = resolve(agentCwd);
   if (process.env.SYNAPSE_DEBUG) {
     const slug = cwdToProjectSlug(absCwd);
     const dir = join(claudeProjectsRoot(), slug);
-    console.error(`[debug] watching ${dir} for new .jsonl (before: ${[...transcriptIdsBeforeLaunch].join(",")||"(empty)"})`);
+    console.error(
+      `[debug] watching ${dir} for new .jsonl (before: ${[...transcriptIdsBeforeLaunch].join(",") || "(empty)"})`,
+    );
   }
   let nudged = false;
   while (Date.now() < deadline) {
-    const transcriptSessionId = findNewClaudeSessionIdForCwd(absCwd, transcriptIdsBeforeLaunch, launchTime);
+    const transcriptSessionId = findNewClaudeSessionIdForCwd(
+      absCwd,
+      transcriptIdsBeforeLaunch,
+      launchTime,
+    );
     if (transcriptSessionId) return transcriptSessionId;
     // After 3s, send a nudge message to trigger the first jsonl write
     if (!nudged && Date.now() > launchTime + 3000) {
-      Bun.spawnSync(["tmux", "send-keys", "-t", `${tmuxSession}:${windowName}`, "hi", "Enter"]);
+      Bun.spawnSync([
+        "tmux",
+        "send-keys",
+        "-t",
+        `${tmuxSession}:${windowName}`,
+        "hi",
+        "Enter",
+      ]);
       nudged = true;
-      if (process.env.SYNAPSE_DEBUG) console.error(`[debug] nudged ${windowName} to trigger jsonl`);
+      if (process.env.SYNAPSE_DEBUG)
+        console.error(`[debug] nudged ${windowName} to trigger jsonl`);
     }
     Bun.sleepSync(intervalMs);
   }
@@ -881,7 +958,7 @@ function launchAgentWindow(
   agent: AgentConfig,
   synapseDb: string,
   claudePath: string,
-  sessionId: string
+  sessionId: string,
 ): void {
   const absCwd = resolve(agent.cwd);
   const shellCmd = `
@@ -893,13 +970,20 @@ function launchAgentWindow(
     console.error(`[debug] window '${agent.name}' shellCmd:\n${shellCmd}`);
   }
   const result = Bun.spawnSync([
-    "tmux", "new-window",
-    "-t", tmuxSession,
-    "-n", agent.name,
-    "/bin/bash", "-c", shellCmd,
+    "tmux",
+    "new-window",
+    "-t",
+    tmuxSession,
+    "-n",
+    agent.name,
+    "/bin/bash",
+    "-c",
+    shellCmd,
   ]);
   if (result.exitCode !== 0) {
-    fail(`failed to create tmux window '${agent.name}': ${result.stderr.toString().trim()}`);
+    fail(
+      `failed to create tmux window '${agent.name}': ${result.stderr.toString().trim()}`,
+    );
   }
 }
 
@@ -923,31 +1007,58 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
     `INSERT INTO agents (window_name, role, session_id, status, last_seen_at)
      VALUES ('operator', 'operator', NULL, 'idle', ?)
      ON CONFLICT(window_name) DO UPDATE SET status='idle', last_seen_at=excluded.last_seen_at`,
-    [nowIso()]
+    [nowIso()],
   );
 
   // Create tmux session (fail gracefully if it exists)
-  const sessionExists = Bun.spawnSync(["tmux", "has-session", "-t", config.session]);
+  const sessionExists = Bun.spawnSync([
+    "tmux",
+    "has-session",
+    "-t",
+    config.session,
+  ]);
   if (sessionExists.exitCode !== 0) {
-    const newSession = Bun.spawnSync(["tmux", "new-session", "-d", "-s", config.session]);
+    const newSession = Bun.spawnSync([
+      "tmux",
+      "new-session",
+      "-d",
+      "-s",
+      config.session,
+    ]);
     if (newSession.exitCode !== 0) {
-      fail(`failed to create tmux session '${config.session}': ${newSession.stderr.toString().trim()}`);
+      fail(
+        `failed to create tmux session '${config.session}': ${newSession.stderr.toString().trim()}`,
+      );
     }
     // Rename the default window created with the session (base-index agnostic)
-    Bun.spawnSync(["tmux", "rename-window", "-t", `${config.session}`, "monitor"]);
+    Bun.spawnSync([
+      "tmux",
+      "rename-window",
+      "-t",
+      `${config.session}`,
+      "monitor",
+    ]);
   } else {
-    console.log(`synapse: tmux session '${config.session}' already exists — reusing`);
+    console.log(
+      `synapse: tmux session '${config.session}' already exists — reusing`,
+    );
   }
 
   // Check if agents are already registered (idempotent re-start)
   const agentNames = config.agents.map((a) => a.name);
   const placeholders = agentNames.map(() => "?").join(",");
-  const existing = (db.query(
-    `SELECT window_name FROM agents WHERE window_name IN (${placeholders}) AND status != 'stopped'`
-  ).all(...agentNames) as any[]).map((r) => r.window_name);
+  const existing = (
+    db
+      .query(
+        `SELECT window_name FROM agents WHERE window_name IN (${placeholders}) AND status != 'stopped'`,
+      )
+      .all(...agentNames) as any[]
+  ).map((r) => r.window_name);
 
   if (existing.length === agentNames.length) {
-    console.log(`synapse: team '${config.session}' already running — reusing existing agents`);
+    console.log(
+      `synapse: team '${config.session}' already running — reusing existing agents`,
+    );
     console.log(`  Attach: tmux attach -t ${config.session}`);
     console.log(`  Status: synapse status`);
     return;
@@ -955,22 +1066,26 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
 
   // Launch each agent window and capture session ids
   const transcriptIdsBeforeLaunch: Map<string, Set<string>> = new Map();
-  const synapseCliPath = resolve(process.execPath === process.argv[0]
-    ? process.argv[1]   // running via bun src/synapse.ts
-    : process.execPath  // compiled binary
+  const synapseCliPath = resolve(
+    process.execPath === process.argv[0]
+      ? process.argv[1] // running via bun src/synapse.ts
+      : process.execPath, // compiled binary
   );
 
   // Resolve claude binary path at start time so tmux windows inherit it
   // even if their shell doesn't have the same PATH.
   const claudeWhich = Bun.spawnSync(["which", "claude"]);
-  const claudePath = claudeWhich.exitCode === 0
-    ? claudeWhich.stdout.toString().trim()
-    : "claude";
+  const claudePath =
+    claudeWhich.exitCode === 0
+      ? claudeWhich.stdout.toString().trim()
+      : "claude";
 
   for (const agent of config.agents) {
     // Generate a UUID to pass as --session-id so we know it before launch.
     const sessionId = crypto.randomUUID();
-    console.log(`synapse: launching window '${agent.name}' (${agent.role}) in ${agent.cwd}`);
+    console.log(
+      `synapse: launching window '${agent.name}' (${agent.role}) in ${agent.cwd}`,
+    );
     launchAgentWindow(config.session, agent, dbFile, claudePath, sessionId);
     cmdRegister(agent.name, agent.role, sessionId);
   }
@@ -979,12 +1094,21 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
   if (!noMonitor) {
     const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${config.session} 2>&1 | tee '${dbFile.replace(/synapse\.db$/, "monitor.log")}'`;
     const r = Bun.spawnSync([
-      "tmux", "send-keys", "-t", `${config.session}:monitor`, monitorCmd, "Enter",
+      "tmux",
+      "send-keys",
+      "-t",
+      `${config.session}:monitor`,
+      monitorCmd,
+      "Enter",
     ]);
     if (r.exitCode !== 0) {
-      console.error(`synapse: warning — failed to start monitor: ${r.stderr.toString().trim()}`);
+      console.error(
+        `synapse: warning — failed to start monitor: ${r.stderr.toString().trim()}`,
+      );
     } else {
-      console.log(`synapse: monitor started in window '${config.session}:monitor'`);
+      console.log(
+        `synapse: monitor started in window '${config.session}:monitor'`,
+      );
     }
   }
 
@@ -992,29 +1116,40 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
   if (goal) {
     const planner = config.agents.find((a) => a.role === "planner");
     if (!planner) {
-      console.error("synapse: warning — no planner agent found; cannot send initial goal");
+      console.error(
+        "synapse: warning — no planner agent found; cannot send initial goal",
+      );
     } else {
       cmdSend(planner.name, "TASK", goal, "operator", null);
       console.log(`synapse: initial goal queued as TASK to '${planner.name}'`);
     }
   }
 
-  console.log(`synapse: team '${config.session}' started with ${config.agents.length} agent(s)`);
+  console.log(
+    `synapse: team '${config.session}' started with ${config.agents.length} agent(s)`,
+  );
   console.log(`  Attach: tmux attach -t ${config.session}`);
   console.log(`  Status: synapse status`);
 }
 
 function cmdStop(name: string, tmuxSession: string) {
   const db = connect();
-  const agent = db.query("SELECT * FROM agents WHERE window_name=?").get(name) as any;
+  const agent = db
+    .query("SELECT * FROM agents WHERE window_name=?")
+    .get(name) as any;
   if (!agent) fail(`no registered agent named '${name}'`);
 
-  db.run("UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=?", [
-    nowIso(),
-    name,
-  ]);
+  db.run(
+    "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=?",
+    [nowIso(), name],
+  );
 
-  const killResult = Bun.spawnSync(["tmux", "kill-window", "-t", `${tmuxSession}:${name}`]);
+  const killResult = Bun.spawnSync([
+    "tmux",
+    "kill-window",
+    "-t",
+    `${tmuxSession}:${name}`,
+  ]);
   if (killResult.exitCode !== 0) {
     const stderr = killResult.stderr.toString().trim();
     console.error(`synapse: warning — tmux kill-window failed: ${stderr}`);
@@ -1025,7 +1160,7 @@ function cmdStop(name: string, tmuxSession: string) {
 function cmdAttach(name: string, tmuxSession: string) {
   const result = Bun.spawnSync(
     ["tmux", "attach-session", "-t", `${tmuxSession}:${name}`],
-    { stdio: ["inherit", "inherit", "inherit"] }
+    { stdio: ["inherit", "inherit", "inherit"] },
   );
   if (result.exitCode !== 0) {
     fail(`tmux attach failed: ${result.stderr?.toString().trim()}`);
@@ -1034,8 +1169,12 @@ function cmdAttach(name: string, tmuxSession: string) {
 
 function cmdMonitor(flags: Record<string, string>) {
   const tmuxSession = flags["session"] ?? DEFAULT_TMUX_SESSION;
-  const sweepMs = flags["interval"] ? parseInt(flags["interval"], 10) : DEFAULT_SWEEP_INTERVAL_MS;
-  const debounceMs = flags["debounce"] ? parseInt(flags["debounce"], 10) : DEFAULT_DEBOUNCE_MS;
+  const sweepMs = flags["interval"]
+    ? parseInt(flags["interval"], 10)
+    : DEFAULT_SWEEP_INTERVAL_MS;
+  const debounceMs = flags["debounce"]
+    ? parseInt(flags["debounce"], 10)
+    : DEFAULT_DEBOUNCE_MS;
   const once = flags["once"] === "true";
 
   const db = connect();
@@ -1250,7 +1389,9 @@ function cmdUi(flags: Record<string, string>) {
 
   let lastMessageId = 0;
   // Seed last_id to current max so we only push new messages after startup.
-  const maxRow = db.query("SELECT MAX(id) AS max_id FROM messages").get() as any;
+  const maxRow = db
+    .query("SELECT MAX(id) AS max_id FROM messages")
+    .get() as any;
   if (maxRow?.max_id) lastMessageId = maxRow.max_id;
 
   // SSE client registry
@@ -1276,7 +1417,7 @@ function cmdUi(flags: Record<string, string>) {
                  WHERE m.status='pending'
                    AND (m.to_agent=a.window_name OR m.to_agent='broadcast')) AS pending_count
          FROM agents a
-         ORDER BY role, window_name`
+         ORDER BY role, window_name`,
       )
       .all();
     pushToAll("agent-status", agents);
@@ -1285,7 +1426,7 @@ function cmdUi(flags: Record<string, string>) {
     const newMessages = db
       .query(
         `SELECT id, from_agent, to_agent, type, body, status, created_at
-         FROM messages WHERE id > ? ORDER BY id`
+         FROM messages WHERE id > ? ORDER BY id`,
       )
       .all(lastMessageId) as any[];
     if (newMessages.length > 0) {
@@ -1332,29 +1473,50 @@ function cmdUi(flags: Record<string, string>) {
       }
 
       if (url.pathname === "/send" && req.method === "POST") {
-        return req.json().then((body: any) => {
-          const { to, type, body: msgBody } = body ?? {};
-          if (!to || !type || !msgBody) {
-            return Response.json({ ok: false, error: "missing to, type, or body" }, { status: 400 });
-          }
-          if (!MESSAGE_TYPES.has(type)) {
-            return Response.json(
-              { ok: false, error: `type must be one of ${[...MESSAGE_TYPES].sort()}` },
-              { status: 400 }
-            );
-          }
-          if (to !== "broadcast") {
-            const known = db.query("SELECT 1 FROM agents WHERE window_name=?").get(to);
-            if (!known) {
-              console.error(`synapse ui: warning — '${to}' not in agents registry (sending anyway)`);
+        return req
+          .json()
+          .then((body: any) => {
+            const { to, type, body: msgBody } = body ?? {};
+            if (!to || !type || !msgBody) {
+              return Response.json(
+                { ok: false, error: "missing to, type, or body" },
+                { status: 400 },
+              );
             }
-          }
-          const result = db.run(
-            `INSERT INTO messages (from_agent, to_agent, type, body) VALUES ('ui', ?, ?, ?)`,
-            [to, type, msgBody]
+            if (!MESSAGE_TYPES.has(type)) {
+              return Response.json(
+                {
+                  ok: false,
+                  error: `type must be one of ${[...MESSAGE_TYPES].sort()}`,
+                },
+                { status: 400 },
+              );
+            }
+            if (to !== "broadcast") {
+              const known = db
+                .query("SELECT 1 FROM agents WHERE window_name=?")
+                .get(to);
+              if (!known) {
+                console.error(
+                  `synapse ui: warning — '${to}' not in agents registry (sending anyway)`,
+                );
+              }
+            }
+            const result = db.run(
+              `INSERT INTO messages (from_agent, to_agent, type, body) VALUES ('ui', ?, ?, ?)`,
+              [to, type, msgBody],
+            );
+            return Response.json({
+              ok: true,
+              id: Number(result.lastInsertRowid),
+            });
+          })
+          .catch(() =>
+            Response.json(
+              { ok: false, error: "invalid JSON" },
+              { status: 400 },
+            ),
           );
-          return Response.json({ ok: true, id: Number(result.lastInsertRowid) });
-        }).catch(() => Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }));
       }
 
       return new Response("Not Found", { status: 404 });
@@ -1364,7 +1526,9 @@ function cmdUi(flags: Record<string, string>) {
   const shutdown = () => {
     clearInterval(pollTimer);
     for (const ctrl of clients) {
-      try { ctrl.close(); } catch {}
+      try {
+        ctrl.close();
+      } catch {}
     }
     server.stop(true);
     process.exit(0);
@@ -1411,13 +1575,16 @@ function main() {
       return cmdInit();
     case "register": {
       const [name, role, sessionId] = positional;
-      if (!name || !role) fail("usage: synapse register <name> <role> [session_id]");
+      if (!name || !role)
+        fail("usage: synapse register <name> <role> [session_id]");
       return cmdRegister(name, role, sessionId ?? null);
     }
     case "send": {
       const [to, type, body] = positional;
       if (!to || !type || !body)
-        fail("usage: synapse send <to> <type> <body> [--from NAME] [--ref-id N]");
+        fail(
+          "usage: synapse send <to> <type> <body> [--from NAME] [--ref-id N]",
+        );
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
       return cmdSend(to, type, body, flags["from"] ?? null, refId);
     }
@@ -1440,7 +1607,8 @@ function main() {
       return cmdMonitor(flags);
     case "start": {
       const [configPath] = positional;
-      if (!configPath) fail("usage: synapse start <team.yaml> [--goal TEXT] [--no-monitor]");
+      if (!configPath)
+        fail("usage: synapse start <team.yaml> [--goal TEXT] [--no-monitor]");
       return cmdStart(configPath, flags);
     }
     case "stop": {
@@ -1457,7 +1625,7 @@ function main() {
       return cmdUi(flags);
     default:
       fail(
-        `unknown command '${command}'. Expected one of: init, register, send, log, status, pending, deliver, monitor, start, stop, attach, ui`
+        `unknown command '${command}'. Expected one of: init, register, send, log, status, pending, deliver, monitor, start, stop, attach, ui`,
       );
   }
 }
