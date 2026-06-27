@@ -365,7 +365,9 @@ function readTranscriptState(
   if (!path) return { status: "unknown", detail: "no transcript found yet" };
 
   const stopReason = lastAssistantStopReason(path);
-  if (!stopReason) return { status: "unknown", detail: "no assistant turn yet" };
+  if (!stopReason) {
+    return { status: "unknown", detail: "no assistant turn yet" };
+  }
 
   if (stopReason !== "end_turn") {
     return { status: "busy", detail: `stop_reason=${stopReason}` };
@@ -708,8 +710,11 @@ function runLiveMonitor(
     if (agentState?.status === "idle") {
       dispatchNextDirectMessage(db, tmuxSession, windowName, log);
       broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
-    } else if (agentState?.remainingDebounceMs !== undefined) {
-      // Agent is still debouncing — reschedule to re-evaluate when the window expires.
+    } else if (
+      agentState?.remainingDebounceMs !== undefined &&
+      hasPendingDirectMessageForWindow(db, windowName)
+    ) {
+      // Agent is still debouncing and has mail waiting — reschedule to re-evaluate when the window expires.
       scheduleDelivery(windowName, agentState.remainingDebounceMs);
     }
   };
@@ -789,16 +794,16 @@ function runLiveMonitor(
       if (agentState?.status === "idle") {
         dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
       }
-      if (pool.isWatching(agent.window_name)) {
-        pool.emitOnTranscriptChange(agent.window_name);
-      } else {
-        // fs.watch needs an existing path — poll until the transcript appears.
+      // Poll until the transcript appears to start watching
+      if (!pool.isWatching(agent.window_name)) {
         const path = findTranscriptPath(agent.session_id);
         if (path) {
           pool.watch(agent.window_name, path);
           log(`  ${agent.window_name}: watching ${path}`);
         }
       }
+      // Catch transcript changes fs.watch may have missed (coalesced writes, NFS, etc.).
+      pool.emitOnTranscriptChange(agent.window_name);
     }
     broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
   };
