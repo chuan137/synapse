@@ -404,7 +404,9 @@ describe("ref_id chain", () => {
 
     const pending = run(["pending"]);
     expect(pending.exitCode).toBe(0);
-    const lines = pending.stdout.split("\n").filter((l) => l.startsWith("["));
+    // Each message prints 3 lines: header, body, blank line.
+    // Header contains the route arrow "→".
+    const lines = pending.stdout.split("\n").filter((l) => l.includes("→"));
     expect(lines.length).toBe(3);
   });
 });
