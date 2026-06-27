@@ -483,16 +483,16 @@ function evaluateAgentReadiness(
   }
   if (state !== prev) {
     log(`  ${agent.window_name}: ${prev} -> ${state} (${detail})`);
-  }
-  // Guarded so a concurrent deregister wins — don't resurrect a stopped row.
-  const update = db.run(
-    "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND status != 'stopped'",
-    [state, nowIso(), agent.window_name]
-  );
-  if (update.changes === 0) {
-    idleStates.delete(agent.window_name);
-    log(`  ${agent.window_name}: stopped before readiness update`);
-    return null;
+    // Guarded so a concurrent deregister wins — don't resurrect a stopped row.
+    const update = db.run(
+      "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND status != 'stopped'",
+      [state, nowIso(), agent.window_name]
+    );
+    if (update.changes === 0) {
+      idleStates.delete(agent.window_name);
+      log(`  ${agent.window_name}: stopped before readiness update`);
+      return null;
+    }
   }
 
   return result;
@@ -647,10 +647,7 @@ function runLiveMonitor(
     if (result?.state === "idle") {
       dispatchNextDirectMessage(db, tmuxSession, windowName, log);
       broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
-    } else if (
-      result?.recheckAfterMs !== undefined &&
-      hasPendingDirectMessageForWindow(db, windowName)
-    ) {
+    } else if (result?.recheckAfterMs !== undefined) {
       scheduleDeliveryAttempt(windowName, result.recheckAfterMs);
     }
   };
@@ -722,6 +719,9 @@ function runLiveMonitor(
       }
       if (pool.isWatching(agent.window_name)) {
         pool.checkAndEmitChange(agent.window_name);
+        if (idleStates.get(agent.window_name) !== "idle") {
+          attemptDelivery(agent.window_name);
+        }
       } else {
         // fs.watch needs an existing path — poll until the transcript appears.
         const path = findTranscriptPath(agent.session_id);
@@ -977,7 +977,7 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
 
   // Start monitor in the 'monitor' tmux window
   if (!noMonitor) {
-    const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${config.session}`;
+    const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${config.session} 2>&1 | tee '${dbFile.replace(/synapse\.db$/, "monitor.log")}'`;
     const r = Bun.spawnSync([
       "tmux", "send-keys", "-t", `${config.session}:monitor`, monitorCmd, "Enter",
     ]);
