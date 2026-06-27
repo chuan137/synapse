@@ -305,9 +305,9 @@ function cmdDeliver(id: number) {
 
 // ---------- monitor ----------
 
-type IdleState = "idle" | "busy" | "unknown";
-type IdleStateResult = {
-  state: IdleState;
+type AgentStatus = "idle" | "busy" | "unknown";
+type AgentState = {
+  status: AgentStatus;
   detail: string;
   remainingDebounceMs?: number;
 };
@@ -360,32 +360,32 @@ function lastAssistantStopReason(path: string): string | null {
 function readTranscriptState(
   sessionId: string,
   debounceMs: number,
-): IdleStateResult {
+): AgentState {
   const path = findTranscriptPath(sessionId);
-  if (!path) return { state: "unknown", detail: "no transcript found yet" };
+  if (!path) return { status: "unknown", detail: "no transcript found yet" };
 
   const stopReason = lastAssistantStopReason(path);
-  if (!stopReason) return { state: "unknown", detail: "no assistant turn yet" };
+  if (!stopReason) return { status: "unknown", detail: "no assistant turn yet" };
 
   if (stopReason !== "end_turn") {
-    return { state: "busy", detail: `stop_reason=${stopReason}` };
+    return { status: "busy", detail: `stop_reason=${stopReason}` };
   }
 
   let ageMs: number;
   try {
     ageMs = Date.now() - statSync(path).mtimeMs;
   } catch {
-    return { state: "unknown", detail: "transcript unreadable" };
+    return { status: "unknown", detail: "transcript unreadable" };
   }
   if (ageMs < debounceMs) {
     return {
-      state: "busy",
+      status: "busy",
       detail: `end_turn, debouncing (${Math.round(ageMs)}ms)`,
       remainingDebounceMs: debounceMs - ageMs,
     };
   }
   return {
-    state: "idle",
+    status: "idle",
     detail: `end_turn, quiet for ${Math.round(ageMs)}ms`,
   };
 }
@@ -485,7 +485,7 @@ function broadcastReadyMessages(
   db: Database,
   tmuxSession: string,
   agents: any[],
-  idleStates: Map<string, IdleState>,
+  agentStatuses: Map<string, AgentStatus>,
   log: (s: string) => void,
 ) {
   const broadcasts = db
@@ -497,7 +497,7 @@ function broadcastReadyMessages(
     const recipients = agents.filter((a) => a.window_name !== msg.from_agent);
     if (recipients.length === 0) continue;
     const allIdle = recipients.every(
-      (a) => idleStates.get(a.window_name) === "idle",
+      (a) => agentStatuses.get(a.window_name) === "idle",
     );
     if (!allIdle) continue;
     let allOk = true;
@@ -518,56 +518,63 @@ function broadcastReadyMessages(
   }
 }
 
-function readTmuxPaneState(tmuxSession: string, windowName: string): IdleStateResult {
+function readTmuxPaneState(
+  tmuxSession: string,
+  windowName: string,
+): AgentState {
   const pane = Bun.spawnSync([
-    "tmux", "capture-pane", "-t", `${tmuxSession}:${windowName}`, "-p",
+    "tmux",
+    "capture-pane",
+    "-t",
+    `${tmuxSession}:${windowName}`,
+    "-p",
   ]);
   const paneText = pane.stdout.toString();
   const isIdle = /[❯$#]\s*$/.test(paneText.trimEnd());
-  return { state: isIdle ? "idle" : "busy", detail: "tmux-pane-fallback" };
+  return { status: isIdle ? "idle" : "busy", detail: "tmux-pane-fallback" };
 }
 
 // Reads agent state from transcript (or tmux pane fallback) and persists any transition.
-// idleStates acts as both prev-state tracker and the snapshot broadcastReadyMessages reads.
-function updateAgentState(
+// Returns null if no state source exists or the agent was concurrently stopped — callers skip delivery.
+function refreshAgentState(
   db: Database,
   debounceMs: number,
   agent: any,
-  idleStates: Map<string, IdleState>,
+  agentStatuses: Map<string, AgentStatus>,
   log: (s: string) => void,
   tmuxSession?: string,
-): IdleStateResult | null {
-  let result: IdleStateResult;
+): AgentState | null {
+  let state: AgentState;
   if (agent.session_id && agent.session_id !== "-") {
-    result = readTranscriptState(agent.session_id, debounceMs);
+    state = readTranscriptState(agent.session_id, debounceMs);
   } else if (tmuxSession) {
-    result = readTmuxPaneState(tmuxSession, agent.window_name);
+    state = readTmuxPaneState(tmuxSession, agent.window_name);
   } else {
     return null;
   }
 
-  const { state, detail } = result;
-  const prev = idleStates.get(agent.window_name) ?? agent.status;
-  idleStates.set(agent.window_name, state);
-  if (state === "unknown") {
+  const { status, detail } = state;
+  const prev = agentStatuses.get(agent.window_name) ?? agent.status;
+  agentStatuses.set(agent.window_name, status);
+  if (status === "unknown") {
     log(`  ${agent.window_name}: unknown (${detail})`);
-    return result;
+    return state;
   }
-  if (state !== prev) {
-    log(`  ${agent.window_name}: ${prev} -> ${state} (${detail})`);
+  if (status !== prev) {
+    log(`  ${agent.window_name}: ${prev} -> ${status} (${detail})`);
     // Guarded so a concurrent deregister wins — don't resurrect a stopped row.
     const update = db.run(
       "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND status != 'stopped'",
-      [state, nowIso(), agent.window_name],
+      [status, nowIso(), agent.window_name],
     );
     if (update.changes === 0) {
-      idleStates.delete(agent.window_name);
+      agentStatuses.delete(agent.window_name);
       log(`  ${agent.window_name}: stopped before readiness update`);
       return null;
     }
   }
 
-  return result;
+  return state;
 }
 
 // Single synchronous snapshot — evaluate every live agent, then broadcast if ready.
@@ -580,15 +587,22 @@ function pollOnce(
   const agents = db
     .query("SELECT * FROM agents WHERE status != 'stopped'")
     .all() as any[];
-  const idleStates = new Map<string, IdleState>();
+  const agentStatuses = new Map<string, AgentStatus>();
   for (const agent of agents) {
     if (agent.window_name === "operator") continue;
-    const result = updateAgentState(db, debounceMs, agent, idleStates, log, tmuxSession);
-    if (result?.state === "idle") {
+    const result = refreshAgentState(
+      db,
+      debounceMs,
+      agent,
+      agentStatuses,
+      log,
+      tmuxSession,
+    );
+    if (result?.status === "idle") {
       dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
     }
   }
-  broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
+  broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
 }
 
 // Callers get a single onChange(key, path) callback for each fs.watch event,
@@ -669,12 +683,12 @@ function runLiveMonitor(
   sweepMs: number,
   log: (s: string) => void,
 ) {
-  const idleStates = new Map<string, IdleState>();
+  const agentStatuses = new Map<string, AgentStatus>();
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let agents: any[] = [];
   let agentsByWindow = new Map<string, any>();
 
-  const refreshAgents = () => {
+  const reloadAgents = () => {
     agents = db
       .query(
         "SELECT * FROM agents WHERE status != 'stopped' AND session_id IS NOT NULL",
@@ -683,20 +697,20 @@ function runLiveMonitor(
     agentsByWindow = new Map(agents.map((a) => [a.window_name, a]));
   };
 
-  const evaluateWindowReadiness = (windowName: string) => {
+  const refreshAgentStateByWindow = (windowName: string) => {
     const agent = agentsByWindow.get(windowName);
     if (!agent) return null; // deregistered/stopped between event and update
-    return updateAgentState(db, debounceMs, agent, idleStates, log);
+    return refreshAgentState(db, debounceMs, agent, agentStatuses, log);
   };
 
-  const deliverIfIdle = (windowName: string) => {
-    const result = evaluateWindowReadiness(windowName);
-    if (result?.state === "idle") {
-      cancelScheduledDelivery(windowName);
+  const deliverOrReschedule = (windowName: string) => {
+    const agentState = refreshAgentStateByWindow(windowName);
+    if (agentState?.status === "idle") {
       dispatchNextDirectMessage(db, tmuxSession, windowName, log);
-      broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
-    } else if (result?.remainingDebounceMs !== undefined) {
-      scheduleDelivery(windowName, result.remainingDebounceMs);
+      broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
+    } else if (agentState?.remainingDebounceMs !== undefined) {
+      // Agent is still debouncing — reschedule to re-evaluate when the window expires.
+      scheduleDelivery(windowName, agentState.remainingDebounceMs);
     }
   };
 
@@ -707,22 +721,24 @@ function runLiveMonitor(
   };
 
   const scheduleDelivery = (windowName: string, delayMs: number) => {
-    cancelScheduledDelivery(windowName);
     debounceTimers.set(
       windowName,
       setTimeout(
         () => {
           debounceTimers.delete(windowName);
-          deliverIfIdle(windowName);
+          deliverOrReschedule(windowName);
         },
         Math.max(0, delayMs),
       ),
     );
   };
 
+  // On new transcript activity, reset the debounce window and re-evaluate.
+  // Delivery only fires once the agent has been quiet for the full debounce period,
+  // ensuring the agent is truly idle before a message is sent.
   const onTranscriptActivity = (windowName: string) => {
     cancelScheduledDelivery(windowName);
-    deliverIfIdle(windowName);
+    deliverOrReschedule(windowName);
   };
 
   const pool = new FileWatchPool((windowName) =>
@@ -751,10 +767,10 @@ function runLiveMonitor(
   // agents, retries pending delivery for agents already idle, and broadcasts
   // ready messages.
   const sweep = () => {
-    refreshAgents();
+    reloadAgents();
     const liveNames = new Set(agents.map((a) => a.window_name));
     const trackedNames = new Set([
-      ...idleStates.keys(),
+      ...agentStatuses.keys(),
       ...pool.watchedKeys(),
       ...debounceTimers.keys(),
     ]);
@@ -762,15 +778,15 @@ function runLiveMonitor(
     for (const name of trackedNames) {
       if (liveNames.has(name)) continue;
       pool.unwatch(name);
-      idleStates.delete(name);
+      agentStatuses.delete(name);
       cancelScheduledDelivery(name);
       log(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
-      const result = evaluateWindowReadiness(agent.window_name);
+      const agentState = refreshAgentStateByWindow(agent.window_name);
 
       // Mail can arrive without transcript activity.
-      if (result?.state === "idle") {
+      if (agentState?.status === "idle") {
         dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
       }
       if (pool.isWatching(agent.window_name)) {
@@ -784,7 +800,7 @@ function runLiveMonitor(
         }
       }
     }
-    broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
+    broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
   };
 
   sweep();
