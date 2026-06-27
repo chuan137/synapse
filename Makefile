@@ -4,7 +4,7 @@ SRC := src/synapse.ts
 BREW_PREFIX := $(shell command -v brew >/dev/null 2>&1 && brew --prefix)
 PREFIX ?= $(if $(BREW_PREFIX),$(BREW_PREFIX)/bin,~/.local/bin)
 
-.PHONY: build init clean install test unit smoke
+.PHONY: build init clean install test unit smoke e2e
 
 build: $(SRC)
 	mkdir -p $(BINDIR)
@@ -24,7 +24,10 @@ unit:
 smoke: build
 	./$(BINDIR)/$(BIN) status
 
-test: unit smoke
+e2e: build
+	bash tests/e2e-monitor.sh
+
+test: unit smoke e2e
 
 clean:
 	rm -rf $(BINDIR) .*.bun-build
