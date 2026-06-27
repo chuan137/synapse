@@ -692,6 +692,7 @@ function runLiveMonitor(
   const deliverIfIdle = (windowName: string) => {
     const result = evaluateWindowReadiness(windowName);
     if (result?.state === "idle") {
+      cancelScheduledDelivery(windowName);
       dispatchNextDirectMessage(db, tmuxSession, windowName, log);
       broadcastReadyMessages(db, tmuxSession, agents, idleStates, log);
     } else if (result?.remainingDebounceMs !== undefined) {
