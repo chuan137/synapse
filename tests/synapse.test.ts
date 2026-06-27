@@ -308,3 +308,104 @@ describe("unknown command", () => {
     expect(r.stderr).toContain("unknown command");
   });
 });
+
+describe("start — team.yaml parsing", () => {
+  // We test the YAML parsing indirectly: pass a malformed config path and
+  // check the error, then a valid file but tmux-free (--no-monitor prevents
+  // side-effects that require a live tmux session).
+
+  test("fails when config file does not exist", () => {
+    run(["init"]);
+    const r = run(["start", "/nonexistent/team.yaml", "--no-monitor"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("team config not found");
+  });
+
+  test("fails when yaml has no agents", () => {
+    run(["init"]);
+    const yaml = join(dir, "empty.yaml");
+    Bun.write(yaml, "session: team\nagents:\n");
+    const r = run(["start", yaml, "--no-monitor"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("no agents defined");
+  });
+
+  test("fails when yaml is missing session field", () => {
+    run(["init"]);
+    const yaml = join(dir, "nosession.yaml");
+    Bun.write(yaml, "agents:\n  - name: planner\n    role: planner\n    cwd: .\n");
+    const r = run(["start", yaml, "--no-monitor"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("missing 'session'");
+  });
+});
+
+describe("stop", () => {
+  beforeEach(() => {
+    run(["init"]);
+    run(["register", "coder-1", "coder", "sess-c"]);
+  });
+
+  test("marks agent stopped in DB", () => {
+    // kill-window will fail (no real tmux) but the DB update should still happen
+    run(["stop", "coder-1", "--session", "team"]);
+    const db = openDb();
+    const row = db.query("SELECT status FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(row.status).toBe("stopped");
+  });
+
+  test("fails for unknown agent", () => {
+    const r = run(["stop", "ghost", "--session", "team"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("no registered agent");
+  });
+});
+
+describe("ref_id chain", () => {
+  // Validates the TASK -> STATUS -> REVIEW -> STATUS chain from spec section 6.3/6.4.
+  beforeEach(() => {
+    run(["init"]);
+    run(["register", "operator", "operator", null]);
+    run(["register", "planner", "planner", "sess-p"]);
+    run(["register", "coder-1", "coder", "sess-c"]);
+    run(["register", "reviewer", "reviewer", "sess-r"]);
+  });
+
+  test("full TASK→STATUS→REVIEW→STATUS chain stores correct ref_id links", () => {
+    // operator -> planner: root TASK
+    run(["send", "planner", "TASK", "Build feature X", "--from", "operator"]);
+    const rootTask = openDb().query("SELECT id FROM messages WHERE type='TASK' AND from_agent='operator'").get() as any;
+
+    // planner -> coder-1: subtask
+    run(["send", "coder-1", "TASK", "Implement X", "--from", "planner", "--ref-id", String(rootTask.id)]);
+    const subTask = openDb().query("SELECT id, ref_id FROM messages WHERE type='TASK' AND from_agent='planner'").get() as any;
+    expect(subTask.ref_id).toBe(rootTask.id);
+
+    // coder-1 -> reviewer: REVIEW
+    run(["send", "reviewer", "REVIEW", "Please review my PR", "--from", "coder-1", "--ref-id", String(subTask.id)]);
+    const review = openDb().query("SELECT id, ref_id FROM messages WHERE type='REVIEW'").get() as any;
+    expect(review.ref_id).toBe(subTask.id);
+
+    // reviewer -> coder-1: STATUS on review
+    run(["send", "coder-1", "STATUS", "LGTM", "--from", "reviewer", "--ref-id", String(review.id)]);
+    const reviewStatus = openDb().query("SELECT ref_id FROM messages WHERE type='STATUS' AND from_agent='reviewer'").get() as any;
+    expect(reviewStatus.ref_id).toBe(review.id);
+
+    // coder-1 -> planner: final STATUS
+    run(["send", "planner", "STATUS", "Feature X done", "--from", "coder-1", "--ref-id", String(subTask.id)]);
+    const finalStatus = openDb().query("SELECT ref_id FROM messages WHERE type='STATUS' AND from_agent='coder-1'").get() as any;
+    expect(finalStatus.ref_id).toBe(subTask.id);
+  });
+
+  test("pending shows all undelivered messages across the chain", () => {
+    run(["send", "planner", "TASK", "Do something", "--from", "operator"]);
+    run(["send", "coder-1", "TASK", "Subtask", "--from", "planner"]);
+    run(["send", "reviewer", "REVIEW", "Check this", "--from", "coder-1"]);
+
+    const pending = run(["pending"]);
+    expect(pending.exitCode).toBe(0);
+    const lines = pending.stdout.split("\n").filter((l) => l.startsWith("["));
+    expect(lines.length).toBe(3);
+  });
+});
+

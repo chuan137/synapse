@@ -11,6 +11,9 @@
  *   synapse pending [agent]
  *   synapse deliver <id>
  *   synapse monitor [--session NAME] [--interval MS] [--debounce MS] [--once]
+ *   synapse start <team.yaml> [--goal "text"] [--no-monitor]
+ *   synapse stop <name> [--session SESSION]
+ *   synapse attach <name> [--session SESSION]
  *
  * DB location: $SYNAPSE_DB, else ./.synapse/synapse.db
  * Transcript root: $CLAUDE_PROJECTS_DIR, else ~/.claude/projects
@@ -70,6 +73,19 @@ function nowIso(): string {
 function fail(msg: string): never {
   console.error(`synapse: ${msg}`);
   process.exit(1);
+}
+
+const c = {
+  reset:  "\x1b[0m",
+  dim:    "\x1b[2m",
+  blue:   "\x1b[34m",
+  yellow: "\x1b[33m",
+  green:  "\x1b[32m",
+  cyan:   "\x1b[36m",
+};
+function colorType(t: string): string {
+  const color = t === "TASK" ? c.blue : t === "REVIEW" ? c.yellow : t === "STATUS" ? c.green : c.cyan;
+  return `${color}${t}${c.reset}`;
 }
 
 // ---------- commands ----------
@@ -235,11 +251,19 @@ function cmdPending(agent: string | null) {
     console.log("synapse: no pending messages");
     return;
   }
+  const agentW = Math.max(...rows.flatMap(r => [r.from_agent.length, r.to_agent.length]));
+  const typeW  = Math.max(...rows.map(r => r.type.length));
+  const refW   = Math.max(...rows.map(r => r.ref_id ? `ref:#${r.ref_id}`.length : 0));
   for (const r of rows) {
-    const ref = r.ref_id ? ` ref=${r.ref_id}` : "";
-    console.log(
-      `[${r.id}] ${r.from_agent} -> ${r.to_agent} (${r.type}${ref}) @ ${r.created_at}\n    ${r.body}`
-    );
+    const route = `${r.from_agent.padEnd(agentW)} → ${r.to_agent.padEnd(agentW)}`;
+    const type  = colorType(r.type) + " ".repeat(typeW - r.type.length);
+    const refRaw = r.ref_id ? `ref:#${r.ref_id}` : "";
+    const ref   = refRaw ? `${c.dim}${refRaw}${c.reset}` + " ".repeat(refW - refRaw.length) : " ".repeat(refW);
+    const ts    = `${c.dim}${r.created_at.slice(0, 16)}${c.reset}`;
+    const id    = `${c.dim}#${String(r.id).padStart(2)}${c.reset}`;
+    console.log(`${id}  ${route}  ${type}  ${ref}  ${ts}`);
+    console.log(`      ${r.body}`);
+    console.log();
   }
 }
 
@@ -697,6 +721,271 @@ function runLiveMonitor(
   sweepTimer = setInterval(sweep, sweepMs);
 }
 
+// ---------- team.yaml / bootstrap ----------
+
+interface AgentConfig {
+  name: string;
+  role: string;
+  cwd: string;
+}
+
+interface TeamConfig {
+  session: string;
+  agents: AgentConfig[];
+}
+
+function parseTeamYaml(text: string): TeamConfig {
+  // Minimal YAML parser — only handles the flat list shape used in synapse-spec.md.
+  // Format:
+  //   session: <name>
+  //   agents:
+  //     - name: <n>
+  //       role: <r>
+  //       cwd: <path>
+  const lines = text.split("\n");
+  let session = "";
+  const agents: AgentConfig[] = [];
+  let current: Partial<AgentConfig> | null = null;
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (/^session:\s/.test(line)) {
+      session = line.replace(/^session:\s+/, "").trim();
+      continue;
+    }
+    if (/^\s+-\s+name:\s/.test(line)) {
+      if (current && current.name && current.role && current.cwd) agents.push(current as AgentConfig);
+      current = { name: line.replace(/^\s+-\s+name:\s+/, "").trim() };
+      continue;
+    }
+    if (current && /^\s+role:\s/.test(line)) {
+      current.role = line.replace(/^\s+role:\s+/, "").trim();
+      continue;
+    }
+    if (current && /^\s+cwd:\s/.test(line)) {
+      current.cwd = line.replace(/^\s+cwd:\s+/, "").trim();
+      continue;
+    }
+  }
+  if (current && current.name && current.role && current.cwd) agents.push(current as AgentConfig);
+
+  if (!session) fail("team.yaml: missing 'session' field");
+  if (agents.length === 0) fail("team.yaml: no agents defined");
+  return { session, agents };
+}
+
+// Polls the pane for a session-id file written by the launch wrapper.
+// The wrapper is: `cd <cwd> && claude` piped through a shim that captures the
+// session id from the session-start banner and writes it to
+// .synapse/<name>.session-id within SYNAPSE_DB's directory.
+// We wait up to timeoutMs for the file to appear.
+function waitForSessionId(
+  sessionIdFile: string,
+  timeoutMs: number,
+  intervalMs = 500
+): string | null {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(sessionIdFile)) {
+      const content = readFileSync(sessionIdFile, "utf8").trim();
+      if (content.length > 0) return content;
+    }
+    // Bun synchronous sleep
+    Bun.sleepSync(intervalMs);
+  }
+  return null;
+}
+
+// Launches one agent window in the tmux session.
+// The window runs a small shell snippet that starts claude, captures the
+// session id from the "Starting session <id>" banner, writes it to a file,
+// and then hands off stdin/stdout to the claude process normally.
+function launchAgentWindow(
+  tmuxSession: string,
+  agent: AgentConfig,
+  sessionIdFile: string,
+  synapseDb: string,
+  synapseCliPath: string
+): void {
+  // Shell snippet:
+  //   1. cd to agent's working directory.
+  //   2. Start claude, tee its initial output to a temp file.
+  //   3. Extract the session id from the banner line.
+  //   4. Write the session id to sessionIdFile.
+  //   5. The process continues running as the claude session.
+  //
+  // We use script(1) + grep trick: start claude with its output going to a
+  // named pipe; a background subshell reads the pipe, grabs the session id,
+  // writes the file, then discards. The main shell then exec's into claude
+  // directly so the pane behaves normally from that point on.
+  const absSessionIdFile = resolve(sessionIdFile);
+  const absCwd = resolve(agent.cwd);
+  const shellCmd = [
+    `cd '${absCwd}'`,
+    // Create a shell function that starts claude, captures the session id
+    // from stdout, and writes it to the session-id file. We do this by
+    // running claude with its stdout going through a tee to a fifo, then
+    // forwarding to the pane's stdout. A background subshell reads the fifo,
+    // extracts the session id, writes the file, then exits.
+    `_fifo=$(mktemp -u)`,
+    `mkfifo "$_fifo"`,
+    // Background reader: grab the first matching banner line
+    `( grep -m1 'Starting session' < "$_fifo" | sed 's/.*Starting session //' | tr -d '\\r\\n' > '${absSessionIdFile}'; rm -f "$_fifo" ) &`,
+    // Start claude, tee to the fifo so the bg reader sees banner, and also
+    // output normally to the pane via stdout.
+    `SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' claude | tee "$_fifo"`,
+  ].join(" && ");
+
+  const result = Bun.spawnSync([
+    "tmux", "new-window",
+    "-t", tmuxSession,
+    "-n", agent.name,
+    "--",
+    "bash", "-c", shellCmd,
+  ]);
+  if (result.exitCode !== 0) {
+    fail(`failed to create tmux window '${agent.name}': ${result.stderr.toString().trim()}`);
+  }
+}
+
+function cmdStart(configPath: string, flags: Record<string, string>) {
+  if (!existsSync(configPath)) fail(`team config not found: ${configPath}`);
+  const config = parseTeamYaml(readFileSync(configPath, "utf8"));
+  const goal = flags["goal"] ?? null;
+  const noMonitor = flags["no-monitor"] === "true";
+
+  const dbFile = dbPath();
+  const dataDir = dirname(dbFile);
+  mkdirSync(dataDir, { recursive: true });
+
+  // Init DB (idempotent)
+  cmdInit();
+
+  const db = connect();
+
+  // Register operator pseudo-agent
+  db.run(
+    `INSERT INTO agents (window_name, role, session_id, status, last_seen_at)
+     VALUES ('operator', 'operator', NULL, 'idle', ?)
+     ON CONFLICT(window_name) DO UPDATE SET status='idle', last_seen_at=excluded.last_seen_at`,
+    [nowIso()]
+  );
+
+  // Create tmux session (fail gracefully if it exists)
+  const sessionExists = Bun.spawnSync(["tmux", "has-session", "-t", config.session]);
+  if (sessionExists.exitCode !== 0) {
+    const newSession = Bun.spawnSync(["tmux", "new-session", "-d", "-s", config.session]);
+    if (newSession.exitCode !== 0) {
+      fail(`failed to create tmux session '${config.session}': ${newSession.stderr.toString().trim()}`);
+    }
+    // Rename the default window created with the session
+    Bun.spawnSync(["tmux", "rename-window", "-t", `${config.session}:0`, "monitor"]);
+  } else {
+    console.log(`synapse: tmux session '${config.session}' already exists — reusing`);
+  }
+
+  // Check if agents are already registered (idempotent re-start)
+  const agentNames = config.agents.map((a) => a.name);
+  const placeholders = agentNames.map(() => "?").join(",");
+  const existing = (db.query(
+    `SELECT window_name FROM agents WHERE window_name IN (${placeholders}) AND status != 'stopped'`
+  ).all(...agentNames) as any[]).map((r) => r.window_name);
+
+  if (existing.length === agentNames.length) {
+    console.log(`synapse: team '${config.session}' already running — reusing existing agents`);
+    console.log(`  Attach: tmux attach -t ${config.session}`);
+    console.log(`  Status: synapse status`);
+    return;
+  }
+
+  // Launch each agent window and capture session ids
+  const sessionIdFiles: Map<string, string> = new Map();
+  const synapseCliPath = resolve(process.execPath === process.argv[0]
+    ? process.argv[1]   // running via bun src/synapse.ts
+    : process.execPath  // compiled binary
+  );
+
+  for (const agent of config.agents) {
+    const sessionIdFile = join(dataDir, `${agent.name}.session-id`);
+    sessionIdFiles.set(agent.name, sessionIdFile);
+    console.log(`synapse: launching window '${agent.name}' (${agent.role}) in ${agent.cwd}`);
+    launchAgentWindow(config.session, agent, sessionIdFile, dbFile, synapseCliPath);
+  }
+
+  // Wait for each session id and register
+  const SESSION_ID_TIMEOUT_MS = 30_000;
+  for (const agent of config.agents) {
+    const file = sessionIdFiles.get(agent.name)!;
+    console.log(`synapse: waiting for session id from '${agent.name}'...`);
+    const sessionId = waitForSessionId(file, SESSION_ID_TIMEOUT_MS);
+    if (!sessionId) {
+      console.error(
+        `synapse: warning — timed out waiting for session id from '${agent.name}' (${SESSION_ID_TIMEOUT_MS}ms). Registering without session id.`
+      );
+      cmdRegister(agent.name, agent.role, null);
+    } else {
+      console.log(`synapse: '${agent.name}' session id: ${sessionId}`);
+      cmdRegister(agent.name, agent.role, sessionId);
+    }
+  }
+
+  // Start monitor in the 'monitor' tmux window
+  if (!noMonitor) {
+    const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${config.session}`;
+    const r = Bun.spawnSync([
+      "tmux", "send-keys", "-t", `${config.session}:monitor`, monitorCmd, "Enter",
+    ]);
+    if (r.exitCode !== 0) {
+      console.error(`synapse: warning — failed to start monitor: ${r.stderr.toString().trim()}`);
+    } else {
+      console.log(`synapse: monitor started in window '${config.session}:monitor'`);
+    }
+  }
+
+  // Send initial goal as TASK from operator to first planner agent, if provided
+  if (goal) {
+    const planner = config.agents.find((a) => a.role === "planner");
+    if (!planner) {
+      console.error("synapse: warning — no planner agent found; cannot send initial goal");
+    } else {
+      cmdSend(planner.name, "TASK", goal, "operator", null);
+      console.log(`synapse: initial goal queued as TASK to '${planner.name}'`);
+    }
+  }
+
+  console.log(`synapse: team '${config.session}' started with ${config.agents.length} agent(s)`);
+  console.log(`  Attach: tmux attach -t ${config.session}`);
+  console.log(`  Status: synapse status`);
+}
+
+function cmdStop(name: string, tmuxSession: string) {
+  const db = connect();
+  const agent = db.query("SELECT * FROM agents WHERE window_name=?").get(name) as any;
+  if (!agent) fail(`no registered agent named '${name}'`);
+
+  db.run("UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=?", [
+    nowIso(),
+    name,
+  ]);
+
+  const killResult = Bun.spawnSync(["tmux", "kill-window", "-t", `${tmuxSession}:${name}`]);
+  if (killResult.exitCode !== 0) {
+    const stderr = killResult.stderr.toString().trim();
+    console.error(`synapse: warning — tmux kill-window failed: ${stderr}`);
+  }
+  console.log(`synapse: agent '${name}' stopped`);
+}
+
+function cmdAttach(name: string, tmuxSession: string) {
+  const result = Bun.spawnSync(
+    ["tmux", "attach-session", "-t", `${tmuxSession}:${name}`],
+    { stdio: ["inherit", "inherit", "inherit"] }
+  );
+  if (result.exitCode !== 0) {
+    fail(`tmux attach failed: ${result.stderr?.toString().trim()}`);
+  }
+}
+
 function cmdMonitor(flags: Record<string, string>) {
   const tmuxSession = flags["session"] ?? DEFAULT_TMUX_SESSION;
   const sweepMs = flags["interval"] ? parseInt(flags["interval"], 10) : DEFAULT_SWEEP_INTERVAL_MS;
@@ -774,9 +1063,24 @@ function main() {
     }
     case "monitor":
       return cmdMonitor(flags);
+    case "start": {
+      const [configPath] = positional;
+      if (!configPath) fail("usage: synapse start <team.yaml> [--goal TEXT] [--no-monitor]");
+      return cmdStart(configPath, flags);
+    }
+    case "stop": {
+      const [name] = positional;
+      if (!name) fail("usage: synapse stop <name> [--session SESSION]");
+      return cmdStop(name, flags["session"] ?? DEFAULT_TMUX_SESSION);
+    }
+    case "attach": {
+      const [name] = positional;
+      if (!name) fail("usage: synapse attach <name> [--session SESSION]");
+      return cmdAttach(name, flags["session"] ?? DEFAULT_TMUX_SESSION);
+    }
     default:
       fail(
-        `unknown command '${command}'. Expected one of: init, register, send, log, status, pending, deliver, monitor`
+        `unknown command '${command}'. Expected one of: init, register, send, log, status, pending, deliver, monitor, start, stop, attach`
       );
   }
 }
