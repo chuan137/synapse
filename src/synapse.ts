@@ -706,6 +706,7 @@ function runLiveMonitor(
   };
 
   const scheduleDelivery = (windowName: string, delayMs: number) => {
+    cancelScheduledDelivery(windowName);
     debounceTimers.set(
       windowName,
       setTimeout(
