@@ -720,7 +720,7 @@ function runLiveMonitor(
       if (pool.isWatching(agent.window_name)) {
         pool.checkAndEmitChange(agent.window_name);
         if (idleStates.get(agent.window_name) !== "idle") {
-          attemptDelivery(agent.window_name);
+          evaluateWindowReadiness(agent.window_name);
         }
       } else {
         // fs.watch needs an existing path — poll until the transcript appears.
