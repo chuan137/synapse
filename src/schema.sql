@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS agents (
   window_name TEXT PRIMARY KEY,    -- tmux window name == agent address
-  role        TEXT NOT NULL,       -- planner | coder | reviewer | operator | ...
+  role        TEXT NOT NULL,       -- manager | coder | reviewer | operator | ...
   session_id  TEXT,                -- Claude Code session id, for jsonl path
   status      TEXT NOT NULL DEFAULT 'unknown',  -- idle | busy | stopped | unknown
   last_seen_at TEXT
@@ -30,6 +30,19 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- bootstrap-spec.md #10/#11: one team == one root task == one run. session
+-- is the actual tmux session name (team-<run_id>), set right after insert
+-- once the run id is known.
+CREATE TABLE IF NOT EXISTS runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session    TEXT NOT NULL,
+  goal       TEXT,
+  status     TEXT NOT NULL DEFAULT 'running', -- running|completed|failed|aborted
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at   TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_to_status ON messages(to_agent, status);
 CREATE INDEX IF NOT EXISTS idx_messages_ref ON messages(ref_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent);
+CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);

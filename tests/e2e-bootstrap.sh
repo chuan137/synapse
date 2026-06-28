@@ -17,25 +17,23 @@ setup() {
   DATADIR="$DIR"
 
   mkdir -p "$FAKEBIN" "$PROJECTS_DIR"
-  printf '#!/bin/sh\necho "$@" >> "%s"\nexit 0\n' "$TMUX_LOG" > "$FAKEBIN/tmux"
+  printf '#!/bin/sh\necho "$@" >> "%s"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n' "$TMUX_LOG" > "$FAKEBIN/tmux"
   chmod +x "$FAKEBIN/tmux"
   export PATH="$FAKEBIN:$PATH"
 
-  cat > "$DIR/team.yaml" << 'EOF'
-session: team
+  TASK_NAME="my-feature-task"
+  TASK_DIR="$DIR/tasks/$TASK_NAME"
+  mkdir -p "$TASK_DIR"
+
+  cat > "$TASK_DIR/task.yml" << 'EOF'
+synapse_version: 0.1.0
+workflow: hub-and-spoke
+goal: "Build feature X end to end"
 agents:
-  - name: planner
-    role: planner
-    cwd: /tmp
-  - name: coder-1
-    role: coder
-    cwd: /tmp
-  - name: coder-2
-    role: coder
-    cwd: /tmp
-  - name: reviewer
-    role: reviewer
-    cwd: /tmp
+  - role: planner
+  - role: coder
+  - role: coder
+  - role: reviewer
 EOF
 }
 
@@ -49,6 +47,11 @@ seed_session_ids() {
   echo "sess-coder1"   > "$DATADIR/coder-1.session-id"
   echo "sess-coder2"   > "$DATADIR/coder-2.session-id"
   echo "sess-reviewer" > "$DATADIR/reviewer.session-id"
+}
+
+reset_task_runtime() {
+  rm -f "$SYNAPSE_DB" "$SYNAPSE_DB-shm" "$SYNAPSE_DB-wal" "$TMUX_LOG"
+  rm -rf "$DIR/agents/$TASK_NAME"
 }
 
 write_transcript() {
@@ -92,43 +95,44 @@ section1() {
   echo "[1] YAML Parsing Errors"
 
   local out
-  out=$("$SYNAPSE" start /nonexistent/team.yaml --no-monitor 2>&1; echo "exit:$?")
+  out=$("$SYNAPSE" start /nonexistent/task.yml --no-monitor 2>&1; echo "exit:$?")
   assert_exit "1a exit 1 on missing file" "$out"
-  assert      "1a stderr: team config not found" "$out" "team config not found"
+  assert      "1a stderr: task config not found" "$out" "task config not found"
 
-  cat > "$DIR/nosession.yaml" << 'EOF'
+  mkdir -p "$DIR/tasks/no-workflow"
+  cat > "$DIR/tasks/no-workflow/task.yml" << 'EOF'
+synapse_version: 0.1.0
 agents:
-  - name: planner
-    role: planner
-    cwd: .
+  - role: planner
 EOF
-  out=$("$SYNAPSE" start "$DIR/nosession.yaml" --no-monitor 2>&1; echo "exit:$?")
-  assert_exit "1b exit 1 on missing session" "$out"
-  assert      "1b stderr: missing 'session'" "$out" "missing 'session'"
+  out=$("$SYNAPSE" start "$DIR/tasks/no-workflow/task.yml" --no-monitor 2>&1; echo "exit:$?")
+  assert_exit "1b exit 1 on missing workflow" "$out"
+  assert      "1b stderr: missing 'workflow'" "$out" "missing 'workflow'"
 
-  cat > "$DIR/empty.yaml" << 'EOF'
-session: team
+  mkdir -p "$DIR/tasks/empty"
+  cat > "$DIR/tasks/empty/task.yml" << 'EOF'
+synapse_version: 0.1.0
+workflow: hub-and-spoke
 agents:
 EOF
-  out=$("$SYNAPSE" start "$DIR/empty.yaml" --no-monitor 2>&1; echo "exit:$?")
+  out=$("$SYNAPSE" start "$DIR/tasks/empty/task.yml" --no-monitor 2>&1; echo "exit:$?")
   assert_exit "1c exit 1 on no agents" "$out"
   assert      "1c stderr: no agents defined" "$out" "no agents defined"
 }
 
 section2() {
   echo "[2] start — DB init and operator registration"
-  rm -f "$SYNAPSE_DB"
+  reset_task_runtime
   seed_session_ids
 
-  local start_out; start_out=$(run start "$DIR/team.yaml" --no-monitor)
-  assert "started message"           "$start_out" "team 'team' started with 4 agent(s)"
+  local start_out; start_out=$(run start "$TASK_DIR/task.yml" --no-monitor)
+  assert "started message"           "$start_out" "team '$TASK_NAME' (run #1) started with 4 agent(s)"
 
   local out; out=$(run status)
   assert "operator registered"       "$out" "operator"
   assert "operator role"             "$out" "operator"
   assert "operator idle"             "$out" "idle"
   assert "planner registered"        "$out" "planner"
-  assert "planner session id"        "$out" "sess-planner"
   assert "coder-1 registered"        "$out" "coder-1"
   assert "coder-2 registered"        "$out" "coder-2"
   assert "reviewer registered"       "$out" "reviewer"
@@ -136,10 +140,10 @@ section2() {
 
 section3() {
   echo "[3] start — initial goal queued as TASK to planner"
-  rm -f "$SYNAPSE_DB"
+  reset_task_runtime
   seed_session_ids
 
-  run start "$DIR/team.yaml" --no-monitor --goal "Build feature X end to end" > /dev/null
+  run start "$TASK_DIR/task.yml" --no-monitor --goal "Build feature X end to end" > /dev/null
 
   local out; out=$(run pending planner)
   assert "one pending TASK"    "$out" "TASK"
@@ -150,12 +154,12 @@ section3() {
 
 section4() {
   echo "[4] start — monitor window receives monitor command"
-  rm -f "$SYNAPSE_DB" "$TMUX_LOG"
+  reset_task_runtime
   seed_session_ids
 
-  run start "$DIR/team.yaml" --goal "Build something" > /dev/null
+  run start "$TASK_DIR/task.yml" --goal "Build something" > /dev/null
 
-  assert "tmux send-keys to monitor" "$(cat "$TMUX_LOG")" "send-keys -t team:monitor"
+  assert "tmux send-keys to monitor" "$(cat "$TMUX_LOG")" "send-keys -t $TASK_NAME:monitor"
   assert "monitor command"           "$(cat "$TMUX_LOG")" "synapse monitor"
 }
 
@@ -164,13 +168,13 @@ section5() {
 
   # 5a: stop coder-2
   rm -f "$TMUX_LOG"
-  run stop coder-2 --session team > /dev/null
+  run stop coder-2 --session "$TASK_NAME" > /dev/null
   local db_status; db_status=$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM agents WHERE window_name='coder-2'")
   assert "5a DB status stopped"       "$db_status"          "stopped"
-  assert "5a tmux kill-window"        "$(cat "$TMUX_LOG")"  "kill-window -t team:coder-2"
+  assert "5a tmux kill-window"        "$(cat "$TMUX_LOG")"  "kill-window -t $TASK_NAME:coder-2"
 
   # 5b: stop unknown agent
-  local out; out=$("$SYNAPSE" stop ghost --session team 2>&1; echo "exit:$?")
+  local out; out=$("$SYNAPSE" stop ghost --session "$TASK_NAME" 2>&1; echo "exit:$?")
   assert_exit "5b exit 1 on unknown agent"    "$out"
   assert      "5b stderr: no registered agent" "$out" "no registered agent"
 
@@ -230,13 +234,13 @@ section6() {
 }
 
 section7() {
-  echo "[7] Idempotent re-start"
-  rm -f "$SYNAPSE_DB"
+  echo "[7] Re-start rejects existing scratch"
+  reset_task_runtime
   seed_session_ids
-  run start "$DIR/team.yaml" --no-monitor > /dev/null
+  run start "$TASK_DIR/task.yml" --no-monitor > /dev/null
 
-  local out; out=$(run start "$DIR/team.yaml" --no-monitor)
-  assert "7 reusing message" "$out" "already running"
+  local out; out=$(run start "$TASK_DIR/task.yml" --no-monitor)
+  assert "7 scratch exists message" "$out" "agent scratch already exists"
 }
 
 # ── main ─────────────────────────────────────────────────────────────────────

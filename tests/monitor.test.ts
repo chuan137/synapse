@@ -64,6 +64,7 @@ function run(args: string[], extraEnv: Record<string, string> = {}) {
     env: {
       ...process.env,
       PATH: `${fakeBinDir}:${process.env.PATH}`,
+      HOME: dir,
       SYNAPSE_DB: dbFile,
       CLAUDE_PROJECTS_DIR: projectsRoot,
       ...extraEnv,
@@ -497,5 +498,143 @@ describe("monitor: live event-driven loop (no --once)", () => {
     expect(exitCode).toBe(0);
     expect(out.text()).toContain("stopped");
     proc = undefined;
+  }, 15000);
+});
+
+// bootstrap-spec.md #8/#9: `synapse done` is the only thing that ends a run;
+// the monitor's job is just to notice `runs.status` left 'running' and
+// disband the team (kill agent windows + the tmux session, mark agents
+// stopped) — it never deletes DB rows.
+describe("monitor: run lifecycle teardown", () => {
+  function insertRun(status: string): number {
+    const db = new Database(dbFile);
+    const result = db.run(
+      "INSERT INTO runs (session, goal, status) VALUES ('team', 'goal', ?)",
+      [status],
+    );
+    db.close();
+    return Number(result.lastInsertRowid);
+  }
+
+  beforeEach(() => {
+    run(["init"]);
+    run(["register", "operator", "operator", null]);
+    run(["register", "manager", "manager", "sess-manager"]);
+    run(["register", "coder-1", "coder", "sess-coder"]);
+  });
+
+  test("--once leaves a still-running team alone", () => {
+    const runId = insertRun("running");
+    const r = run(["monitor", "--once", "--session", "team", "--run-id", String(runId)]);
+    expect(r.exitCode).toBe(0);
+    expect(tmuxLogContents()).toBe("");
+    const agent = openDb().query("SELECT status FROM agents WHERE window_name='manager'").get() as any;
+    expect(agent.status).not.toBe("stopped");
+  });
+
+  test("--once disbands the team once the run is terminal", () => {
+    const runId = insertRun("completed");
+    const r = run(["monitor", "--once", "--session", "team", "--run-id", String(runId)]);
+    expect(r.exitCode).toBe(0);
+    const log = tmuxLogContents();
+    expect(log).toContain("kill-window -t team:manager");
+    expect(log).toContain("kill-window -t team:coder-1");
+    expect(log).toContain("kill-session -t team");
+    expect(log).not.toContain("team:operator"); // operator isn't a tmux window
+
+    const db = openDb();
+    const manager = db.query("SELECT status FROM agents WHERE window_name='manager'").get() as any;
+    const coder = db.query("SELECT status FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(manager.status).toBe("stopped");
+    expect(coder.status).toBe("stopped");
+  });
+
+  test("the live loop notices a terminal run at startup and exits on its own, no signal needed", async () => {
+    const runId = insertRun("failed");
+    // No --once and nothing kills it — if teardown didn't self-exit, this
+    // spawnSync-style wait (via run(), which blocks for the process to
+    // finish) would hang until bun's test timeout.
+    const r = run(["monitor", "--session", "team", "--run-id", String(runId), "--interval", "30"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("disbanding team");
+    expect(tmuxLogContents()).toContain("kill-session -t team");
+  }, 15000);
+});
+
+// End-to-end `synapse start` against a real task.yml — templates assembled
+// into CLAUDE.md, a task-scoped tmux session, planner goal routing, all with the same fake
+// tmux used elsewhere in this file so it doesn't touch a real session.
+describe("start: full agent launch against task.yml", () => {
+  test("writes CLAUDE.md per agent, creates a task-scoped tmux session, and routes the goal to planner", () => {
+    // The shared fake tmux (above) always exits 0, which works for every
+    // command this suite uses elsewhere — except `has-session`, where exit
+    // code is the actual signal (0 = exists). cmdStart relies on that to
+    // detect a stuck/colliding session, so override it here to report "no
+    // such session", matching a real fresh run id.
+    writeFileSync(
+      join(fakeBinDir, "tmux"),
+      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
+    );
+    run(["init"]);
+
+    const taskName = "feature-x";
+    const taskDir = join(dir, "tasks", taskName);
+    mkdirSync(taskDir, { recursive: true });
+    const yaml = join(taskDir, "task.yml");
+    writeFileSync(
+      yaml,
+      [
+        "synapse_version: 0.1.0",
+        "workflow: hub-and-spoke",
+        'goal: "Build feature X"',
+        "agents:",
+        "  - role: planner",
+        "  - role: coder",
+        "    focus: backend",
+        "  - role: coder",
+        "",
+      ].join("\n"),
+    );
+
+    const r = run(["start", yaml, "--no-monitor"]);
+    expect(r.exitCode).toBe(0);
+
+    const db = openDb();
+    const runRow = db.query("SELECT * FROM runs").get() as any;
+    expect(runRow.status).toBe("running");
+    expect(runRow.goal).toBe("Build feature X");
+    expect(runRow.session).toBe(taskName);
+
+    const tmuxSession = runRow.session;
+    const log = tmuxLogContents();
+    expect(log).toContain(`new-session -d -s ${tmuxSession}`);
+    expect(log).toContain(`rename-window -t ${tmuxSession} monitor`);
+    expect(log).toContain(`new-window -t ${tmuxSession} -n planner`);
+    expect(log).toContain(`new-window -t ${tmuxSession} -n coder-1`);
+    expect(log).toContain(`new-window -t ${tmuxSession} -n coder-2`);
+
+    const plannerAgent = db.query("SELECT * FROM agents WHERE window_name='planner'").get() as any;
+    const coderAgent = db.query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(plannerAgent.role).toBe("planner");
+    expect(coderAgent.role).toBe("coder");
+
+    const agentsRoot = join(dir, "agents", taskName);
+    const plannerMd = readFileSync(join(agentsRoot, "planner", "CLAUDE.md"), "utf8");
+    expect(plannerMd).toContain("Synapse Team — Shared Protocol");
+    expect(plannerMd).toContain("Your role: planner");
+
+    const coderMd = readFileSync(join(agentsRoot, "coder-1", "CLAUDE.md"), "utf8");
+    expect(coderMd).toContain("Your role: coder");
+    expect(coderMd).toContain("backend");
+
+    const secondCoderMd = readFileSync(join(agentsRoot, "coder-2", "CLAUDE.md"), "utf8");
+    expect(secondCoderMd).toContain("Your role: coder");
+
+    // Goal routes to planner.
+    const task = db
+      .query("SELECT * FROM messages WHERE type='TASK' AND from_agent='operator'")
+      .get() as any;
+    expect(task.to_agent).toBe("planner");
+    expect(task.body).toBe("Build feature X");
   }, 15000);
 });

@@ -11,15 +11,16 @@
  *   synapse pending [agent]
  *   synapse deliver <id>
  *   synapse monitor [--session NAME] [--interval MS] [--debounce MS] [--once]
- *   synapse start <team.yaml> [--goal "text"] [--no-monitor]
+ *   synapse start <task.yml> [--goal "text"] [--no-monitor]
  *   synapse stop <name> [--session SESSION]
  *   synapse attach <name> [--session SESSION]
  *   synapse ui [--port N]
+ *   synapse version
  *
  * DB location: $SYNAPSE_DB, else ./.synapse/synapse.db
  * Transcript root: $CLAUDE_PROJECTS_DIR, else ~/.claude/projects
  *
- * Build: bun build src/synapse.ts --compile --outfile synapse
+ * Build: make build (injects SYNAPSE_VERSION from `git describe`; see Makefile)
  */
 import { Database } from "bun:sqlite";
 import {
@@ -27,17 +28,34 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
+  writeFileSync,
   watch as fsWatch,
 } from "fs";
 import { homedir } from "os";
-import { dirname, join, resolve } from "path";
+import { basename, dirname, join, resolve } from "path";
 // Bundled as text so it's available inside a --compile binary with no schema.sql beside it.
 import SCHEMA_SQL from "./schema.sql" with { type: "text" };
+// Three-segment CLAUDE.md templates (bootstrap-spec.md, dimension A), bundled
+// the same way so a --compile binary doesn't need templates/ beside it.
+import SHARED_MD from "../templates/shared.md" with { type: "text" };
+import ROLE_MANAGER_MD from "../templates/role-manager.md" with { type: "text" };
+import ROLE_PLANNER_MD from "../templates/role-planner.md" with { type: "text" };
+import ROLE_CODER_MD from "../templates/role-coder.md" with { type: "text" };
+import ROLE_REVIEWER_MD from "../templates/role-reviewer.md" with {
+  type: "text",
+};
 
 const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO"]);
 const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
+const ROLE_TEMPLATES: Record<string, string> = {
+  manager: ROLE_MANAGER_MD,
+  planner: ROLE_PLANNER_MD,
+  coder: ROLE_CODER_MD,
+  reviewer: ROLE_REVIEWER_MD,
+};
 
 const DEFAULT_TMUX_SESSION = "team";
 // Cheap mailbox/roster sweep — idle detection is event-driven, not on this timer.
@@ -45,10 +63,25 @@ const DEFAULT_SWEEP_INTERVAL_MS = 1000;
 const DEFAULT_DEBOUNCE_MS = 2000;
 
 // Stored in PRAGMA user_version so detection works before any table exists.
-const SCHEMA_VERSION = 1;
+// v2 added the `runs` table (bootstrap-spec.md #10/#11).
+const SCHEMA_VERSION = 2;
+
+// Injected at compile time via `bun build --define SYNAPSE_VERSION=...`
+// (see Makefile). The identifier doesn't exist when running uncompiled
+// (`bun src/synapse.ts`), and `typeof` on an undeclared identifier never
+// throws, so this falls back to "dev" cleanly in that case.
+declare const SYNAPSE_VERSION: string | undefined;
+const VERSION: string =
+  typeof SYNAPSE_VERSION !== "undefined" ? SYNAPSE_VERSION : "dev";
 
 function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
+}
+
+// Synapse-managed per-agent scratch directory for a task:
+// .synapse/agents/<task-name>/<agent-name>, sibling to the shared DB.
+function defaultAgentDir(taskName: string, name: string): string {
+  return join(dirname(dbPath()), "agents", taskName, name);
 }
 
 function connect(createParent = false): Database {
@@ -579,13 +612,67 @@ function refreshAgentState(
   return state;
 }
 
+// Kills every non-operator agent window and the tmux session itself. The DB
+// (agents/messages/events/runs) is left intact — only the live tmux process
+// tree is torn down, never the audit trail (bootstrap-spec.md #9).
+function disbandTeam(
+  db: Database,
+  tmuxSession: string,
+  log: (s: string) => void,
+): void {
+  const agents = db
+    .query(
+      "SELECT window_name FROM agents WHERE window_name != 'operator' AND status != 'stopped'",
+    )
+    .all() as any[];
+  for (const a of agents) {
+    Bun.spawnSync([
+      "tmux",
+      "kill-window",
+      "-t",
+      `${tmuxSession}:${a.window_name}`,
+    ]);
+    db.run(
+      "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=?",
+      [nowIso(), a.window_name],
+    );
+    log(`  ${a.window_name}: stopped (teardown)`);
+  }
+  Bun.spawnSync(["tmux", "kill-session", "-t", tmuxSession]);
+  log(`synapse monitor: tmux session '${tmuxSession}' killed`);
+}
+
+// Returns true (after disbanding the team) once `runs.status` for runId has
+// left 'running'. The only thing that sets a terminal status is the
+// manager's `synapse done` — nothing else ends a run.
+function checkRunTerminal(
+  db: Database,
+  tmuxSession: string,
+  runId: number,
+  log: (s: string) => void,
+): boolean {
+  const run = db.query("SELECT status FROM runs WHERE id=?").get(runId) as
+    | any
+    | undefined;
+  if (!run || run.status === "running") return false;
+  log(
+    `run ${runId} reached terminal state '${run.status}' — disbanding team '${tmuxSession}'`,
+  );
+  disbandTeam(db, tmuxSession, log);
+  return true;
+}
+
 // Single synchronous snapshot — evaluate every live agent, then broadcast if ready.
 function pollOnce(
   db: Database,
   tmuxSession: string,
   debounceMs: number,
   log: (s: string) => void,
+  runId?: number,
 ) {
+  if (runId !== undefined && checkRunTerminal(db, tmuxSession, runId, log)) {
+    return;
+  }
   const agents = db
     .query("SELECT * FROM agents WHERE status != 'stopped'")
     .all() as any[];
@@ -684,6 +771,7 @@ function runLiveMonitor(
   debounceMs: number,
   sweepMs: number,
   log: (s: string) => void,
+  runId?: number,
 ) {
   const agentStatuses = new Map<string, AgentStatus>();
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -772,6 +860,10 @@ function runLiveMonitor(
   // agents, retries pending delivery for agents already idle, and broadcasts
   // ready messages.
   const sweep = () => {
+    if (runId !== undefined && checkRunTerminal(db, tmuxSession, runId, log)) {
+      shutdown();
+      return;
+    }
     reloadAgents();
     const liveNames = new Set(agents.map((a) => a.window_name));
     const trackedNames = new Set([
@@ -812,181 +904,264 @@ function runLiveMonitor(
   sweepTimer = setInterval(sweep, sweepMs);
 }
 
-// ---------- team.yaml / bootstrap ----------
+// ---------- task.yml / bootstrap ----------
 
 interface AgentConfig {
   name: string;
   role: string;
-  cwd: string;
+  // Instance block: free text distinguishing this specific agent from other
+  // agents of the same role (e.g. coder-1 vs coder-2).
+  focus?: string;
 }
 
-interface TeamConfig {
-  session: string;
+interface TaskConfig {
+  synapseVersion: string;
+  workflow: string;
+  goal: string | null;
   agents: AgentConfig[];
 }
 
-function parseTeamYaml(text: string): TeamConfig {
-  // Minimal YAML parser — only handles the flat list shape used in synapse-spec.md.
+function unquoteYamlScalar(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function assignAgentNames(agents: Array<Partial<AgentConfig>>): AgentConfig[] {
+  const roleCounts = new Map<string, number>();
+  for (const agent of agents) {
+    if (agent.role) roleCounts.set(agent.role, (roleCounts.get(agent.role) ?? 0) + 1);
+  }
+
+  const roleIndexes = new Map<string, number>();
+  return agents.map((agent) => {
+    if (!agent.role) fail("task.yml: every agent must define 'role'");
+    const count = roleCounts.get(agent.role) ?? 0;
+    const next = (roleIndexes.get(agent.role) ?? 0) + 1;
+    roleIndexes.set(agent.role, next);
+    return {
+      ...agent,
+      name: agent.name ?? (count > 1 ? `${agent.role}-${next}` : agent.role),
+      role: agent.role,
+    } as AgentConfig;
+  });
+}
+
+function parseTaskYaml(text: string): TaskConfig {
+  // Minimal YAML parser — only handles the task.yml shape in
+  // docs/synapse-spec-task-manifest.md, plus optional per-agent `focus`
+  // single-line or `|` block scalar.
   // Format:
-  //   session: <name>
+  //   synapse_version: 0.1.0
+  //   workflow: hub-and-spoke
+  //   goal: "Implement X"
   //   agents:
-  //     - name: <n>
-  //       role: <r>
-  //       cwd: <path>
+  //     - role: planner
+  //     - role: coder
+  //       focus: <single line>        # or:
+  //       focus: |
+  //         multi
+  //         line
   const lines = text.split("\n");
-  let session = "";
-  const agents: AgentConfig[] = [];
+  let synapseVersion = "";
+  let workflow = "";
+  let goal: string | null = null;
+  const agents: Array<Partial<AgentConfig>> = [];
   let current: Partial<AgentConfig> | null = null;
+  // While collecting a `focus: |` block scalar, lines indented further than
+  // this column belong to it; the first such line establishes the column.
+  let blockIndent: number | null = null;
+  const blockLines: string[] = [];
+
+  const flushBlock = () => {
+    if (blockIndent !== null && current) {
+      current.focus = blockLines.join("\n").replace(/\n+$/, "");
+    }
+    blockIndent = null;
+    blockLines.length = 0;
+  };
+  const indentOf = (s: string) => s.length - s.replace(/^\s+/, "").length;
 
   for (const raw of lines) {
     const line = raw.trimEnd();
-    if (/^session:\s/.test(line)) {
-      session = line.replace(/^session:\s+/, "").trim();
+
+    if (blockIndent !== null) {
+      if (line.trim() === "") {
+        blockLines.push("");
+        continue;
+      }
+      if (indentOf(line) >= blockIndent) {
+        blockLines.push(line.slice(blockIndent));
+        continue;
+      }
+      flushBlock();
+      // fall through — this line starts something new, handled below
+    }
+
+    if (/^synapse_version:\s/.test(line)) {
+      synapseVersion = unquoteYamlScalar(line.replace(/^synapse_version:\s+/, ""));
+      continue;
+    }
+    if (/^workflow:\s/.test(line)) {
+      workflow = unquoteYamlScalar(line.replace(/^workflow:\s+/, ""));
+      continue;
+    }
+    if (/^goal:\s/.test(line)) {
+      const value = unquoteYamlScalar(line.replace(/^goal:\s+/, ""));
+      goal = value.length > 0 ? value : null;
+      continue;
+    }
+    if (/^\s+-\s+role:\s/.test(line)) {
+      if (current) agents.push(current);
+      current = { role: unquoteYamlScalar(line.replace(/^\s+-\s+role:\s+/, "")) };
       continue;
     }
     if (/^\s+-\s+name:\s/.test(line)) {
-      if (current && current.name && current.role && current.cwd)
-        agents.push(current as AgentConfig);
-      current = { name: line.replace(/^\s+-\s+name:\s+/, "").trim() };
+      if (current) agents.push(current);
+      current = { name: unquoteYamlScalar(line.replace(/^\s+-\s+name:\s+/, "")) };
+      continue;
+    }
+    if (current && /^\s+name:\s/.test(line)) {
+      current.name = unquoteYamlScalar(line.replace(/^\s+name:\s+/, ""));
       continue;
     }
     if (current && /^\s+role:\s/.test(line)) {
-      current.role = line.replace(/^\s+role:\s+/, "").trim();
+      current.role = unquoteYamlScalar(line.replace(/^\s+role:\s+/, ""));
       continue;
     }
-    if (current && /^\s+cwd:\s/.test(line)) {
-      current.cwd = line.replace(/^\s+cwd:\s+/, "").trim();
+    if (current && /^\s+focus:\s*\|\s*$/.test(line)) {
+      blockIndent = indentOf(line) + 2; // YAML block scalars are conventionally +2
+      blockLines.length = 0;
+      continue;
+    }
+    if (current && /^\s+focus:\s/.test(line)) {
+      current.focus = unquoteYamlScalar(line.replace(/^\s+focus:\s+/, ""));
       continue;
     }
   }
-  if (current && current.name && current.role && current.cwd)
-    agents.push(current as AgentConfig);
+  flushBlock();
+  if (current) agents.push(current);
 
-  if (!session) fail("team.yaml: missing 'session' field");
-  if (agents.length === 0) fail("team.yaml: no agents defined");
-  return { session, agents };
+  if (!synapseVersion) fail("task.yml: missing 'synapse_version' field");
+  if (!workflow) fail("task.yml: missing 'workflow' field");
+  if (workflow !== "hub-and-spoke") {
+    fail(`task.yml: unsupported workflow '${workflow}'`);
+  }
+  if (agents.length === 0) fail("task.yml: no agents defined");
+  return { synapseVersion, workflow, goal, agents: assignAgentNames(agents) };
 }
 
-function claudeProjectsRoot(): string {
-  return (
-    process.env.CLAUDE_PROJECTS_DIR ?? join(homedir(), ".claude", "projects")
-  );
-}
+// ---------- CLAUDE.md assembly (bootstrap-spec.md dimension A + #5) ----------
 
-function listClaudeSessionIdsForCwd(absCwd: string): Set<string> {
-  const slug = cwdToProjectSlug(absCwd);
-  const dir = join(claudeProjectsRoot(), slug);
-  const ids = new Set<string>();
-  if (!existsSync(dir)) return ids;
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return ids;
-  }
-  for (const entry of entries) {
-    if (!entry.endsWith(".jsonl")) continue;
-    ids.add(entry.slice(0, -".jsonl".length));
-  }
-  return ids;
-}
+// Three-segment assembly: shared block (all agents) + role block (per role,
+// reused across instances of that role) + instance block (per agent, from
+// task.yml's `focus` field). Written once into the synapse-managed scratch
+// tree for a fresh task; task names are unique, so existing scratch is never
+// overwritten.
+function assembleClaudeMd(agent: AgentConfig): string {
+  const sections: string[] = [SHARED_MD.trimEnd()];
 
-function findNewClaudeSessionIdForCwd(
-  absCwd: string,
-  before: Set<string>,
-  launchTime: number,
-): string | null {
-  const slug = cwdToProjectSlug(absCwd);
-  const dir = join(claudeProjectsRoot(), slug);
-  if (!existsSync(dir)) return null;
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return null;
-  }
-  for (const entry of entries) {
-    if (!entry.endsWith(".jsonl")) continue;
-    const id = entry.slice(0, -".jsonl".length);
-    // New session: file didn't exist before launch
-    if (!before.has(id)) return id;
-    // Resumed session: file existed but was written to after launch
-    try {
-      const mtime = statSync(join(dir, entry)).mtimeMs;
-      if (mtime > launchTime) return id;
-    } catch {}
-  }
-  return null;
-}
-
-// Polls Claude's project transcript directory for the new session .jsonl file.
-// The .jsonl filename is the Claude session id.
-function waitForSessionId(
-  agentCwd: string,
-  transcriptIdsBeforeLaunch: Set<string>,
-  launchTime: number,
-  timeoutMs: number,
-  tmuxSession: string,
-  windowName: string,
-  intervalMs = 500,
-): string | null {
-  const deadline = Date.now() + timeoutMs;
-  const absCwd = resolve(agentCwd);
-  if (process.env.SYNAPSE_DEBUG) {
-    const slug = cwdToProjectSlug(absCwd);
-    const dir = join(claudeProjectsRoot(), slug);
+  const roleBlock = ROLE_TEMPLATES[agent.role];
+  if (roleBlock) {
+    sections.push(roleBlock.trimEnd());
+  } else {
     console.error(
-      `[debug] watching ${dir} for new .jsonl (before: ${[...transcriptIdsBeforeLaunch].join(",") || "(empty)"})`,
+      `synapse: warning — no role template for role '${agent.role}' (agent '${agent.name}'); CLAUDE.md will have the shared block only`,
     );
   }
-  let nudged = false;
-  while (Date.now() < deadline) {
-    const transcriptSessionId = findNewClaudeSessionIdForCwd(
-      absCwd,
-      transcriptIdsBeforeLaunch,
-      launchTime,
+
+  if (agent.focus && agent.focus.trim()) {
+    sections.push(
+      `## Your focus (${agent.name})\n\n${agent.focus.trim()}`,
     );
-    if (transcriptSessionId) return transcriptSessionId;
-    // After 3s, send a nudge message to trigger the first jsonl write
-    if (!nudged && Date.now() > launchTime + 3000) {
-      Bun.spawnSync([
-        "tmux",
-        "send-keys",
-        "-t",
-        `${tmuxSession}:${windowName}`,
-        "hi",
-        "Enter",
-      ]);
-      nudged = true;
-      if (process.env.SYNAPSE_DEBUG)
-        console.error(`[debug] nudged ${windowName} to trigger jsonl`);
-    }
-    Bun.sleepSync(intervalMs);
   }
-  return null;
+
+  sections.push(
+    `---\n\n_Generated by \`synapse start\` for agent \`${agent.name}\` (role: ${agent.role}). ` +
+      `Regenerated and overwritten on every \`synapse start\` — edits made directly to this file do not persist._`,
+  );
+
+  return sections.join("\n\n") + "\n";
 }
 
-// Derive the Claude projects slug from a directory path.
-// Claude uses the absolute path with '/' replaced by '-' (leading '-' included).
-function cwdToProjectSlug(absCwd: string): string {
-  // Claude replaces every non-alphanumeric character (including '.' and '/') with '-'.
-  return absCwd.replace(/[^a-zA-Z0-9]/g, "-");
+// Writes (overwrites) <absCwd>/CLAUDE.md, creating the directory if needed.
+function writeAgentClaudeMd(absCwd: string, agent: AgentConfig): void {
+  mkdirSync(absCwd, { recursive: true });
+  writeFileSync(join(absCwd, "CLAUDE.md"), assembleClaudeMd(agent));
+}
+
+// ---------- unattended preflight (bootstrap-spec.md #7) ----------
+
+// Workspace trust ("trust this folder") blocks unattended launch and isn't
+// cleared by --dangerously-skip-permissions or git init. Claude Code records
+// acceptance in ~/.claude.json under .projects[<canonical abs cwd>], keyed by
+// the *symlink-resolved* path (macOS /var -> /private/var) — using
+// path.resolve() instead of realpathSync here would silently fail to match.
+function presetClaudeTrust(absCwd: string): void {
+  const canonicalCwd = realpathSync(absCwd);
+  const configPath = join(homedir(), ".claude.json");
+
+  let config: any = {};
+  if (existsSync(configPath)) {
+    try {
+      config = JSON.parse(readFileSync(configPath, "utf8"));
+    } catch {
+      console.error(
+        `synapse: warning — ${configPath} is not valid JSON; leaving it untouched and skipping trust preseed`,
+      );
+      return;
+    }
+  }
+
+  config.hasCompletedOnboarding = true;
+  config.projects ??= {};
+  config.projects[canonicalCwd] ??= {};
+  config.projects[canonicalCwd].hasTrustDialogAccepted = true;
+
+  try {
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+  } catch (err: any) {
+    console.error(
+      `synapse: warning — could not write ${configPath}; skipping trust preseed (${err?.message ?? err})`,
+    );
+  }
 }
 
 // Launches one agent window in the tmux session.
-// claude requires a real TTY, so script(1) provides the pty.
-// We pass --session-id explicitly so we know the session ID before launch.
+//
+// claude requires a real TTY, so script(1) provides the pty. We pass
+// --session-id explicitly so we know the session ID before launch — no need
+// to poll ~/.claude/projects/ for a new transcript file (that approach, plus
+// the "hi" nudge to coax a first jsonl write, has been removed: it was the
+// fragile timing hack bootstrap-spec.md problem 2 set out to replace).
+//
+// The first-kick (bootstrap-spec.md #6/#7) is the bare minimum: `synapse
+// pending <name>`, passed as claude's initial prompt so it runs the instant
+// the session loads — no external actor has to guess when claude is ready.
+// `--dangerously-skip-permissions` clears the per-tool-call approval prompt
+// (the other unattended-launch gate, bootstrap-spec.md #7); presetClaudeTrust
+// clears the one-time workspace-trust dialog before that.
 function launchAgentWindow(
   tmuxSession: string,
+  taskName: string,
   agent: AgentConfig,
   synapseDb: string,
   claudePath: string,
   sessionId: string,
+  runId: number,
 ): void {
-  const absCwd = resolve(agent.cwd);
+  const absCwd = resolve(defaultAgentDir(taskName, agent.name));
+  presetClaudeTrust(absCwd);
+
+  const initialPrompt = `synapse pending ${agent.name}`;
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' script -q /dev/null '${claudePath}' --session-id '${sessionId}'
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' script -q /dev/null '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions '${initialPrompt}'
   `;
 
   if (process.env.SYNAPSE_DEBUG) {
@@ -1011,19 +1186,35 @@ function launchAgentWindow(
 }
 
 function cmdStart(configPath: string, flags: Record<string, string>) {
-  if (!existsSync(configPath)) fail(`team config not found: ${configPath}`);
-  const config = parseTeamYaml(readFileSync(configPath, "utf8"));
-  const goal = flags["goal"] ?? null;
+  if (!existsSync(configPath)) fail(`task config not found: ${configPath}`);
+  const absConfigPath = resolve(configPath);
+  if (basename(absConfigPath) !== "task.yml") {
+    fail(`task config must be named task.yml: ${configPath}`);
+  }
+  const config = parseTaskYaml(readFileSync(absConfigPath, "utf8"));
+  const goal = flags["goal"] ?? config.goal;
   const noMonitor = flags["no-monitor"] === "true";
 
   const dbFile = dbPath();
   const dataDir = dirname(dbFile);
   mkdirSync(dataDir, { recursive: true });
 
-  // Init DB (idempotent)
+  // Init DB now so we can get a run id for the task folder name.
   cmdInit();
-
   const db = connect();
+
+  const runResult = db.run(
+    `INSERT INTO runs (session, goal, status) VALUES ('', ?, 'running')`,
+    [goal ?? ""],
+  );
+  const runId = Number(runResult.lastInsertRowid);
+  const taskName = `run-${runId}`;
+
+  // Create the task folder and copy task.yml into it.
+  const taskFolder = join(dataDir, "tasks", taskName);
+  mkdirSync(taskFolder, { recursive: true });
+  copyFileSync(absConfigPath, join(taskFolder, "task.yml"));
+  console.log(`synapse: created task folder ${taskFolder}`);
 
   // Register operator pseudo-agent
   db.run(
@@ -1033,62 +1224,24 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
     [nowIso()],
   );
 
-  // Create tmux session (fail gracefully if it exists)
-  const sessionExists = Bun.spawnSync([
-    "tmux",
-    "has-session",
-    "-t",
-    config.session,
-  ]);
-  if (sessionExists.exitCode !== 0) {
-    const newSession = Bun.spawnSync([
-      "tmux",
-      "new-session",
-      "-d",
-      "-s",
-      config.session,
-    ]);
-    if (newSession.exitCode !== 0) {
-      fail(
-        `failed to create tmux session '${config.session}': ${newSession.stderr.toString().trim()}`,
-      );
-    }
-    // Rename the default window created with the session (base-index agnostic)
-    Bun.spawnSync([
-      "tmux",
-      "rename-window",
-      "-t",
-      `${config.session}`,
-      "monitor",
-    ]);
-  } else {
-    console.log(
-      `synapse: tmux session '${config.session}' already exists — reusing`,
+  const tmuxSession = taskName;
+  db.run(`UPDATE runs SET session=? WHERE id=?`, [tmuxSession, runId]);
+
+  const sessionExists = Bun.spawnSync(["tmux", "has-session", "-t", tmuxSession]);
+  if (sessionExists.exitCode === 0) {
+    fail(
+      `tmux session '${tmuxSession}' already exists for a fresh run id — this shouldn't happen; check for a stuck session (tmux kill-session -t ${tmuxSession}) and retry`,
     );
   }
-
-  // Check if agents are already registered (idempotent re-start)
-  const agentNames = config.agents.map((a) => a.name);
-  const placeholders = agentNames.map(() => "?").join(",");
-  const existing = (
-    db
-      .query(
-        `SELECT window_name FROM agents WHERE window_name IN (${placeholders}) AND status != 'stopped'`,
-      )
-      .all(...agentNames) as any[]
-  ).map((r) => r.window_name);
-
-  if (existing.length === agentNames.length) {
-    console.log(
-      `synapse: team '${config.session}' already running — reusing existing agents`,
+  const newSession = Bun.spawnSync(["tmux", "new-session", "-d", "-s", tmuxSession]);
+  if (newSession.exitCode !== 0) {
+    fail(
+      `failed to create tmux session '${tmuxSession}': ${newSession.stderr.toString().trim()}`,
     );
-    console.log(`  Attach: tmux attach -t ${config.session}`);
-    console.log(`  Status: synapse status`);
-    return;
   }
+  // Rename the default window created with the session (base-index agnostic)
+  Bun.spawnSync(["tmux", "rename-window", "-t", tmuxSession, "monitor"]);
 
-  // Launch each agent window and capture session ids
-  const transcriptIdsBeforeLaunch: Map<string, Set<string>> = new Map();
   const synapseCliPath = resolve(
     process.execPath === process.argv[0]
       ? process.argv[1] // running via bun src/synapse.ts
@@ -1106,21 +1259,25 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
   for (const agent of config.agents) {
     // Generate a UUID to pass as --session-id so we know it before launch.
     const sessionId = crypto.randomUUID();
+    const absCwd = resolve(defaultAgentDir(taskName, agent.name));
+    // Three-segment CLAUDE.md: generated in synapse-managed scratch from
+    // templates plus this agent's task.yml `focus`.
+    writeAgentClaudeMd(absCwd, agent);
     console.log(
-      `synapse: launching window '${agent.name}' (${agent.role}) in ${agent.cwd}`,
+      `synapse: launching window '${agent.name}' (${agent.role}) in ${absCwd}`,
     );
-    launchAgentWindow(config.session, agent, dbFile, claudePath, sessionId);
+    launchAgentWindow(tmuxSession, taskName, agent, dbFile, claudePath, sessionId, runId);
     cmdRegister(agent.name, agent.role, sessionId);
   }
 
   // Start monitor in the 'monitor' tmux window
   if (!noMonitor) {
-    const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${config.session} 2>&1 | tee '${dbFile.replace(/synapse\.db$/, "monitor.log")}'`;
+    const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${tmuxSession} --run-id ${runId} 2>&1 | tee '${dbFile.replace(/synapse\.db$/, "monitor.log")}'`;
     const r = Bun.spawnSync([
       "tmux",
       "send-keys",
       "-t",
-      `${config.session}:monitor`,
+      `${tmuxSession}:monitor`,
       monitorCmd,
       "Enter",
     ]);
@@ -1129,13 +1286,11 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
         `synapse: warning — failed to start monitor: ${r.stderr.toString().trim()}`,
       );
     } else {
-      console.log(
-        `synapse: monitor started in window '${config.session}:monitor'`,
-      );
+      console.log(`synapse: monitor started in window '${tmuxSession}:monitor'`);
     }
   }
 
-  // Send initial goal as TASK from operator to first planner agent, if provided
+  // Send initial goal as TASK from operator to the planner agent, if provided.
   if (goal) {
     const planner = config.agents.find((a) => a.role === "planner");
     if (!planner) {
@@ -1149,10 +1304,64 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
   }
 
   console.log(
-    `synapse: team '${config.session}' started with ${config.agents.length} agent(s)`,
+    `synapse: team '${tmuxSession}' (run #${runId}) started with ${config.agents.length} agent(s)`,
   );
-  console.log(`  Attach: tmux attach -t ${config.session}`);
+  console.log(`  Attach: tmux attach -t ${tmuxSession}`);
   console.log(`  Status: synapse status`);
+  console.log(
+    `  Finish: SYNAPSE_RUN_ID=${runId} synapse done --status done "<summary>"  (planner calls this, not the operator)`,
+  );
+}
+
+// The hub agent's signal that the root task has reached a terminal outcome
+// (bootstrap-spec.md #8/#13). Writes the run's terminal state and sends the
+// final STATUS back to operator. This is the only thing that triggers
+// teardown — the monitor watches `runs.status` and disbands the team once it
+// leaves 'running' (kill agent windows, exit, kill the tmux session; DB and
+// audit logs are kept, never deleted).
+function cmdDone(
+  status: string,
+  summary: string,
+  refIdFlag: number | null,
+  runIdFlag: number | null,
+) {
+  const agent = resolveFrom(null);
+  const dbStatus = status === "failed" ? "failed" : "completed";
+
+  const db = connect();
+  const runId = runIdFlag ?? (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
+  if (runId === null || Number.isNaN(runId)) {
+    console.error(
+      "synapse: warning — no run id (SYNAPSE_RUN_ID not set and --run-id not passed); runs table not updated",
+    );
+  } else {
+    const result = db.run(
+      "UPDATE runs SET status=?, ended_at=? WHERE id=? AND status='running'",
+      [dbStatus, nowIso(), runId],
+    );
+    if (result.changes === 0) {
+      console.error(
+        `synapse: warning — run ${runId} not found or already finished`,
+      );
+    }
+  }
+
+  // Default ref_id to the root TASK addressed to this agent, if not given —
+  // that's the message this STATUS is closing out.
+  let refId = refIdFlag;
+  if (refId === null) {
+    const root = db
+      .query(
+        `SELECT id FROM messages WHERE to_agent=? AND type='TASK' AND ref_id IS NULL ORDER BY id DESC LIMIT 1`,
+      )
+      .get(agent) as any;
+    refId = root?.id ?? null;
+  }
+
+  cmdSend("operator", "STATUS", summary, agent, refId);
+  console.log(
+    `synapse: done — run ${runId ?? "?"} marked '${dbStatus}', final STATUS sent to operator`,
+  );
 }
 
 function cmdStop(name: string, tmuxSession: string) {
@@ -1199,16 +1408,19 @@ function cmdMonitor(flags: Record<string, string>) {
     ? parseInt(flags["debounce"], 10)
     : DEFAULT_DEBOUNCE_MS;
   const once = flags["once"] === "true";
+  const runId = flags["run-id"] !== undefined
+    ? parseInt(flags["run-id"], 10)
+    : undefined;
 
   const db = connect();
   const log = (s: string) => console.log(`[${nowIso()}] ${s}`);
 
   if (once) {
-    pollOnce(db, tmuxSession, debounceMs, log);
+    pollOnce(db, tmuxSession, debounceMs, log, runId);
     return;
   }
 
-  runLiveMonitor(db, tmuxSession, debounceMs, sweepMs, log);
+  runLiveMonitor(db, tmuxSession, debounceMs, sweepMs, log, runId);
 }
 
 // ---------- ui ----------
@@ -1594,6 +1806,11 @@ function main() {
   const { positional, flags } = parseFlags(rest);
 
   switch (command) {
+    case "version":
+    case "--version":
+    case "-v":
+      console.log(`synapse ${VERSION}`);
+      return;
     case "init":
       return cmdInit();
     case "register": {
@@ -1631,7 +1848,7 @@ function main() {
     case "start": {
       const [configPath] = positional;
       if (!configPath)
-        fail("usage: synapse start <team.yaml> [--goal TEXT] [--no-monitor]");
+        fail("usage: synapse start <task.yml> [--goal TEXT] [--no-monitor]");
       return cmdStart(configPath, flags);
     }
     case "stop": {
@@ -1646,9 +1863,19 @@ function main() {
     }
     case "ui":
       return cmdUi(flags);
+    case "done": {
+      const [summary] = positional;
+      if (!summary)
+        fail(
+          'usage: synapse done --status done|failed "<summary>" [--ref-id N] [--run-id N]',
+        );
+      const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
+      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
+      return cmdDone(flags["status"] ?? "done", summary, refId, runId);
+    }
     default:
       fail(
-        `unknown command '${command}'. Expected one of: init, register, send, log, status, pending, deliver, monitor, start, stop, attach, ui`,
+        `unknown command '${command}'. Expected one of: init, register, send, log, status, pending, deliver, monitor, start, stop, attach, ui, done, version`,
       );
   }
 }

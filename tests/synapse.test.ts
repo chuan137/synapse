@@ -17,7 +17,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readdirSync, rmSync } from "fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { basename, dirname, join } from "path";
 
@@ -309,34 +309,47 @@ describe("unknown command", () => {
   });
 });
 
-describe("start — team.yaml parsing", () => {
+describe("start — task.yml parsing", () => {
   // We test the YAML parsing indirectly: pass a malformed config path and
   // check the error, then a valid file but tmux-free (--no-monitor prevents
   // side-effects that require a live tmux session).
 
   test("fails when config file does not exist", () => {
     run(["init"]);
-    const r = run(["start", "/nonexistent/team.yaml", "--no-monitor"]);
+    const r = run(["start", "/nonexistent/task.yml", "--no-monitor"]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("team config not found");
+    expect(r.stderr).toContain("task config not found");
   });
 
   test("fails when yaml has no agents", () => {
     run(["init"]);
-    const yaml = join(dir, "empty.yaml");
-    Bun.write(yaml, "session: team\nagents:\n");
+    const taskDir = join(dir, ".synapse", "tasks", "empty-task");
+    mkdirSync(taskDir, { recursive: true });
+    const yaml = join(taskDir, "task.yml");
+    Bun.write(yaml, "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n");
     const r = run(["start", yaml, "--no-monitor"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("no agents defined");
   });
 
-  test("fails when yaml is missing session field", () => {
+  test("fails when yaml is missing workflow field", () => {
     run(["init"]);
-    const yaml = join(dir, "nosession.yaml");
-    Bun.write(yaml, "agents:\n  - name: planner\n    role: planner\n    cwd: .\n");
+    const taskDir = join(dir, ".synapse", "tasks", "no-workflow");
+    mkdirSync(taskDir, { recursive: true });
+    const yaml = join(taskDir, "task.yml");
+    Bun.write(yaml, "synapse_version: 0.1.0\nagents:\n  - role: planner\n");
     const r = run(["start", yaml, "--no-monitor"]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("missing 'session'");
+    expect(r.stderr).toContain("missing 'workflow'");
+  });
+
+  test("fails when config is not named task.yml", () => {
+    run(["init"]);
+    const yaml = join(dir, "team.yaml");
+    Bun.write(yaml, "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n  - role: planner\n");
+    const r = run(["start", yaml, "--no-monitor"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("must be named task.yml");
   });
 });
 
@@ -411,3 +424,70 @@ describe("ref_id chain", () => {
   });
 });
 
+describe("done", () => {
+  // bootstrap-spec.md #8/#13: `synapse done` is the hub agent's sole
+  // completion signal — it writes the run's terminal state and sends the
+  // final STATUS to operator.
+  beforeEach(() => {
+    run(["init"]);
+    run(["register", "operator", "operator", null]);
+    run(["register", "planner", "planner", "sess-p"]);
+  });
+
+  function insertRun(): number {
+    const db = openDbWritable();
+    const result = db.run(
+      "INSERT INTO runs (session, goal, status) VALUES ('team-1', 'Build feature X', 'running')",
+    );
+    db.close();
+    return Number(result.lastInsertRowid);
+  }
+
+  test("marks the run completed and sends a final STATUS to operator, ref_id defaulted to the root TASK", () => {
+    const runId = insertRun();
+    run(["send", "planner", "TASK", "Build feature X", "--from", "operator"]);
+    const rootTask = openDb()
+      .query("SELECT id FROM messages WHERE type='TASK' AND to_agent='planner'")
+      .get() as any;
+
+    const r = run(["done", "All done", "--status", "done", "--run-id", String(runId)], {
+      SYNAPSE_AGENT: "planner",
+    });
+    expect(r.exitCode).toBe(0);
+
+    const db = openDb();
+    const run_ = db.query("SELECT * FROM runs WHERE id=?").get(runId) as any;
+    expect(run_.status).toBe("completed");
+    expect(run_.ended_at).not.toBeNull();
+
+    const status = db
+      .query("SELECT * FROM messages WHERE type='STATUS' AND from_agent='planner' AND to_agent='operator'")
+      .get() as any;
+    expect(status.body).toBe("All done");
+    expect(status.ref_id).toBe(rootTask.id);
+  });
+
+  test("--status failed marks the run failed", () => {
+    const runId = insertRun();
+    const r = run(["done", "Could not finish", "--status", "failed", "--run-id", String(runId)], {
+      SYNAPSE_AGENT: "planner",
+    });
+    expect(r.exitCode).toBe(0);
+    const run_ = openDb().query("SELECT status FROM runs WHERE id=?").get(runId) as any;
+    expect(run_.status).toBe("failed");
+  });
+
+  test("an explicit --ref-id overrides the root-TASK default", () => {
+    const runId = insertRun();
+    run(["send", "planner", "TASK", "Build feature X", "--from", "operator"]);
+    const r = run(
+      ["done", "All done", "--status", "done", "--run-id", String(runId), "--ref-id", "999"],
+      { SYNAPSE_AGENT: "planner" },
+    );
+    expect(r.exitCode).toBe(0);
+    const status = openDb()
+      .query("SELECT ref_id FROM messages WHERE type='STATUS' AND from_agent='planner'")
+      .get() as any;
+    expect(status.ref_id).toBe(999);
+  });
+});

@@ -15,7 +15,7 @@ agent's session transcript and produces human-readable activity summaries.
 ### 1. tmux layout
 
 - One tmux session per team (e.g. `team`), one window per agent.
-- Window naming convention encodes role and instance: `planner`,
+- Window naming convention encodes role and instance: `manager`,
   `coder-1`, `coder-2`, `reviewer`. The monitor and message bus use this
   name as the agent's address — no separate ID mapping needed.
 - Each window launches `claude` (or `claude --resume <session-id>`) in a
@@ -34,7 +34,7 @@ up, not scraped) and a `messages` mailbox.
 ```sql
 CREATE TABLE agents (
   window_name TEXT PRIMARY KEY,    -- tmux window name == agent address
-  role        TEXT NOT NULL,       -- planner | coder | reviewer | ...
+  role        TEXT NOT NULL,       -- manager | coder | reviewer | ...
   session_id  TEXT,                -- Claude Code session id, for jsonl path
   status      TEXT NOT NULL DEFAULT 'unknown',  -- idle | busy | unknown
   last_seen_at TEXT
@@ -195,15 +195,15 @@ events might have missed or glossed over.
 
 #### 6.1 Defining a team
 
-A team is declared in a config file (e.g. `team.yaml`), not assembled by
+A team is declared in a config file (e.g. `task.yml`), not assembled by
 hand:
 
 ```yaml
 session: team
 agents:
-  - name: planner
-    role: planner
-    cwd: ./planner
+  - name: manager
+    role: manager
+    cwd: ./manager
   - name: coder-1
     role: coder
     cwd: ./coder-1
@@ -219,14 +219,34 @@ Each `cwd` has its own `CLAUDE.md` describing that role's responsibilities
 and, critically, the Synapse conventions it must follow: when to call
 `synapse-send` (and with which `type`), when to call `synapse-log`, and who it
 typically reports to. Role behavior lives entirely in these files — the
-bus and monitor have no concept of "planner" vs "coder," only of message
+bus and monitor have no concept of "manager" vs "coder," only of message
 types and idle/busy state.
+
+`cwd` is optional. If omitted for an agent, synapse defaults to
+`.synapse/agents/<version>/<name>` (created automatically) rather than a
+real project checkout — useful for ad hoc or scratch agents that don't need
+their own working tree. `<version>` is the running binary's version (`synapse
+version`; baked in at build time from `git describe`, see Makefile). It
+namespaces the directory by build rather than by run: the `CLAUDE.md` inside
+is fully regenerated from templates on every `synapse start`, so it holds no
+run-specific history, but pinning it to the version that wrote it means a
+synapse upgrade gets a clean directory instead of a stale mix of old and new
+template content.
 
 #### 6.2 Starting the team
 
-A single `synapse-start team.yaml` does, in order:
+`synapse start` accepts any `task.yml` (including a template copy kept
+outside `.synapse`). If no argument is given, it defaults to
+`templates/task.example.yml`. On start it:
 
-1. Create the tmux session (`team`), one window per config entry.
+0. Allocates a new run id from the DB and creates a run folder
+   `.synapse/runs/run-<id>/`, copying the supplied `task.yml` into it.
+   This gives every run a stable, self-contained snapshot of the config
+   that launched it — the original template is never mutated.
+
+Then, in order:
+
+1. Create the tmux session (`run-<id>`), one window per config entry.
 2. In each window: `cd <cwd> && claude`, then capture the new session id
    and call `synapse-register <name> <role> <session-id>` to populate
    `agents`.
@@ -236,33 +256,33 @@ A single `synapse-start team.yaml` does, in order:
 4. Register the human operator as a pseudo-agent (`operator`) in `agents`
    so the initial goal and any later interjections are just ordinary
    messages, not a special-cased channel.
-5. Send the initial goal as a `TASK` message from `operator` to `planner`
+5. Send the initial goal as a `TASK` message from `operator` to `manager`
    — this is what actually kicks the team into motion; nothing runs
    before this message is delivered.
 
 #### 6.3 Assigning tasks
 
-- The human operator's `TASK` to `planner` carries the overall goal in
+- The human operator's `TASK` to `manager` carries the overall goal in
   free text (`ref_id` null — it's a root task).
-- `planner` decomposes the goal and sends one `TASK` message per subtask
+- `manager` decomposes the goal and sends one `TASK` message per subtask
   to the relevant coder window(s), `ref_id` null (new tasks) but the body
   should include enough acceptance criteria that the coder can self-judge
   "done."
 - When a coder finishes (or gets blocked), it sends `STATUS` back to
-  `planner` with `ref_id` set to the originating `TASK`'s id. `planner`
+  `manager` with `ref_id` set to the originating `TASK`'s id. `manager`
   uses `ref_id` to track which subtasks are outstanding rather than
   keeping that state only in its own context window — the DB is the
-  source of truth for "what's still open," not the planner's memory.
-- `planner` only considers the root goal complete once all subtasks it
+  source of truth for "what's still open," not the manager's memory.
+- `manager` only considers the root goal complete once all subtasks it
   issued have a terminal `STATUS` (done or explicitly abandoned).
 
 #### 6.4 How agents interact
 
-Default topology is hub-and-spoke through `planner` for task
+Default topology is hub-and-spoke through `manager` for task
 assignment and status, with one explicit exception for review:
 
 ```
-operator --TASK--> planner --TASK--> coder-1
+operator --TASK--> manager --TASK--> coder-1
                        ^                |
                        |             REVIEW
                     STATUS              v
@@ -270,17 +290,17 @@ operator --TASK--> planner --TASK--> coder-1
                        +----STATUS-----+
 ```
 
-- `TASK` / `STATUS` always flow through `planner` — it's the only agent
+- `TASK` / `STATUS` always flow through `manager` — it's the only agent
   that hands out work and the only one that needs the full picture to
   decide what's next.
 - `REVIEW` is peer-to-peer (coder → reviewer directly) rather than routed
-  through `planner`, since planner doesn't need to be in the loop for
+  through `manager`, since manager doesn't need to be in the loop for
   every review round-trip — only the final `STATUS` (review passed/failed)
-  needs to reach planner, with `ref_id` chasing back to the original
+  needs to reach manager, with `ref_id` chasing back to the original
   `TASK`.
 - `ACK` is used for low-stakes "got it, working on it" replies that don't
   need a `STATUS` round-trip later.
-- This keeps `planner` from being a bottleneck on review iteration while
+- This keeps `manager` from being a bottleneck on review iteration while
   still giving it a single, complete view of task lifecycle via `ref_id`
   chains.
 
@@ -293,7 +313,7 @@ operator --TASK--> planner --TASK--> coder-1
   not deleted, so a finished or aborted run can be inspected after the
   fact.
 - Staleness (an agent with a `TASK` outstanding but no `STATUS` and no
-  `last_seen_at` update past some timeout) is surfaced to `planner` (and/or
+  `last_seen_at` update past some timeout) is surfaced to `manager` (and/or
   the human operator) as a notice, not auto-resolved — the monitor stays
   mechanical (idle detection + delivery) and leaves judgment calls
   ("reassign? nudge? escalate to human?") to the agents themselves.
@@ -337,7 +357,7 @@ a terminal pane.
 
 ## Bootstrap modes
 
-Section 6.2 assumes a human runs `synapse-start team.yaml` before any agent
+Section 6.2 assumes a human runs `synapse start task.yml` before any agent
 exists. A second, equally valid entry point: the human just opens one
 interactive Claude CLI session and prompts it directly ("set up a team to
 do X"). That collapses "write a YAML file" into "describe what you want,"
@@ -346,8 +366,8 @@ whether the resulting team members end up as separate processes or not.
 
 ### Mode A — prompted, separate windows (still tmux + SQLite)
 
-The session the human is talking to plays `planner`. Instead of an
-external script performing bootstrap, `planner` does it itself,
+The session the human is talking to plays `manager`. Instead of an
+external script performing bootstrap, `manager` does it itself,
 reactively, using its own Bash access:
 
 - decides team composition from the prompt (how many coders, is a
@@ -360,14 +380,14 @@ reactively, using its own Bash access:
 
 Everything in sections 2–6 (SQLite bus, jsonl idle detection, send-keys
 delivery, audit) applies unchanged — the only things that moved are *who*
-performs the bootstrap step (the planner agent itself, not a pre-run
+performs the bootstrap step (the manager agent itself, not a pre-run
 script) and *when* team shape gets decided (at prompt time, not config
 time). This is the natural mode for ad hoc or one-off teams where writing
 a YAML first is more overhead than it's worth.
 
 ### Mode B — prompted, in-process (no separate windows at all)
 
-Alternatively, `planner` doesn't spin up other tmux windows/CLI processes
+Alternatively, `manager` doesn't spin up other tmux windows/CLI processes
 at all. It dispatches coder/reviewer work as sub-agent calls within its
 own process and gets the result back inline, synchronously, as a return
 value — no second process, no second tmux window.
@@ -379,7 +399,7 @@ This is a fork in the whole architecture, not just a startup detail:
   and the `agents` session-id registry (2) don't apply at all. There's
   nothing to poll for idleness; the call blocks until the sub-agent
   returns.
-- No SQLite mailbox needed either — `planner` gets the sub-agent's result
+- No SQLite mailbox needed either — `manager` gets the sub-agent's result
   directly as the call's return value, not as a `STATUS` row it has to
   notice later via polling.
 - Loses: persistence (a sub-agent call isn't a resumable session you can
@@ -389,7 +409,7 @@ This is a fork in the whole architecture, not just a startup detail:
   message), and the live status-board property of `agents` (nothing to
   show as "currently idle" since nothing is ever idle — it's either
   running or finished).
-- Gains: far less infrastructure — no `team.yaml`, no bus, no monitor
+- Gains: far less infrastructure — no `task.yml`, no bus, no monitor
   process to keep alive, no audit pipeline to wire up. Good fit for
   shorter, more supervised tasks where the human is actively driving the
   one open session.
@@ -429,13 +449,13 @@ end to end, before automating delivery makes mistakes harder to see.
 **Phase 2 — Idle detection + monitor, two agents.** Build the jsonl
 tailer (assistant `stop_reason: end_turn` + debounce) and the monitor
 loop (poll `pending` rows for idle agents, deliver, mark `delivered`).
-Test with exactly two windows — `planner` and one `coder` — running a
+Test with exactly two windows — `manager` and one `coder` — running a
 real `TASK` → `STATUS` round trip with no human pressing send-keys by
 hand. This is the riskiest unverified piece (jsonl schema assumptions
 from section 3), so it's isolated here before scaling to a full team.
 
-**Phase 3 — Full team + bootstrap (Mode A).** `team.yaml` format and
-`synapse-start`; scale to the full role set (planner, 2 coders, reviewer);
+**Phase 3 — Full team + bootstrap (Mode A).** `task.yml` format and
+`synapse start`; scale to the full role set (manager, 2 coders, reviewer);
 implement the `REVIEW` peer-to-peer path and `ref_id` correlation across
 multi-step task chains (6.3/6.4). Mode B (in-process sub-agents) is not
 built in this plan — it's a different, simpler system, noted but
@@ -469,10 +489,10 @@ and each is more productively settled by running Phases 1–5 first.
   existing `agents` row in place? Affects whether `agents.session_id`
   history is preserved or overwritten.
 - Reassignment policy when a coder stalls (6.5 says it's surfaced, not
-  auto-resolved) — does `planner` get a fixed playbook (e.g. nudge once,
+  auto-resolved) — does `manager` get a fixed playbook (e.g. nudge once,
   then reassign), or is that left entirely to its judgment per situation?
 - Multiple coders, one subtask each is assumed in 6.3 — not specified:
-  can `planner` split a single subtask across two coders, and if so how
+  can `manager` split a single subtask across two coders, and if so how
   do their `STATUS` replies merge under one `ref_id`?
 - Backpressure: what happens if an agent is flooded with messages faster
   than it can act on them between idle windows?
