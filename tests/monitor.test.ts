@@ -687,7 +687,7 @@ describe("start: full agent launch against task.yml", () => {
     expect(task.body).toBe("Build feature X");
   }, 15000);
 
-  test("starts monitor with the shared monitor log", () => {
+  test("starts monitor without starting a per-run UI", () => {
     writeFileSync(
       join(fakeBinDir, "tmux"),
       `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
@@ -697,14 +697,12 @@ describe("start: full agent launch against task.yml", () => {
     expect(r.exitCode).toBe(0);
 
     const log = tmuxLogContents();
-    expect(log).toContain("new-window -t run-1 -n ui");
-    const uiPort = Number(log.match(/ui --port (\d+)/)?.[1]);
-    expect(uiPort).toBeGreaterThanOrEqual(49152);
-    expect(uiPort).toBeLessThanOrEqual(65535);
+    expect(log).not.toContain("new-window -t run-1 -n ui");
+    expect(log).not.toContain("ui --port");
     expect(log).toContain("synapse.ts monitor --session run-1 --run-id 1");
     expect(log).toContain("monitor.log");
-    expect(log).toContain("ui.log");
-    expect(r.stdout).toContain(`UI: http://localhost:${uiPort}`);
+    expect(log).not.toContain("ui.log");
+    expect(r.stdout).not.toContain("UI: http://localhost:");
     expect(log).not.toContain("sweep-run-1.log");
   }, 15000);
 
@@ -761,6 +759,7 @@ describe("start: full agent launch against task.yml", () => {
         "  - role: coder",
         "    focus: backend",
         "  - role: coder",
+        "  - role: reviewer",
         "",
       ].join("\n"),
     );
@@ -781,23 +780,36 @@ describe("start: full agent launch against task.yml", () => {
     expect(log).toContain(`new-window -t ${tmuxSession} -n manager`);
     expect(log).toContain(`new-window -t ${tmuxSession} -n coder-1`);
     expect(log).toContain(`new-window -t ${tmuxSession} -n coder-2`);
+    expect(log).toContain(`new-window -t ${tmuxSession} -n reviewer`);
 
     const managerAgent = db.query("SELECT * FROM agents WHERE window_name='manager'").get() as any;
     const coderAgent = db.query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
+    const reviewerAgent = db.query("SELECT * FROM agents WHERE window_name='reviewer'").get() as any;
     expect(managerAgent.role).toBe("manager");
     expect(coderAgent.role).toBe("coder");
+    expect(reviewerAgent.role).toBe("reviewer");
 
     const agentsRoot = join(dir, "agents", tmuxSession);
     const managerMd = readFileSync(join(agentsRoot, "manager", "CLAUDE.md"), "utf8");
     expect(managerMd).toContain("Synapse Team — Shared Protocol");
     expect(managerMd).toContain("Your role: manager");
+    expect(managerMd).toContain("Every coder subtask must be reviewed before you count it complete");
+    expect(managerMd).toContain("verify the same `ref_id` chain includes");
 
     const coderMd = readFileSync(join(agentsRoot, "coder-1", "CLAUDE.md"), "utf8");
     expect(coderMd).toContain("Your role: coder");
     expect(coderMd).toContain("backend");
+    expect(coderMd).toContain("mandatory even for small or straightforward changes");
+    expect(coderMd).toContain("wait for an approving reviewer `STATUS`");
 
     const secondCoderMd = readFileSync(join(agentsRoot, "coder-2", "CLAUDE.md"), "utf8");
     expect(secondCoderMd).toContain("Your role: coder");
+
+    const reviewerMd = readFileSync(join(agentsRoot, "reviewer", "CLAUDE.md"), "utf8");
+    expect(reviewerMd).toContain("Your role: reviewer");
+    expect(reviewerMd).toContain("send a short `INFO` summary to `manager`");
+    expect(reviewerMd).toContain("Use `INFO`, not");
+    expect(reviewerMd).toContain('synapse send manager INFO "Review LGTM');
 
     const runTask = readFileSync(join(dir, "runs", tmuxSession, "task.yml"), "utf8");
     expect(runTask).toContain("run_id: 1");

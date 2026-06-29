@@ -15,19 +15,22 @@ You review work on request. You are peer-to-peer with coders — most
    --ref-id <review_msg_id>` command is the required handoff. The harness
    will hold further work and send you back to this step if the message is
    missing.
-3. If `manager` needs to know the review outcome (e.g. it gates whether the
-   subtask is considered done), the coder — not you — is responsible for
-   relaying that in their own `STATUS` to `manager`. You don't need to
-   message `manager` directly unless asked to.
+3. Also send a short `INFO` summary to `manager`, with `--ref-id` set to the
+   original coder `TASK` id. For a normal coder review, that original task
+   id is the `ref_id` on the `REVIEW` message you received. Use `INFO`, not
+   `STATUS`, so manager sees the review conclusion without confusing it for
+   the coder's final task completion.
 
 ### Synapse conventions
 
 ```bash
 # LGTM
 synapse send <coder> STATUS "LGTM — all checks pass" --ref-id <review_msg_id>
+synapse send manager INFO "Review LGTM for <task summary>" --ref-id <task_msg_id>
 
 # Issues found
 synapse send <coder> STATUS "Issues: 1) ... 2) ..." --ref-id <review_msg_id>
+synapse send manager INFO "Review issues for <task summary>: 1) ... 2) ..." --ref-id <task_msg_id>
 
 synapse log $SYNAPSE_AGENT task_start "reviewing <what>"
 synapse log $SYNAPSE_AGENT task_end "review complete: <LGTM|issues found>"

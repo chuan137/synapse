@@ -1,6 +1,13 @@
 import { readFileSync, watch } from "fs";
 import { dirname, resolve } from "path";
-import { connect, disbandTeam, MESSAGE_TYPES, nowIso } from "./commands";
+import {
+  connect,
+  dbPath,
+  DEFAULT_TASK_TEMPLATE,
+  disbandTeam,
+  MESSAGE_TYPES,
+  nowIso,
+} from "./commands";
 
 // ---------- ui ----------
 
@@ -221,10 +228,49 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     border: 1px dashed var(--border);
     color: var(--muted);
     border-radius: 4px;
-    cursor: not-allowed;
-    opacity: 0.5;
+    cursor: pointer;
     font-family: inherit;
   }
+  .new-run-btn:hover { color: var(--text); border-color: var(--accent); }
+  .start-run-panel {
+    display: none;
+    margin: 0 8px 8px;
+    padding: 8px;
+    border-top: 1px solid var(--border);
+    gap: 6px;
+    flex-direction: column;
+  }
+  .start-run-panel.open { display: flex; }
+  #start-goal-input {
+    width: 100%;
+    min-height: 88px;
+    resize: vertical;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  .start-run-actions { display: flex; gap: 6px; align-items: center; }
+  .start-run-actions button {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text);
+  }
+  #start-run-submit {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 700;
+  }
+  #start-run-status { font-size: 11px; color: var(--muted); }
 
   /* ── Messages panel ── */
   #messages-panel {
@@ -274,7 +320,9 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     gap: 4px;
     font-size: 12px;
     color: var(--muted);
+    cursor: pointer;
   }
+  .agent-chip:hover .agent-name { color: var(--text); }
   .agent-state-dot {
     width: 6px;
     height: 6px;
@@ -498,7 +546,15 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   <aside id="runs-sidebar">
     <div class="sidebar-header"><span>Runs</span></div>
     <div id="runs-sidebar-list"></div>
-    <button id="new-run-btn" class="new-run-btn" disabled title="Coming soon">+ New Run</button>
+    <button id="new-run-btn" class="new-run-btn" title="Start a new run">+ New Run</button>
+    <div id="start-run-panel" class="start-run-panel">
+      <textarea id="start-goal-input" placeholder="Goal for the new run"></textarea>
+      <div class="start-run-actions">
+        <button id="start-run-submit">Start</button>
+        <button id="start-run-cancel">Cancel</button>
+      </div>
+      <span id="start-run-status"></span>
+    </div>
   </aside>
   <div id="messages-panel">
     <div id="thread-header">
@@ -529,6 +585,12 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   const feedback    = $('send-feedback');
   const countBadge  = $('msg-count-badge');
   const ackRunBtn   = $('ack-run-btn');
+  const newRunBtn   = $('new-run-btn');
+  const startPanel  = $('start-run-panel');
+  const startGoal   = $('start-goal-input');
+  const startSubmit = $('start-run-submit');
+  const startCancel = $('start-run-cancel');
+  const startStatus = $('start-run-status');
 
   let totalMsgs = 0;
 
@@ -585,6 +647,11 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     feedback.className = ok ? 'ok' : 'err';
     feedback.textContent = msg;
     setTimeout(() => { feedback.textContent = ''; feedback.className = ''; }, 3000);
+  }
+
+  function setStartStatus(msg, ok) {
+    startStatus.textContent = msg || '';
+    startStatus.style.color = ok ? 'var(--idle)' : 'var(--error)';
   }
 
   function buildMessageRow(msg) {
@@ -656,12 +723,24 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       const dotState = ['idle','busy','stopped'].includes(st) ? st : 'unknown';
       const badge = a.pending_count > 0
         ? '<span class="agent-pending">' + a.pending_count + '</span>' : '';
-      return '<span class="agent-chip">' +
+      return '<span class="agent-chip" data-window="' + esc(a.window_name) + '">' +
         '<span class="agent-state-dot" data-state="' + esc(dotState) + '"></span>' +
         '<span class="agent-name">' + esc(a.window_name) + '</span>' +
         badge +
         '</span>';
     }).join('');
+    const run = state.runs.find(r => r.id === state.selectedRunId);
+    if (run) {
+      strip.querySelectorAll('.agent-chip[data-window]').forEach(chip => {
+        chip.addEventListener('click', () => {
+          fetch('/focus-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session: run.session, window: chip.dataset.window }),
+          });
+        });
+      });
+    }
   }
 
   function renderRunsSidebar() {
@@ -751,6 +830,11 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     if (state.selectedRunId === null && state.runs.length > 0) {
       const firstRunning = state.runs.find(r => r.status === 'running');
       selectRun((firstRunning || state.runs[0]).id);
+    } else if (state.selectedRunId !== null && !state.runs.some(r => r.id === state.selectedRunId) && state.runs.length > 0) {
+      selectRun(state.runs[0].id);
+    } else if (state.selectedRunId !== null) {
+      const run = state.runs.find(r => r.id === state.selectedRunId);
+      if (run) updateAckButton(run);
     }
   }
 
@@ -874,10 +958,50 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     }
   }
 
+  async function startRun() {
+    const goal = startGoal.value.trim();
+    if (!goal) { setStartStatus('goal required', false); return; }
+    startSubmit.disabled = true;
+    setStartStatus('starting...', true);
+    try {
+      const res = await fetch('/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ goal }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        setStartStatus(json.error || 'start failed', false);
+        return;
+      }
+      startGoal.value = '';
+      startPanel.classList.remove('open');
+      setStartStatus('', true);
+      if (json.run_id) selectRun(json.run_id);
+      flash('started run #' + (json.run_id || '?'), true);
+    } catch (err) {
+      setStartStatus(String(err), false);
+    } finally {
+      startSubmit.disabled = false;
+    }
+  }
+
+  newRunBtn.addEventListener('click', () => {
+    startPanel.classList.toggle('open');
+    if (startPanel.classList.contains('open')) startGoal.focus();
+  });
+  startSubmit.addEventListener('click', startRun);
+  startCancel.addEventListener('click', () => {
+    startPanel.classList.remove('open');
+    setStartStatus('', true);
+  });
   sendBtn.addEventListener('click', sendMessage);
   ackRunBtn.addEventListener('click', ackRun);
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
+  });
+  startGoal.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startRun(); }
   });
 })();
 </script>
@@ -899,6 +1023,13 @@ function resolvePublicHtmlPath(): string {
   return resolve(base, "public/index.html");
 }
 const PUBLIC_HTML_PATH = resolvePublicHtmlPath();
+
+function synapseCommand(): string[] {
+  if (process.execPath === process.argv[0]) {
+    return [process.execPath, process.argv[1]];
+  }
+  return [process.execPath];
+}
 
 export function cmdUi(flags: Record<string, string>) {
   const port = flags["port"] !== undefined ? parseInt(flags["port"], 10) : DEFAULT_UI_PORT;
@@ -1168,6 +1299,59 @@ export function cmdUi(flags: Record<string, string>) {
               ok: true,
               id: Number(result.lastInsertRowid),
             });
+          })
+          .catch(() =>
+            Response.json(
+              { ok: false, error: "invalid JSON" },
+              { status: 400 },
+            ),
+          );
+      }
+
+      if (url.pathname === "/focus-agent" && req.method === "POST") {
+        return req.json().then((body: any) => {
+          const { session, window: win } = body ?? {};
+          if (!session || !win) {
+            return Response.json({ ok: false, error: "missing session or window" }, { status: 400 });
+          }
+          const result = Bun.spawnSync(["tmux", "select-window", "-t", `${session}:${win}`]);
+          if (result.exitCode !== 0) {
+            const stderr = new TextDecoder().decode(result.stderr).trim();
+            return Response.json({ ok: false, error: stderr || `exit ${result.exitCode}` }, { status: 500 });
+          }
+          return Response.json({ ok: true });
+        }).catch(() => Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }));
+      }
+
+      if (url.pathname === "/start" && req.method === "POST") {
+        return req
+          .json()
+          .then((body: any) => {
+            const goal = String(body?.goal ?? "").trim();
+            const configPath = String(body?.config_path ?? DEFAULT_TASK_TEMPLATE).trim();
+            if (!goal) {
+              return Response.json(
+                { ok: false, error: "missing goal" },
+                { status: 400 },
+              );
+            }
+            const args = [...synapseCommand(), "start", configPath, "--goal", goal];
+            if (body?.no_monitor) args.push("--no-monitor");
+            const result = Bun.spawnSync({
+              cmd: args,
+              env: { ...process.env, SYNAPSE_DB: dbPath() },
+            });
+            const stdout = result.stdout.toString();
+            const stderr = result.stderr.toString();
+            if (result.exitCode !== 0) {
+              return Response.json(
+                { ok: false, error: stderr.trim() || stdout.trim() || "start failed" },
+                { status: 500 },
+              );
+            }
+            const runId = Number(stdout.match(/run #(\d+)/)?.[1] ?? 0) || null;
+            pollDb();
+            return Response.json({ ok: true, run_id: runId, stdout });
           })
           .catch(() =>
             Response.json(

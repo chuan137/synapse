@@ -1267,43 +1267,6 @@ function launchAgentWindow(
   }
 }
 
-function randomEphemeralPort(): number {
-  const rangeStart = 49152;
-  const rangeSize = 65535 - rangeStart + 1;
-  const value = new Uint32Array(1);
-  crypto.getRandomValues(value);
-  return rangeStart + (value[0] % rangeSize);
-}
-
-function startUiWindow(
-  tmuxSession: string,
-  dbFile: string,
-  synapseCliPath: string,
-  port: number,
-): boolean {
-  const uiLog = dbFile.replace(/synapse\.db$/, "ui.log");
-  const devPrefix = process.env.SYNAPSE_DEV ? "SYNAPSE_DEV=1 " : "";
-  const uiCmd = `${devPrefix}SYNAPSE_DB='${dbFile}' ${synapseCliPath} ui --port ${port} 2>&1 | tee '${uiLog}'`;
-  const result = Bun.spawnSync([
-    "tmux",
-    "new-window",
-    "-t",
-    tmuxSession,
-    "-n",
-    "ui",
-    "/bin/bash",
-    "-c",
-    uiCmd,
-  ]);
-  if (result.exitCode !== 0) {
-    console.error(
-      `synapse: warning — failed to start UI: ${result.stderr.toString().trim()}`,
-    );
-    return false;
-  }
-  return true;
-}
-
 export function cmdStart(configPath: string, flags: Record<string, string>) {
   if (!existsSync(configPath)) fail(`task config not found: ${configPath}`);
   const absConfigPath = resolve(configPath);
@@ -1391,12 +1354,6 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     );
     launchAgentWindow(tmuxSession, taskName, agent, dbFile, claudePath, sessionId, runId);
     cmdRegister(agent.name, agent.role, sessionId, runId);
-  }
-
-  const uiPort = randomEphemeralPort();
-  if (startUiWindow(tmuxSession, dbFile, synapseCliPath, uiPort)) {
-    console.log(`synapse: UI started in window '${tmuxSession}:ui'`);
-    console.log(`  UI: http://localhost:${uiPort}`);
   }
 
   // Start monitor in the 'monitor' tmux window

@@ -11,14 +11,18 @@ below it.
 - One `manager` — the single point of contact for the human operator,
   decomposes the root task, assigns subtasks, tracks completion, and is the
   only agent that calls `synapse done`.
-- One or more `coder` agents — implement assigned subtasks.
-- A `reviewer` — reviews code on request, peer-to-peer with coders.
+- One or more `coder` agents — implement assigned subtasks and must obtain
+  review before reporting any assigned `TASK` done.
+- A `reviewer` — reviews every coder task before the coder reports it done,
+  peer-to-peer with coders.
 - `operator` — the human. Not a tmux window; you reach them only through
   the message bus (`STATUS`/`INFO` to `operator`), never directly.
 
 `TASK`/`STATUS` flow hub-and-spoke through `manager`. `REVIEW` is
 peer-to-peer (coder ↔ reviewer) and doesn't need to route through manager —
-only the final `STATUS` on a review needs to reach manager.
+but it is mandatory for every coder `TASK`. The coder may only send a final
+done `STATUS` to manager after the reviewer has replied with a `STATUS` on
+that `REVIEW`.
 
 ## How you got here
 

@@ -17,10 +17,16 @@ accountability for the outcome too.)
 3. Track outstanding subtasks by `ref_id`, not in your own memory — query
    the DB (`synapse pending`, `synapse status`, or look at the `messages`
    table) for what's still open.
-4. Only the final `STATUS` of a `REVIEW` round-trip needs to reach you —
+4. Every coder subtask must be reviewed before you count it complete. When a
+   coder sends a final done `STATUS`, verify the same `ref_id` chain includes
+   a coder -> reviewer `REVIEW` and a reviewer -> coder `STATUS`. If that
+   review evidence is missing, send the coder a new `TASK` or `STATUS`
+   reminder asking them to request review before reporting done.
+5. Only the final `STATUS` of a `REVIEW` round-trip needs to reach you —
    you don't need to be in the loop for every review iteration between a
-   coder and the reviewer.
-5. Once every subtask you issued has a terminal `STATUS` (done or
+   coder and the reviewer, but you are accountable for enforcing that review
+   happened before closure.
+6. Once every subtask you issued has a terminal reviewed `STATUS` (done or
    explicitly abandoned), the root task is complete.
 
 ### Finishing — you are the only one who calls this
