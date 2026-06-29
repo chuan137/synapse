@@ -41,7 +41,8 @@ export const DEFAULT_DEBOUNCE_MS = 2000;
 
 // Stored in PRAGMA user_version so detection works before any table exists.
 // v2 added the `runs` table (bootstrap-spec.md #10/#11).
-export const SCHEMA_VERSION = 2;
+// v3 added `run_id` column to `messages`.
+export const SCHEMA_VERSION = 3;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -122,6 +123,15 @@ export function cmdInit() {
       fail(
         `DB at ${path} is schema v${version}, newer than this binary supports (v${SCHEMA_VERSION}). Upgrade synapse before running init.`,
       );
+    }
+    if (hasTables && version === 2) {
+      // Migrate v2 → v3: add run_id column to messages (non-destructive).
+      const db = connect(true);
+      db.exec(`ALTER TABLE messages ADD COLUMN run_id INTEGER;`);
+      db.exec(`PRAGMA user_version=${SCHEMA_VERSION};`);
+      db.close();
+      console.log(`synapse: migrated ${path} from schema v2 to v${SCHEMA_VERSION}`);
+      return;
     }
     if (hasTables && version < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that
@@ -1121,6 +1131,43 @@ function launchAgentWindow(
   }
 }
 
+function randomEphemeralPort(): number {
+  const rangeStart = 49152;
+  const rangeSize = 65535 - rangeStart + 1;
+  const value = new Uint32Array(1);
+  crypto.getRandomValues(value);
+  return rangeStart + (value[0] % rangeSize);
+}
+
+function startUiWindow(
+  tmuxSession: string,
+  dbFile: string,
+  synapseCliPath: string,
+  port: number,
+): boolean {
+  const uiLog = dbFile.replace(/synapse\.db$/, "ui.log");
+  const devPrefix = process.env.SYNAPSE_DEV ? "SYNAPSE_DEV=1 " : "";
+  const uiCmd = `${devPrefix}SYNAPSE_DB='${dbFile}' ${synapseCliPath} ui --port ${port} 2>&1 | tee '${uiLog}'`;
+  const result = Bun.spawnSync([
+    "tmux",
+    "new-window",
+    "-t",
+    tmuxSession,
+    "-n",
+    "ui",
+    "/bin/bash",
+    "-c",
+    uiCmd,
+  ]);
+  if (result.exitCode !== 0) {
+    console.error(
+      `synapse: warning — failed to start UI: ${result.stderr.toString().trim()}`,
+    );
+    return false;
+  }
+  return true;
+}
+
 export function cmdStart(configPath: string, flags: Record<string, string>) {
   if (!existsSync(configPath)) fail(`task config not found: ${configPath}`);
   const absConfigPath = resolve(configPath);
@@ -1210,6 +1257,12 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     cmdRegister(agent.name, agent.role, sessionId);
   }
 
+  const uiPort = randomEphemeralPort();
+  if (startUiWindow(tmuxSession, dbFile, synapseCliPath, uiPort)) {
+    console.log(`synapse: UI started in window '${tmuxSession}:ui'`);
+    console.log(`  UI: http://localhost:${uiPort}`);
+  }
+
   // Start monitor in the 'monitor' tmux window
   if (!noMonitor) {
     const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${tmuxSession} --run-id ${runId} 2>&1 | tee '${dbFile.replace(/synapse\.db$/, "monitor.log")}'`;
@@ -1257,10 +1310,11 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 export function cmdDone(
   status: string,
   summary: string,
+  from: string | null,
   refIdFlag: number | null,
   runIdFlag: number | null,
 ) {
-  const agent = resolveFrom(null);
+  const agent = resolveFrom(from);
   const dbStatus = status === "failed" ? "failed" : "completed";
 
   const db = connect();

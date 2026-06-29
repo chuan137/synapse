@@ -391,7 +391,7 @@
   </div>
   <div id="messages-panel">
     <div class="panel-header">
-      <span>Thread</span>
+      <span id="thread-title">Thread</span>
     </div>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
     <div id="compose">
@@ -538,7 +538,13 @@
     msgList.scrollTop = msgList.scrollHeight;
   }
 
-  function renderThread(messages) {
+  function renderThread(payload) {
+    const messages = Array.isArray(payload) ? payload : (payload.messages || []);
+    const run = Array.isArray(payload) ? null : (payload.run || null);
+    const titleEl = $('thread-title');
+    if (titleEl) {
+      titleEl.textContent = run ? 'Thread  run #' + run.id : 'Thread';
+    }
     msgList.innerHTML = '';
     seenIds.clear();
     totalMsgs = 0;

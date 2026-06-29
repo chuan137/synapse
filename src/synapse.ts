@@ -38,6 +38,7 @@ import {
   cmdLog,
   cmdPending,
   cmdRegister,
+  cmdRuns,
   cmdSend,
   cmdStatus,
 } from "./mailbox";
@@ -95,10 +96,11 @@ function main() {
       const [to, type, body] = positional;
       if (!to || !type || !body)
         fail(
-          "usage: synapse send <to> <type> <body> [--from NAME] [--ref-id N]",
+          "usage: synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N]",
         );
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
-      return cmdSend(to, type, body, flags["from"] ?? null, refId);
+      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
+      return cmdSend(to, type, body, flags["from"] ?? null, refId, runId);
     }
     case "log": {
       const [agent, type, summary] = positional;
@@ -108,6 +110,8 @@ function main() {
     }
     case "status":
       return cmdStatus();
+    case "runs":
+      return cmdRuns();
     case "pending":
       return cmdPending(positional[0] ?? null);
     case "deliver": {
@@ -135,17 +139,17 @@ function main() {
       return cmdUi(flags);
     case "done": {
       const [summary] = positional;
-      if (!summary)
+      if (summary === undefined)
         fail(
-          'usage: synapse done --status done|failed "<summary>" [--ref-id N] [--run-id N]',
+          'usage: synapse done --status done|failed "<summary>" [--from NAME] [--run-id N] [--ref-id N]',
         );
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
-      return cmdDone(flags["status"] ?? "done", summary, refId, runId);
+      return cmdDone(flags["status"] ?? "done", summary, flags["from"] ?? null, refId, runId);
     }
     default:
       fail(
-        `unknown command '${command}'. Expected one of: init, register, send, log, status, pending, deliver, monitor, start, stop, attach, ui, done, version`,
+        `unknown command '${command}'. Expected one of: init, register, send, log, status, runs, pending, deliver, monitor, start, stop, attach, ui, done, version`,
       );
   }
 }

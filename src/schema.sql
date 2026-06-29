@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS agents (
 
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id     INTEGER,                -- references runs.id; NULL for operator messages sent outside a run
   from_agent TEXT NOT NULL,
   to_agent   TEXT NOT NULL,       -- references agents.window_name, or 'broadcast'
   type       TEXT NOT NULL DEFAULT 'INFO',  -- TASK | STATUS | REVIEW | ACK | INFO

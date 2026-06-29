@@ -397,7 +397,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   </div>
   <div id="messages-panel">
     <div class="panel-header">
-      <span>Thread</span>
+      <span id="thread-title">Thread</span>
     </div>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
     <div id="compose">
@@ -544,7 +544,13 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     msgList.scrollTop = msgList.scrollHeight;
   }
 
-  function renderThread(messages) {
+  function renderThread(payload) {
+    const messages = Array.isArray(payload) ? payload : (payload.messages || []);
+    const run = Array.isArray(payload) ? null : (payload.run || null);
+    const titleEl = $('thread-title');
+    if (titleEl) {
+      titleEl.textContent = run ? 'Thread  run #' + run.id : 'Thread';
+    }
     msgList.innerHTML = '';
     seenIds.clear();
     totalMsgs = 0;
@@ -605,7 +611,18 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 
 const DEFAULT_UI_PORT = 7700;
 // In dev mode (SYNAPSE_DEV=1), HTML is read from disk on every request.
-const PUBLIC_HTML_PATH = resolve(dirname(import.meta.filename), "public/index.html");
+// When running as a compiled binary, import.meta.filename is a virtual /$bunfs
+// path, so resolve relative to the real executable instead.
+function resolvePublicHtmlPath(): string {
+  const base = dirname(import.meta.filename);
+  if (base.startsWith("/$bunfs")) {
+    // compiled binary: process.execPath is the real binary path
+    // binary lives at <project>/bin/synapse; HTML is at <project>/src/public/index.html
+    return resolve(dirname(process.execPath), "../src/public/index.html");
+  }
+  return resolve(base, "public/index.html");
+}
+const PUBLIC_HTML_PATH = resolvePublicHtmlPath();
 
 export function cmdUi(flags: Record<string, string>) {
   const port = flags["port"] !== undefined ? parseInt(flags["port"], 10) : DEFAULT_UI_PORT;
@@ -643,46 +660,97 @@ export function cmdUi(flags: Record<string, string>) {
     }
   }
 
-  function operatorThreadMessages() {
+  function activeRun() {
+    return (
+      (db
+        .query(
+          `SELECT id, session, status, goal, started_at, ended_at
+           FROM runs
+           WHERE status='running'
+           ORDER BY id DESC LIMIT 1`,
+        )
+        .get() as any) ??
+      (db
+        .query(
+          `SELECT id, session, status, goal, started_at, ended_at
+           FROM runs
+           ORDER BY id DESC LIMIT 1`,
+        )
+        .get() as any) ??
+      null
+    );
+  }
+
+  function operatorThreadMessages(run: any) {
+    if (!run) {
+      return db
+        .query(
+          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+           FROM messages
+           WHERE (from_agent='operator' OR to_agent='operator')
+           ORDER BY id DESC LIMIT 200`,
+        )
+        .all()
+        .reverse();
+    }
     return db
       .query(
-        `SELECT id, from_agent, to_agent, type, body, status, created_at
+        `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
          FROM messages
-         WHERE from_agent='operator' OR to_agent='operator'
-         ORDER BY id DESC
-         LIMIT 200`,
+         WHERE (from_agent='operator' OR to_agent='operator')
+           AND run_id = ?
+         ORDER BY id DESC LIMIT 200`,
       )
-      .all()
+      .all(run.id)
       .reverse();
   }
 
   function pushOperatorThread(ctrl: ReadableStreamDefaultController) {
-    const chunk = `event: operator-thread\ndata: ${JSON.stringify(operatorThreadMessages())}\n\n`;
+    const run = activeRun();
+    const messages = operatorThreadMessages(run);
+    const chunk = `event: operator-thread\ndata: ${JSON.stringify({ run, messages })}\n\n`;
     ctrl.enqueue(chunk);
   }
 
   function pollDb() {
+    const run = activeRun();
+
     const agents = db
       .query(
         `SELECT window_name, role, status, last_seen_at,
                 (SELECT COUNT(*) FROM messages m
                  WHERE m.status='pending'
-                   AND m.to_agent=a.window_name) AS pending_count
+                   AND m.to_agent=a.window_name
+                   AND (? IS NULL OR m.run_id = ?)) AS pending_count
          FROM agents a
          ORDER BY role, window_name`,
       )
-      .all();
+      .all(run?.id ?? null, run?.id ?? null);
     pushToAll("agent-status", agents);
 
-    const newMessages = db
-      .query(
-        `SELECT id, from_agent, to_agent, type, body, status, created_at
-         FROM messages
-         WHERE id > ?
-           AND (from_agent='operator' OR to_agent='operator')
-         ORDER BY id`,
-      )
-      .all(lastMessageId) as any[];
+    let newMessages: any[];
+    if (run) {
+      newMessages = db
+        .query(
+          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+           FROM messages
+           WHERE id > ?
+             AND (from_agent='operator' OR to_agent='operator')
+             AND run_id = ?
+           ORDER BY id`,
+        )
+        .all(lastMessageId, run.id) as any[];
+    } else {
+      newMessages = db
+        .query(
+          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+           FROM messages
+           WHERE id > ?
+             AND (from_agent='operator' OR to_agent='operator')
+           ORDER BY id`,
+        )
+        .all(lastMessageId) as any[];
+    }
     if (newMessages.length > 0) {
       lastMessageId = newMessages[newMessages.length - 1].id;
       for (const msg of newMessages) {
@@ -782,8 +850,8 @@ export function cmdUi(flags: Record<string, string>) {
               );
             }
             const result = db.run(
-              `INSERT INTO messages (from_agent, to_agent, type, body) VALUES ('operator', ?, ?, ?)`,
-              [to, type, msgBody],
+              `INSERT INTO messages (run_id, from_agent, to_agent, type, body) VALUES (?, 'operator', ?, ?, ?)`,
+              [activeRun()?.id ?? null, to, type, msgBody],
             );
             return Response.json({
               ok: true,

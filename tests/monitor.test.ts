@@ -666,8 +666,14 @@ describe("start: full agent launch against task.yml", () => {
     expect(r.exitCode).toBe(0);
 
     const log = tmuxLogContents();
+    expect(log).toContain("new-window -t run-1 -n ui");
+    const uiPort = Number(log.match(/ui --port (\d+)/)?.[1]);
+    expect(uiPort).toBeGreaterThanOrEqual(49152);
+    expect(uiPort).toBeLessThanOrEqual(65535);
     expect(log).toContain("synapse.ts monitor --session run-1 --run-id 1");
     expect(log).toContain("monitor.log");
+    expect(log).toContain("ui.log");
+    expect(r.stdout).toContain(`UI: http://localhost:${uiPort}`);
     expect(log).not.toContain("sweep-run-1.log");
   }, 15000);
 

@@ -28,6 +28,7 @@ export function cmdSend(
   body: string,
   from: string | null,
   refId: number | null,
+  runId?: number | null,
 ) {
   if (!MESSAGE_TYPES.has(type)) {
     fail(`type must be one of ${[...MESSAGE_TYPES].sort()}, got '${type}'`);
@@ -42,15 +43,19 @@ export function cmdSend(
       );
     }
   }
+  // Resolve run_id: explicit arg → SYNAPSE_RUN_ID env → null
+  const resolvedRunId = runId !== undefined && runId !== null
+    ? runId
+    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
   const result = db.run(
-    `INSERT INTO messages (from_agent, to_agent, type, ref_id, body)
-     VALUES (?, ?, ?, ?, ?)`,
-    [frm, to, type, refId, body],
+    `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [resolvedRunId, frm, to, type, refId, body],
   );
   console.log(
     `synapse: message ${result.lastInsertRowid} queued (${frm} -> ${to}, ${type}${
       refId ? ", ref=" + refId : ""
-    })`,
+    }${resolvedRunId ? ", run=" + resolvedRunId : ""})`,
   );
 }
 
@@ -119,6 +124,33 @@ export function cmdStatus() {
       String(pending),
     ];
   });
+  const widths = headers.map((h, i) =>
+    Math.max(h.length, ...rows.map((r) => r[i].length)),
+  );
+  const fmt = (cols: string[]) =>
+    cols.map((c, i) => c.padEnd(widths[i])).join("  ");
+  console.log(fmt(headers));
+  for (const r of rows) console.log(fmt(r));
+}
+
+export function cmdRuns() {
+  const db = connect();
+  const runs = db
+    .query("SELECT id, session, status, started_at, ended_at, goal FROM runs ORDER BY id DESC")
+    .all() as any[];
+  if (!runs.length) {
+    console.log("synapse: no runs recorded");
+    return;
+  }
+  const headers = ["ID", "SESSION", "STATUS", "STARTED", "ENDED", "GOAL"];
+  const rows = runs.map((r) => [
+    String(r.id),
+    r.session,
+    r.status,
+    r.started_at ?? "-",
+    r.ended_at ?? "-",
+    (r.goal ?? "-").replace(/\n[\s\S]*/m, "").slice(0, 60),
+  ]);
   const widths = headers.map((h, i) =>
     Math.max(h.length, ...rows.map((r) => r[i].length)),
   );
