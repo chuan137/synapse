@@ -723,9 +723,10 @@ export function cmdUi(flags: Record<string, string>) {
                    AND m.to_agent=a.window_name
                    AND (? IS NULL OR m.run_id = ?)) AS pending_count
          FROM agents a
+         WHERE (? IS NULL OR run_id=? OR run_id=0)
          ORDER BY role, window_name`,
       )
-      .all(run?.id ?? null, run?.id ?? null);
+      .all(run?.id ?? null, run?.id ?? null, run?.id ?? null, run?.id ?? null);
     pushToAll("agent-status", agents);
 
     let newMessages: any[];
@@ -841,9 +842,12 @@ export function cmdUi(flags: Record<string, string>) {
                 { status: 400 },
               );
             }
+            const run = activeRun();
             const known = db
-              .query("SELECT 1 FROM agents WHERE window_name=?")
-              .get(to);
+              .query(
+                "SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)",
+              )
+              .get(to, run?.id ?? -1);
             if (!known) {
               console.error(
                 `synapse ui: warning — '${to}' not in agents registry (sending anyway)`,
@@ -851,7 +855,7 @@ export function cmdUi(flags: Record<string, string>) {
             }
             const result = db.run(
               `INSERT INTO messages (run_id, from_agent, to_agent, type, body) VALUES (?, 'operator', ?, ?, ?)`,
-              [activeRun()?.id ?? null, to, type, msgBody],
+              [run?.id ?? null, to, type, msgBody],
             );
             return Response.json({
               ok: true,

@@ -26,6 +26,23 @@
     --tooltip-text: #111;
     --hover-soft: rgba(255,255,255,0.02);
   }
+  body.light {
+    --bg:      #f5f5f7;
+    --surface: #ffffff;
+    --border:  #d1d1d6;
+    --text:    #1c1c1e;
+    --muted:   #86868b;
+    --accent:  #4a6ef5;
+    --idle:    #16a34a;
+    --working: #d97706;
+    --error:   #dc2626;
+    --p0:      #dc2626;
+    --p0-bg:   #fef2f2;
+    --p0-text: #991b1b;
+    --tooltip-bg: rgba(30,30,30,0.92);
+    --tooltip-text: #f5f5f7;
+    --hover-soft: rgba(0,0,0,0.03);
+  }
   html, body { height: 100%; }
   body {
     background: var(--bg);
@@ -85,6 +102,18 @@
     font-size: 11px;
     color: var(--muted);
   }
+  #theme-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    line-height: 1;
+  }
+  #theme-btn:hover { color: var(--text); border-color: var(--text); }
 
   /* ── Layout ── */
   main {
@@ -217,16 +246,16 @@
     border-left: 2px solid transparent;
   }
   .message-row.from-human {
-    background: rgba(112,145,245,0.07);
-    border-left-color: rgba(112,145,245,0.35);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    border-left-color: color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .message-row.from-agent {
-    background: rgba(255,255,255,0.025);
+    background: color-mix(in srgb, var(--muted) 6%, var(--surface));
     transition: background 0.15s, border-left-color 0.15s;
   }
   .message-row.from-agent:hover {
-    background: rgba(255,255,255,0.055);
-    border-left-color: rgba(112,145,245,0.4);
+    background: color-mix(in srgb, var(--muted) 12%, var(--surface));
+    border-left-color: color-mix(in srgb, var(--accent) 40%, transparent);
   }
   .message-avatar {
     width: 26px;
@@ -314,12 +343,6 @@
     flex-direction: column;
     gap: 8px;
   }
-  .compose-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .compose-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
   select, input {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -333,7 +356,6 @@
   }
   select:focus, input:focus { border-color: var(--accent); }
   select option { background: var(--bg); }
-  #input-to { width: 130px; }
   textarea#msg-input {
     width: 100%;
     resize: vertical;
@@ -382,6 +404,7 @@
 <header id="header">
   <span class="logo">SYNAPSE</span>
   <span id="conn-status" class="disconnected">● connecting</span>
+  <button id="theme-btn" title="Toggle light/dark theme">☀︎</button>
   <span id="msg-count-badge"></span>
 </header>
 <main>
@@ -395,14 +418,6 @@
     </div>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
     <div id="compose">
-      <div class="compose-row">
-        <span class="compose-label">To:</span>
-        <select id="input-to"></select>
-        <span class="compose-label">Type:</span>
-        <select id="input-type">
-          <option>STATUS</option><option>REVIEW</option><option>ACK</option><option>INFO</option>
-        </select>
-      </div>
       <textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>
       <div class="compose-bottom">
         <button id="send-btn">Send</button>
@@ -418,8 +433,6 @@
   const msgList     = $('messages-list');
   const header      = $('header');
   const connStatus  = $('conn-status');
-  const inputTo     = $('input-to');
-  const inputType   = $('input-type');
   const msgInput    = $('msg-input');
   const sendBtn     = $('send-btn');
   const feedback    = $('send-feedback');
@@ -427,6 +440,17 @@
 
   const seenIds = new Set();
   let totalMsgs = 0;
+
+  // Theme toggle
+  const themeBtn = $('theme-btn');
+  const savedTheme = localStorage.getItem('synapse-theme') || 'dark';
+  if (savedTheme === 'light') document.body.classList.add('light');
+  themeBtn.textContent = savedTheme === 'light' ? '☽' : '☀︎';
+  themeBtn.addEventListener('click', () => {
+    const isLight = document.body.classList.toggle('light');
+    localStorage.setItem('synapse-theme', isLight ? 'light' : 'dark');
+    themeBtn.textContent = isLight ? '☽' : '☀︎';
+  });
 
   // Markdown: marked + DOMPurify (loaded from CDN in <head>)
   function renderMd(raw) {
@@ -464,10 +488,6 @@
   }
 
   function renderAgents(agents) {
-    const cur = inputTo.value;
-    inputTo.innerHTML = agents.map(a => '<option value="' + esc(a.window_name) + '">' + esc(a.window_name) + '</option>').join('');
-    if (cur) inputTo.value = cur;
-
     if (!agents.length) {
       agentsList.innerHTML = '<div class="empty-state">No agents connected.</div>';
       return;
@@ -492,8 +512,6 @@
       card.addEventListener('click', () => {
         agentsList.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
-        const name = card.dataset.name;
-        if (inputTo) { inputTo.value = name; }
       });
     });
   }
@@ -576,16 +594,14 @@
   connectSSE();
 
   async function sendMessage() {
-    const to   = inputTo.value.trim();
-    const type = inputType.value;
     const body = msgInput.value.trim();
-    if (!to || !body) { flash('To and body required', false); return; }
+    if (!body) { flash('body required', false); return; }
     sendBtn.disabled = true;
     try {
       const res  = await fetch('/send', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({to, type, body}),
+        body: JSON.stringify({to: 'manager', type: 'TASK', body}),
       });
       const json = await res.json();
       if (json.ok) { msgInput.value = ''; flash('sent #' + json.id, true); }
