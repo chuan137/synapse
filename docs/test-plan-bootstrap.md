@@ -55,8 +55,8 @@ write_transcript() {
 ```bash
 cat > /tmp/nosession.yaml << 'EOF'
 agents:
-  - name: planner
-    role: planner
+  - name: manager
+    role: manager
     cwd: .
 EOF
 ./bin/synapse start /tmp/nosession.yaml --no-monitor
@@ -84,8 +84,8 @@ EOF
 cat > /tmp/team.yaml << 'EOF'
 session: team
 agents:
-  - name: planner
-    role: planner
+  - name: manager
+    role: manager
     cwd: /tmp
   - name: coder-1
     role: coder
@@ -106,7 +106,7 @@ The fake tmux will time out waiting for session-id files (30 s each), so seed th
 ```bash
 # Seed session-id files so start doesn't wait
 mkdir -p "$(dirname $SYNAPSE_DB)"
-echo "sess-planner" > "$(dirname $SYNAPSE_DB)/planner.session-id"
+echo "sess-manager" > "$(dirname $SYNAPSE_DB)/manager.session-id"
 echo "sess-coder1"  > "$(dirname $SYNAPSE_DB)/coder-1.session-id"
 echo "sess-coder2"  > "$(dirname $SYNAPSE_DB)/coder-2.session-id"
 echo "sess-reviewer" > "$(dirname $SYNAPSE_DB)/reviewer.session-id"
@@ -119,18 +119,18 @@ echo "sess-reviewer" > "$(dirname $SYNAPSE_DB)/reviewer.session-id"
 - stdout confirms `team 'team' started with 4 agent(s)`
 - `synapse status` lists 5 rows: `operator` (role=operator) + the 4 agents
 - `operator` status is `idle`
-- planner/coder-1/coder-2/reviewer each have their session ids
+- manager/coder-1/coder-2/reviewer each have their session ids
 
 ---
 
-## 3. start — initial goal queued as TASK to planner
+## 3. start — initial goal queued as TASK to manager
 
 ```bash
 ./bin/synapse start /tmp/team.yaml --no-monitor --goal "Build feature X end to end"
-./bin/synapse pending planner
+./bin/synapse pending manager
 ```
 
-**Expected:** one `pending` TASK from `operator` to `planner` with body `Build feature X end to end`.
+**Expected:** one `pending` TASK from `operator` to `manager` with body `Build feature X end to end`.
 
 ---
 
@@ -172,7 +172,7 @@ grep 'kill-window' /tmp/synapse-tmux.log
 
 ```bash
 write_transcript sess-coder2 end_turn 5
-./bin/synapse send coder-2 INFO "message to stopped agent" --from planner
+./bin/synapse send coder-2 INFO "message to stopped agent" --from manager
 ./bin/synapse monitor --once --debounce 100
 sqlite3 $SYNAPSE_DB "SELECT status FROM messages WHERE to_agent='coder-2'"
 ```
@@ -190,16 +190,16 @@ This exercises the hub-and-spoke topology from spec section 6.3/6.4.
 rm -f $SYNAPSE_DB
 ./bin/synapse init
 ./bin/synapse register operator  operator  ""
-./bin/synapse register planner   planner   sess-planner
+./bin/synapse register manager   manager   sess-manager
 ./bin/synapse register coder-1   coder     sess-coder1
 ./bin/synapse register reviewer  reviewer  sess-reviewer
 
-# operator → planner: root TASK
-./bin/synapse send planner TASK "Build feature X" --from operator
+# operator → manager: root TASK
+./bin/synapse send manager TASK "Build feature X" --from operator
 ROOT_ID=$(sqlite3 $SYNAPSE_DB "SELECT id FROM messages WHERE from_agent='operator' LIMIT 1")
 
-# planner → coder-1: subtask (ref_id = root TASK)
-./bin/synapse send coder-1 TASK "Implement X" --from planner --ref-id $ROOT_ID
+# manager → coder-1: subtask (ref_id = root TASK)
+./bin/synapse send coder-1 TASK "Implement X" --from manager --ref-id $ROOT_ID
 SUB_ID=$(sqlite3 $SYNAPSE_DB "SELECT id FROM messages WHERE to_agent='coder-1' LIMIT 1")
 
 # coder-1 → reviewer: REVIEW (ref_id = subtask)
@@ -209,8 +209,8 @@ REV_ID=$(sqlite3 $SYNAPSE_DB "SELECT id FROM messages WHERE type='REVIEW' LIMIT 
 # reviewer → coder-1: STATUS on review (ref_id = REVIEW)
 ./bin/synapse send coder-1 STATUS "LGTM" --from reviewer --ref-id $REV_ID
 
-# coder-1 → planner: final STATUS (ref_id = subtask)
-./bin/synapse send planner STATUS "Feature X done" --from coder-1 --ref-id $SUB_ID
+# coder-1 → manager: final STATUS (ref_id = subtask)
+./bin/synapse send manager STATUS "Feature X done" --from coder-1 --ref-id $SUB_ID
 
 # Inspect chain
 sqlite3 $SYNAPSE_DB "SELECT id, from_agent, to_agent, type, ref_id, status FROM messages ORDER BY id"
@@ -220,16 +220,16 @@ sqlite3 $SYNAPSE_DB "SELECT id, from_agent, to_agent, type, ref_id, status FROM 
 
 | id | from      | to       | type   | ref_id |
 |----|-----------|----------|--------|--------|
-| 1  | operator  | planner  | TASK   | NULL   |
-| 2  | planner   | coder-1  | TASK   | 1      |
+| 1  | operator  | manager  | TASK   | NULL   |
+| 2  | manager   | coder-1  | TASK   | 1      |
 | 3  | coder-1   | reviewer | REVIEW | 2      |
 | 4  | reviewer  | coder-1  | STATUS | 3      |
-| 5  | coder-1   | planner  | STATUS | 2      |
+| 5  | coder-1   | manager  | STATUS | 2      |
 
 ### 6b. Deliver the chain via monitor
 
 ```bash
-write_transcript sess-planner  end_turn 5
+write_transcript sess-manager  end_turn 5
 write_transcript sess-coder1   end_turn 5
 write_transcript sess-reviewer end_turn 5
 rm -f /tmp/synapse-tmux.log

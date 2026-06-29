@@ -26,23 +26,25 @@ import { Database } from "bun:sqlite";
 import {
   existsSync,
   mkdirSync,
+  closeSync,
   readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
+  openSync,
   statSync,
+  unlinkSync,
   writeFileSync,
   watch as fsWatch,
 } from "fs";
 import { homedir } from "os";
-import { basename, dirname, join, resolve } from "path";
+import { dirname, join, relative, resolve } from "path";
 // Bundled as text so it's available inside a --compile binary with no schema.sql beside it.
 import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // Three-segment CLAUDE.md templates (bootstrap-spec.md, dimension A), bundled
 // the same way so a --compile binary doesn't need templates/ beside it.
 import SHARED_MD from "../templates/shared.md" with { type: "text" };
 import ROLE_MANAGER_MD from "../templates/role-manager.md" with { type: "text" };
-import ROLE_PLANNER_MD from "../templates/role-planner.md" with { type: "text" };
 import ROLE_CODER_MD from "../templates/role-coder.md" with { type: "text" };
 import ROLE_REVIEWER_MD from "../templates/role-reviewer.md" with {
   type: "text",
@@ -52,12 +54,12 @@ const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO"]);
 const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
 const ROLE_TEMPLATES: Record<string, string> = {
   manager: ROLE_MANAGER_MD,
-  planner: ROLE_PLANNER_MD,
   coder: ROLE_CODER_MD,
   reviewer: ROLE_REVIEWER_MD,
 };
 
 const DEFAULT_TMUX_SESSION = "team";
+const DEFAULT_TASK_TEMPLATE = "templates/task.example.yml";
 // Cheap mailbox/roster sweep — idle detection is event-driven, not on this timer.
 const DEFAULT_SWEEP_INTERVAL_MS = 1000;
 const DEFAULT_DEBOUNCE_MS = 2000;
@@ -107,6 +109,68 @@ function nowIso(): string {
 function fail(msg: string): never {
   console.error(`synapse: ${msg}`);
   process.exit(1);
+}
+
+function safeFileSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.-]/g, "_");
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: any) {
+    return err?.code === "EPERM";
+  }
+}
+
+function monitorLockPath(tmuxSession: string): string {
+  return join(dirname(dbPath()), `monitor-${safeFileSegment(tmuxSession)}.pid`);
+}
+
+function acquireMonitorLock(tmuxSession: string): () => void {
+  const lockPath = monitorLockPath(tmuxSession);
+  const pid = String(process.pid);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = openSync(lockPath, "wx");
+      try {
+        writeFileSync(fd, `${pid}\n`);
+      } finally {
+        closeSync(fd);
+      }
+      return () => {
+        try {
+          if (readFileSync(lockPath, "utf8").trim() === pid) {
+            unlinkSync(lockPath);
+          }
+        } catch {
+          // Already gone or unreadable during process shutdown.
+        }
+      };
+    } catch (err: any) {
+      if (err?.code !== "EEXIST") throw err;
+      let existingPid: number | undefined;
+      try {
+        existingPid = Number(readFileSync(lockPath, "utf8").trim());
+      } catch {
+        existingPid = undefined;
+      }
+      if (existingPid && processIsRunning(existingPid)) {
+        fail(
+          `monitor already running for tmux session '${tmuxSession}' (pid ${existingPid})`,
+        );
+      }
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // If another monitor won the race, the next openSync will report it.
+      }
+    }
+  }
+
+  fail(`could not acquire monitor lock for tmux session '${tmuxSession}'`);
 }
 
 const c = {
@@ -694,14 +758,20 @@ function pollOnce(
   broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
 }
 
-// Callers get a single onChange(key, path) callback for each fs.watch event,
-// initial watch registration, and mtime-based recheck.
+// Callers get a single onChange(key, path, source) callback for each fs.watch
+// event, initial watch registration, and mtime-based recheck.
 class FileWatchPool {
   private watchers = new Map<string, ReturnType<typeof fsWatch>>();
   private paths = new Map<string, string>();
   private mtimes = new Map<string, number>();
 
-  constructor(private onChange: (key: string, path: string) => void) {}
+  constructor(
+    private onChange: (
+      key: string,
+      path: string,
+      source: "sweep" | "watch",
+    ) => void,
+  ) {}
 
   // Idempotent. Fires onChange immediately so callers don't need a separate
   // initial-evaluation step.
@@ -711,9 +781,9 @@ class FileWatchPool {
     this.recordMtime(key, path);
     this.watchers.set(
       key,
-      fsWatch(path, () => this.emitChange(key)),
+      fsWatch(path, () => this.emitChange(key, "watch")),
     );
-    this.onChange(key, path);
+    this.onChange(key, path, "sweep");
   }
 
   unwatch(key: string): void {
@@ -740,18 +810,18 @@ class FileWatchPool {
     } catch {
       return;
     }
-    if (mtime !== this.mtimes.get(key)) this.emitChange(key);
+    if (mtime !== this.mtimes.get(key)) this.emitChange(key, "sweep");
   }
 
   closeAll(): void {
     for (const key of [...this.watchers.keys()]) this.unwatch(key);
   }
 
-  private emitChange(key: string): void {
+  private emitChange(key: string, source: "sweep" | "watch"): void {
     const path = this.paths.get(key);
     if (!path) return;
     this.recordMtime(key, path);
-    this.onChange(key, path);
+    this.onChange(key, path, source);
   }
 
   private recordMtime(key: string, path: string): void {
@@ -777,6 +847,9 @@ function runLiveMonitor(
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let agents: any[] = [];
   let agentsByWindow = new Map<string, any>();
+  const sourceLog =
+    (source: "sweep" | "watch" | "timer") => (s: string) =>
+      log(`[${source}] ${s}`);
 
   const reloadAgents = () => {
     agents = db
@@ -787,17 +860,23 @@ function runLiveMonitor(
     agentsByWindow = new Map(agents.map((a) => [a.window_name, a]));
   };
 
-  const refreshAgentStateByWindow = (windowName: string) => {
+  const refreshAgentStateByWindow = (
+    windowName: string,
+    eventLog: (s: string) => void,
+  ) => {
     const agent = agentsByWindow.get(windowName);
     if (!agent) return null; // deregistered/stopped between event and update
-    return refreshAgentState(db, debounceMs, agent, agentStatuses, log);
+    return refreshAgentState(db, debounceMs, agent, agentStatuses, eventLog);
   };
 
-  const deliverOrReschedule = (windowName: string) => {
-    const agentState = refreshAgentStateByWindow(windowName);
+  const deliverOrReschedule = (
+    windowName: string,
+    eventLog: (s: string) => void,
+  ) => {
+    const agentState = refreshAgentStateByWindow(windowName, eventLog);
     if (agentState?.status === "idle") {
-      dispatchNextDirectMessage(db, tmuxSession, windowName, log);
-      broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
+      dispatchNextDirectMessage(db, tmuxSession, windowName, eventLog);
+      broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, eventLog);
     } else if (
       agentState?.remainingDebounceMs !== undefined &&
       hasPendingDirectMessageForWindow(db, windowName)
@@ -819,7 +898,7 @@ function runLiveMonitor(
       setTimeout(
         () => {
           debounceTimers.delete(windowName);
-          deliverOrReschedule(windowName);
+          deliverOrReschedule(windowName, sourceLog("timer"));
         },
         Math.max(0, delayMs),
       ),
@@ -829,13 +908,17 @@ function runLiveMonitor(
   // On new transcript activity, reset the debounce window and re-evaluate.
   // Delivery only fires once the agent has been quiet for the full debounce period,
   // ensuring the agent is truly idle before a message is sent.
-  const onTranscriptActivity = (windowName: string) => {
+  const onTranscriptActivity = (
+    windowName: string,
+    source: "sweep" | "watch",
+  ) => {
+    sourceLog(source)(`  ${windowName}: transcript activity`);
     cancelScheduledDelivery(windowName);
-    deliverOrReschedule(windowName);
+    deliverOrReschedule(windowName, sourceLog(source));
   };
 
-  const pool = new FileWatchPool((windowName) =>
-    onTranscriptActivity(windowName),
+  const pool = new FileWatchPool((windowName, _path, source) =>
+    onTranscriptActivity(windowName, source),
   );
 
   let sweepTimer: ReturnType<typeof setInterval> | undefined;
@@ -860,7 +943,11 @@ function runLiveMonitor(
   // agents, retries pending delivery for agents already idle, and broadcasts
   // ready messages.
   const sweep = () => {
-    if (runId !== undefined && checkRunTerminal(db, tmuxSession, runId, log)) {
+    const sweepLog = sourceLog("sweep");
+    if (
+      runId !== undefined &&
+      checkRunTerminal(db, tmuxSession, runId, sweepLog)
+    ) {
       shutdown();
       return;
     }
@@ -877,27 +964,27 @@ function runLiveMonitor(
       pool.unwatch(name);
       agentStatuses.delete(name);
       cancelScheduledDelivery(name);
-      log(`  ${name}: stopped, cleanup`);
+      sweepLog(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
-      const agentState = refreshAgentStateByWindow(agent.window_name);
+      const agentState = refreshAgentStateByWindow(agent.window_name, sweepLog);
 
       // Mail can arrive without transcript activity.
       if (agentState?.status === "idle") {
-        dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
+        dispatchNextDirectMessage(db, tmuxSession, agent.window_name, sweepLog);
       }
       // Poll until the transcript appears to start watching
       if (!pool.isWatching(agent.window_name)) {
         const path = findTranscriptPath(agent.session_id);
         if (path) {
           pool.watch(agent.window_name, path);
-          log(`  ${agent.window_name}: watching ${path}`);
+          sweepLog(`  ${agent.window_name}: watching ${path}`);
         }
       }
       // Catch transcript changes fs.watch may have missed (coalesced writes, NFS, etc.).
       pool.emitOnTranscriptChange(agent.window_name);
     }
-    broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
+    broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, sweepLog);
   };
 
   sweep();
@@ -919,6 +1006,19 @@ interface TaskConfig {
   workflow: string;
   goal: string | null;
   agents: AgentConfig[];
+}
+
+function appendGeneratedTaskFields(
+  taskText: string,
+  runId: number,
+  agentsDir: string,
+): string {
+  return `${taskText.trimEnd()}\n\n# --- added by synapse start ---\nrun_id: ${runId}\nagents_dir: ${agentsDir}\n`;
+}
+
+function workspaceRelativePath(absPath: string): string {
+  const rel = relative(process.cwd(), absPath);
+  return rel && !rel.startsWith("..") && !rel.startsWith("/") ? rel : absPath;
 }
 
 function unquoteYamlScalar(value: string): string {
@@ -961,7 +1061,7 @@ function parseTaskYaml(text: string): TaskConfig {
   //   workflow: hub-and-spoke
   //   goal: "Implement X"
   //   agents:
-  //     - role: planner
+  //     - role: manager
   //     - role: coder
   //       focus: <single line>        # or:
   //       focus: |
@@ -1053,7 +1153,12 @@ function parseTaskYaml(text: string): TaskConfig {
     fail(`task.yml: unsupported workflow '${workflow}'`);
   }
   if (agents.length === 0) fail("task.yml: no agents defined");
-  return { synapseVersion, workflow, goal, agents: assignAgentNames(agents) };
+  const namedAgents = assignAgentNames(agents);
+  const managers = namedAgents.filter((a) => a.role === "manager");
+  if (managers.length !== 1) {
+    fail("task.yml: hub-and-spoke workflow requires exactly one manager");
+  }
+  return { synapseVersion, workflow, goal, agents: namedAgents };
 }
 
 // ---------- CLAUDE.md assembly (bootstrap-spec.md dimension A + #5) ----------
@@ -1188,9 +1293,6 @@ function launchAgentWindow(
 function cmdStart(configPath: string, flags: Record<string, string>) {
   if (!existsSync(configPath)) fail(`task config not found: ${configPath}`);
   const absConfigPath = resolve(configPath);
-  if (basename(absConfigPath) !== "task.yml") {
-    fail(`task config must be named task.yml: ${configPath}`);
-  }
   const config = parseTaskYaml(readFileSync(absConfigPath, "utf8"));
   const goal = flags["goal"] ?? config.goal;
   const noMonitor = flags["no-monitor"] === "true";
@@ -1210,11 +1312,18 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
   const runId = Number(runResult.lastInsertRowid);
   const taskName = `run-${runId}`;
 
-  // Create the task folder and copy task.yml into it.
-  const taskFolder = join(dataDir, "tasks", taskName);
+  // Create the durable run folder and copy task.yml into it with generated
+  // links back to this run's scratch tree.
+  const taskFolder = join(dataDir, "runs", taskName);
+  const agentsDir = join(dataDir, "agents", taskName);
   mkdirSync(taskFolder, { recursive: true });
-  copyFileSync(absConfigPath, join(taskFolder, "task.yml"));
-  console.log(`synapse: created task folder ${taskFolder}`);
+  mkdirSync(agentsDir, { recursive: true });
+  const taskText = readFileSync(absConfigPath, "utf8");
+  writeFileSync(
+    join(taskFolder, "task.yml"),
+    appendGeneratedTaskFields(taskText, runId, workspaceRelativePath(agentsDir)),
+  );
+  console.log(`synapse: created run folder ${taskFolder}`);
 
   // Register operator pseudo-agent
   db.run(
@@ -1290,17 +1399,11 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
     }
   }
 
-  // Send initial goal as TASK from operator to the planner agent, if provided.
+  // Send initial goal as TASK from operator to the manager agent, if provided.
   if (goal) {
-    const planner = config.agents.find((a) => a.role === "planner");
-    if (!planner) {
-      console.error(
-        "synapse: warning — no planner agent found; cannot send initial goal",
-      );
-    } else {
-      cmdSend(planner.name, "TASK", goal, "operator", null);
-      console.log(`synapse: initial goal queued as TASK to '${planner.name}'`);
-    }
+    const manager = config.agents.find((a) => a.role === "manager")!;
+    cmdSend(manager.name, "TASK", goal, "operator", null);
+    console.log(`synapse: initial goal queued as TASK to '${manager.name}'`);
   }
 
   console.log(
@@ -1309,7 +1412,7 @@ function cmdStart(configPath: string, flags: Record<string, string>) {
   console.log(`  Attach: tmux attach -t ${tmuxSession}`);
   console.log(`  Status: synapse status`);
   console.log(
-    `  Finish: SYNAPSE_RUN_ID=${runId} synapse done --status done "<summary>"  (planner calls this, not the operator)`,
+    `  Finish: SYNAPSE_RUN_ID=${runId} synapse done --status done "<summary>"  (manager calls this, not the operator)`,
   );
 }
 
@@ -1419,6 +1522,9 @@ function cmdMonitor(flags: Record<string, string>) {
     pollOnce(db, tmuxSession, debounceMs, log, runId);
     return;
   }
+
+  const releaseMonitorLock = acquireMonitorLock(tmuxSession);
+  process.on("exit", releaseMonitorLock);
 
   runLiveMonitor(db, tmuxSession, debounceMs, sweepMs, log, runId);
 }
@@ -1846,9 +1952,7 @@ function main() {
     case "monitor":
       return cmdMonitor(flags);
     case "start": {
-      const [configPath] = positional;
-      if (!configPath)
-        fail("usage: synapse start <task.yml> [--goal TEXT] [--no-monitor]");
+      const [configPath = DEFAULT_TASK_TEMPLATE] = positional;
       return cmdStart(configPath, flags);
     }
     case "stop": {

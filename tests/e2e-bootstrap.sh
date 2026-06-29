@@ -15,8 +15,9 @@ setup() {
   FAKEBIN="$DIR/fakebin"
   PROJECTS_DIR="$DIR/projects/my-project"
   DATADIR="$DIR"
+  export HOME="$DIR/home"
 
-  mkdir -p "$FAKEBIN" "$PROJECTS_DIR"
+  mkdir -p "$FAKEBIN" "$PROJECTS_DIR" "$HOME"
   printf '#!/bin/sh\necho "$@" >> "%s"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n' "$TMUX_LOG" > "$FAKEBIN/tmux"
   chmod +x "$FAKEBIN/tmux"
   export PATH="$FAKEBIN:$PATH"
@@ -30,7 +31,7 @@ synapse_version: 0.1.0
 workflow: hub-and-spoke
 goal: "Build feature X end to end"
 agents:
-  - role: planner
+  - role: manager
   - role: coder
   - role: coder
   - role: reviewer
@@ -43,7 +44,7 @@ run()  { "$SYNAPSE" "$@" 2>&1 || true; }
 rune() { "$SYNAPSE" "$@" 2>&1; echo "exit:$?"; }
 
 seed_session_ids() {
-  echo "sess-planner"  > "$DATADIR/planner.session-id"
+  echo "sess-manager"  > "$DATADIR/manager.session-id"
   echo "sess-coder1"   > "$DATADIR/coder-1.session-id"
   echo "sess-coder2"   > "$DATADIR/coder-2.session-id"
   echo "sess-reviewer" > "$DATADIR/reviewer.session-id"
@@ -51,7 +52,7 @@ seed_session_ids() {
 
 reset_task_runtime() {
   rm -f "$SYNAPSE_DB" "$SYNAPSE_DB-shm" "$SYNAPSE_DB-wal" "$TMUX_LOG"
-  rm -rf "$DIR/agents/$TASK_NAME"
+  rm -rf "$DIR/agents" "$DIR/runs"
 }
 
 write_transcript() {
@@ -103,7 +104,7 @@ section1() {
   cat > "$DIR/tasks/no-workflow/task.yml" << 'EOF'
 synapse_version: 0.1.0
 agents:
-  - role: planner
+  - role: manager
 EOF
   out=$("$SYNAPSE" start "$DIR/tasks/no-workflow/task.yml" --no-monitor 2>&1; echo "exit:$?")
   assert_exit "1b exit 1 on missing workflow" "$out"
@@ -126,29 +127,31 @@ section2() {
   seed_session_ids
 
   local start_out; start_out=$(run start "$TASK_DIR/task.yml" --no-monitor)
-  assert "started message"           "$start_out" "team '$TASK_NAME' (run #1) started with 4 agent(s)"
+  assert "started message"           "$start_out" "team 'run-1' (run #1) started with 4 agent(s)"
+  assert "run task copy"             "$(cat "$DIR/runs/run-1/task.yml")" "run_id: 1"
+  assert "run task agents_dir"       "$(cat "$DIR/runs/run-1/task.yml")" "agents_dir: $DIR/agents/run-1"
 
   local out; out=$(run status)
   assert "operator registered"       "$out" "operator"
   assert "operator role"             "$out" "operator"
   assert "operator idle"             "$out" "idle"
-  assert "planner registered"        "$out" "planner"
+  assert "manager registered"        "$out" "manager"
   assert "coder-1 registered"        "$out" "coder-1"
   assert "coder-2 registered"        "$out" "coder-2"
   assert "reviewer registered"       "$out" "reviewer"
 }
 
 section3() {
-  echo "[3] start — initial goal queued as TASK to planner"
+  echo "[3] start — initial goal queued as TASK to manager"
   reset_task_runtime
   seed_session_ids
 
   run start "$TASK_DIR/task.yml" --no-monitor --goal "Build feature X end to end" > /dev/null
 
-  local out; out=$(run pending planner)
+  local out; out=$(run pending manager)
   assert "one pending TASK"    "$out" "TASK"
   assert "from operator"       "$out" "operator"
-  assert "to planner"          "$out" "planner"
+  assert "to manager"          "$out" "manager"
   assert "goal body"           "$out" "Build feature X end to end"
 }
 
@@ -159,7 +162,7 @@ section4() {
 
   run start "$TASK_DIR/task.yml" --goal "Build something" > /dev/null
 
-  assert "tmux send-keys to monitor" "$(cat "$TMUX_LOG")" "send-keys -t $TASK_NAME:monitor"
+  assert "tmux send-keys to monitor" "$(cat "$TMUX_LOG")" "send-keys -t run-1:monitor"
   assert "monitor command"           "$(cat "$TMUX_LOG")" "synapse monitor"
 }
 
@@ -168,19 +171,19 @@ section5() {
 
   # 5a: stop coder-2
   rm -f "$TMUX_LOG"
-  run stop coder-2 --session "$TASK_NAME" > /dev/null
+  run stop coder-2 --session run-1 > /dev/null
   local db_status; db_status=$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM agents WHERE window_name='coder-2'")
   assert "5a DB status stopped"       "$db_status"          "stopped"
-  assert "5a tmux kill-window"        "$(cat "$TMUX_LOG")"  "kill-window -t $TASK_NAME:coder-2"
+  assert "5a tmux kill-window"        "$(cat "$TMUX_LOG")"  "kill-window -t run-1:coder-2"
 
   # 5b: stop unknown agent
-  local out; out=$("$SYNAPSE" stop ghost --session "$TASK_NAME" 2>&1; echo "exit:$?")
+  local out; out=$("$SYNAPSE" stop ghost --session run-1 2>&1; echo "exit:$?")
   assert_exit "5b exit 1 on unknown agent"    "$out"
   assert      "5b stderr: no registered agent" "$out" "no registered agent"
 
   # 5c: stopped agent ignored by monitor
   write_transcript sess-coder2 end_turn 5
-  run send coder-2 INFO "message to stopped agent" --from planner > /dev/null
+  run send coder-2 INFO "message to stopped agent" --from manager > /dev/null
   rm -f "$TMUX_LOG"
   run monitor --once --debounce 100 > /dev/null
   local msg_status; msg_status=$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM messages WHERE to_agent='coder-2' AND body='message to stopped agent'")
@@ -193,31 +196,31 @@ section6() {
   rm -f "$SYNAPSE_DB"
   run init > /dev/null
   run register operator  operator  ""            > /dev/null
-  run register planner   planner   sess-planner  > /dev/null
+  run register manager   manager   sess-manager  > /dev/null
   run register coder-1   coder     sess-coder1   > /dev/null
   run register reviewer  reviewer  sess-reviewer > /dev/null
 
-  run send planner  TASK   "Build feature X"      --from operator > /dev/null
+  run send manager  TASK   "Build feature X"      --from operator > /dev/null
   ROOT_ID=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE from_agent='operator' LIMIT 1")
 
-  run send coder-1  TASK   "Implement X"           --from planner  --ref-id "$ROOT_ID" > /dev/null
+  run send coder-1  TASK   "Implement X"           --from manager  --ref-id "$ROOT_ID" > /dev/null
   SUB_ID=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE to_agent='coder-1' LIMIT 1")
 
   run send reviewer REVIEW "Please review PR #42"  --from coder-1  --ref-id "$SUB_ID"  > /dev/null
   REV_ID=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE type='REVIEW' LIMIT 1")
 
   run send coder-1  STATUS "LGTM"                  --from reviewer --ref-id "$REV_ID"  > /dev/null
-  run send planner  STATUS "Feature X done"         --from coder-1  --ref-id "$SUB_ID"  > /dev/null
+  run send manager  STATUS "Feature X done"         --from coder-1  --ref-id "$SUB_ID"  > /dev/null
 
   local rows; rows=$(sqlite3 "$SYNAPSE_DB" "SELECT id||'|'||from_agent||'|'||to_agent||'|'||type||'|'||coalesce(ref_id,'NULL') FROM messages ORDER BY id")
-  assert "msg1 operator->planner TASK no ref"   "$rows" "1|operator|planner|TASK|NULL"
-  assert "msg2 planner->coder-1 TASK ref=1"     "$rows" "2|planner|coder-1|TASK|1"
+  assert "msg1 operator->manager TASK no ref"   "$rows" "1|operator|manager|TASK|NULL"
+  assert "msg2 manager->coder-1 TASK ref=1"     "$rows" "2|manager|coder-1|TASK|1"
   assert "msg3 coder-1->reviewer REVIEW ref=2"  "$rows" "3|coder-1|reviewer|REVIEW|2"
   assert "msg4 reviewer->coder-1 STATUS ref=3"  "$rows" "4|reviewer|coder-1|STATUS|3"
-  assert "msg5 coder-1->planner STATUS ref=2"   "$rows" "5|coder-1|planner|STATUS|2"
+  assert "msg5 coder-1->manager STATUS ref=2"   "$rows" "5|coder-1|manager|STATUS|2"
 
   # 6b: deliver via monitor
-  write_transcript sess-planner  end_turn 5
+  write_transcript sess-manager  end_turn 5
   write_transcript sess-coder1   end_turn 5
   write_transcript sess-reviewer end_turn 5
   rm -f "$TMUX_LOG"
@@ -228,19 +231,22 @@ section6() {
   assert "msg1 delivered" "$statuses" "1:delivered"
   assert "msg2 delivered" "$statuses" "2:delivered"
   assert "msg3 delivered" "$statuses" "3:delivered"
-  assert "tmux send-keys planner"  "$(cat "$TMUX_LOG")" "send-keys -t team:planner"
+  assert "tmux send-keys manager"  "$(cat "$TMUX_LOG")" "send-keys -t team:manager"
   assert "tmux send-keys coder-1"  "$(cat "$TMUX_LOG")" "send-keys -t team:coder-1"
   assert "tmux send-keys reviewer" "$(cat "$TMUX_LOG")" "send-keys -t team:reviewer"
 }
 
 section7() {
-  echo "[7] Re-start rejects existing scratch"
+  echo "[7] Re-start allocates a fresh run"
   reset_task_runtime
   seed_session_ids
   run start "$TASK_DIR/task.yml" --no-monitor > /dev/null
 
   local out; out=$(run start "$TASK_DIR/task.yml" --no-monitor)
-  assert "7 scratch exists message" "$out" "agent scratch already exists"
+  assert "7 second run started" "$out" "team 'run-2' (run #2) started with 4 agent(s)"
+  assert "7 run-1 scratch exists" "$(find "$DIR/agents" -maxdepth 2 -type d | sort)" "$DIR/agents/run-1"
+  assert "7 run-2 scratch exists" "$(find "$DIR/agents" -maxdepth 2 -type d | sort)" "$DIR/agents/run-2"
+  assert "7 run-2 task metadata" "$(cat "$DIR/runs/run-2/task.yml")" "run_id: 2"
 }
 
 # ── main ─────────────────────────────────────────────────────────────────────

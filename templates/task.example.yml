@@ -1,8 +1,7 @@
 synapse_version: 0.1.0
 workflow: hub-and-spoke
-goal: "Implement the new payment flow"
 agents:
-  - role: planner
+  - role: manager
   - role: coder
   - role: coder
   - role: reviewer

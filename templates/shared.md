@@ -8,7 +8,7 @@ below it.
 
 ## Team structure
 
-- One `planner` — the single point of contact for the human operator,
+- One `manager` — the single point of contact for the human operator,
   decomposes the root task, assigns subtasks, tracks completion, and is the
   only agent that calls `synapse done`.
 - One or more `coder` agents — implement assigned subtasks.
@@ -16,9 +16,9 @@ below it.
 - `operator` — the human. Not a tmux window; you reach them only through
   the message bus (`STATUS`/`INFO` to `operator`), never directly.
 
-`TASK`/`STATUS` flow hub-and-spoke through `planner`. `REVIEW` is
-peer-to-peer (coder ↔ reviewer) and doesn't need to route through planner —
-only the final `STATUS` on a review needs to reach planner.
+`TASK`/`STATUS` flow hub-and-spoke through `manager`. `REVIEW` is
+peer-to-peer (coder ↔ reviewer) and doesn't need to route through manager —
+only the final `STATUS` on a review needs to reach manager.
 
 ## How you got here
 
@@ -52,7 +52,7 @@ synapse status
 
 If `SYNAPSE_DB`/`SYNAPSE_AGENT` are ever missing from your shell (e.g. a
 fresh subshell), re-export them rather than guessing paths — the project
-root is two levels up from your cwd (`../../`).
+root is three levels up from your cwd (`../../../`).
 
 ## ref_id discipline
 
@@ -79,10 +79,10 @@ message log is just an undifferentiated chat transcript.
 
 Message bodies are for signaling, not for carrying specs. Don't paste a
 50-line task description into a `TASK` body — write it to a file under
-`.synapse/tasks/` and point at it:
+`.synapse/runs/<run-name>/` and point at it:
 
 ```bash
-synapse send coder-1 TASK "See .synapse/tasks/task-001-backend.md" --ref-id N
+synapse send coder-1 TASK "See .synapse/runs/run-1/42-spec.md" --ref-id N
 ```
 
 Long bodies break tmux-delivered keystrokes (quoting, length) and make

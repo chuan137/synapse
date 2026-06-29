@@ -42,7 +42,7 @@ Problems encountered during the first real team run (operator UI task).
 
 **Root cause:** `dispatchNextDirectMessage` calls `tmux send-keys -t <target> "<message>"` but does not append `Enter` (or sends it as a separate call that may not arrive). The message is visible in the input box but never submitted.
 
-**Fix needed:** Confirm that `dispatchNextDirectMessage` sends `Enter` after the message body, as a single `send-keys` call or an immediate second call.
+**Status:** **Fixed** — `tmuxSendKeys` sends the message body literally with `tmux send-keys -l -- <message>`, then immediately sends `tmux send-keys <target> Enter`. Covered by `tests/monitor.test.ts` and `tests/e2e-monitor.sh`.
 
 ---
 
@@ -105,7 +105,7 @@ synapse send planner STATUS "LGTM. See .synapse/tasks/task-001-backend-review.md
 | 1 | Session ID capture fails (TTY vs pipe conflict) | **Fixed** — pass `--session-id <uuid>` at launch |
 | 2 | Monitor broken without session ID | **Fixed** — unblocked by #1 |
 | 3 | `synapse deliver` DB-only, no tmux send | Fix needed |
-| 4 | Missing Enter on message delivery | Fix needed |
+| 4 | Missing Enter on message delivery | **Fixed** — body + immediate Enter send |
 | 5 | Agent permission prompts block automation | Fix needed |
 | 6 | Monitor delivers one message at a time, too conservative | Fix needed |
 | 7 | Task handoff via message body — should use handoff files | Fix needed |

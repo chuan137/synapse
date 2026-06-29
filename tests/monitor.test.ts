@@ -77,6 +77,25 @@ function run(args: string[], extraEnv: Record<string, string> = {}) {
   };
 }
 
+function runFromRepoRoot(args: string[], extraEnv: Record<string, string> = {}) {
+  const result = Bun.spawnSync([process.execPath, SYNAPSE_CLI, ...args], {
+    cwd: join(import.meta.dir, ".."),
+    env: {
+      ...process.env,
+      PATH: `${fakeBinDir}:${process.env.PATH}`,
+      HOME: dir,
+      SYNAPSE_DB: dbFile,
+      CLAUDE_PROJECTS_DIR: projectsRoot,
+      ...extraEnv,
+    },
+  });
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
+  };
+}
+
 function openDb(): Database {
   return new Database(dbFile, { readonly: true });
 }
@@ -105,7 +124,7 @@ function tmuxLogContents(): string {
 describe("monitor: idle detection", () => {
   beforeEach(() => {
     run(["init"]);
-    run(["register", "planner", "planner", "sess-planner"]);
+    run(["register", "manager", "manager", "sess-manager"]);
     run(["register", "coder-1", "coder", "sess-coder"]);
   });
 
@@ -153,9 +172,9 @@ describe("monitor: idle detection", () => {
 describe("monitor: direct delivery", () => {
   beforeEach(() => {
     run(["init"]);
-    run(["register", "planner", "planner", "sess-planner"]);
+    run(["register", "manager", "manager", "sess-manager"]);
     run(["register", "coder-1", "coder", "sess-coder"]);
-    run(["send", "coder-1", "TASK", "do the thing", "--from", "planner"]);
+    run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
   });
 
   test("delivers the pending message via tmux send-keys once the agent is idle", () => {
@@ -181,7 +200,7 @@ describe("monitor: direct delivery", () => {
     // of typing it out. beforeEach already queued "do the thing" ahead of
     // it, so deliver in two ticks (oldest-first, one per tick) and check
     // the second delivery.
-    run(["send", "coder-1", "INFO", "Enter", "--from", "planner"]);
+    run(["send", "coder-1", "INFO", "Enter", "--from", "manager"]);
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
     run(["monitor", "--once", "--debounce", "100"]);
@@ -213,15 +232,15 @@ describe("monitor: direct delivery", () => {
     expect(task.status).toBe("delivered");
 
     // coder-1 picks up the task (tool_use), then finishes (end_turn) and
-    // reports STATUS back to planner — exactly as section 6.3 specifies.
+    // reports STATUS back to manager — exactly as section 6.3 specifies.
     writeTranscript("sess-coder", "tool_use");
     run(["monitor", "--once", "--debounce", "0"]);
-    run(["send", "planner", "STATUS", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
-    writeTranscript("sess-planner", "end_turn", 5000);
+    run(["send", "manager", "STATUS", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
+    writeTranscript("sess-manager", "end_turn", 5000);
 
     r = run(["monitor", "--once", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
-    expect(tmuxLogContents()).toContain("send-keys -t team:planner -l -- done");
+    expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- done");
 
     const status = openDb().query("SELECT * FROM messages WHERE type='STATUS'").get() as any;
     expect(status.status).toBe("delivered");
@@ -252,7 +271,7 @@ describe("monitor: direct delivery", () => {
   });
 
   test("delivers at most one pending message per agent per tick, oldest first", () => {
-    run(["send", "coder-1", "INFO", "second message", "--from", "planner"]);
+    run(["send", "coder-1", "INFO", "second message", "--from", "manager"]);
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
 
@@ -273,16 +292,16 @@ describe("monitor: direct delivery", () => {
 describe("monitor: broadcast delivery", () => {
   beforeEach(() => {
     run(["init"]);
-    run(["register", "planner", "planner", "sess-planner"]);
+    run(["register", "manager", "manager", "sess-manager"]);
     run(["register", "coder-1", "coder", "sess-coder-1"]);
     run(["register", "coder-2", "coder", "sess-coder-2"]);
   });
 
   test("fans out to every other idle agent and marks the single row delivered", () => {
-    run(["send", "broadcast", "INFO", "stand down", "--from", "planner"]);
+    run(["send", "broadcast", "INFO", "stand down", "--from", "manager"]);
     writeTranscript("sess-coder-1", "end_turn", 5000);
     writeTranscript("sess-coder-2", "end_turn", 5000);
-    writeTranscript("sess-planner", "end_turn", 5000);
+    writeTranscript("sess-manager", "end_turn", 5000);
 
     const r = run(["monitor", "--once", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
@@ -291,14 +310,14 @@ describe("monitor: broadcast delivery", () => {
     expect(log).toContain("send-keys -t team:coder-1 -l -- stand down");
     expect(log).toContain("send-keys -t team:coder-2 -l -- stand down");
     // sender is excluded from the fan-out
-    expect(log).not.toContain("team:planner");
+    expect(log).not.toContain("team:manager");
 
     const msg = openDb().query("SELECT * FROM messages WHERE to_agent='broadcast'").get() as any;
     expect(msg.status).toBe("delivered");
   });
 
   test("withholds the broadcast entirely if any recipient is still busy", () => {
-    run(["send", "broadcast", "INFO", "stand down", "--from", "planner"]);
+    run(["send", "broadcast", "INFO", "stand down", "--from", "manager"]);
     writeTranscript("sess-coder-1", "end_turn", 5000);
     writeTranscript("sess-coder-2", "tool_use"); // still busy
 
@@ -368,7 +387,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
 
   beforeEach(() => {
     run(["init"]);
-    run(["register", "planner", "planner", "sess-planner"]);
+    run(["register", "manager", "manager", "sess-manager"]);
     run(["register", "coder-1", "coder", "sess-coder"]);
     proc = undefined;
   });
@@ -390,7 +409,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
     // (that's what produced the "hello while idle" cross-test bleed seen
     // while debugging this). Giving the test room to finish on its own,
     // comfortably above waitFor's own ceiling, is the actual fix.
-    run(["send", "coder-1", "TASK", "do the thing", "--from", "planner"]);
+    run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
     proc = spawnLiveMonitor(["--debounce", "80", "--interval", "30"]);
     const out = collectStream(proc.stdout);
     await waitFor(() => out.text().includes("watching tmux session"));
@@ -416,6 +435,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
 
     expect(msg.status).toBe("delivered");
     expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- do the thing");
+    expect(out.text()).toContain("[watch]   coder-1: transcript activity");
   }, 15000);
 
   test("a message sent while the agent is already idle is still delivered, via the cheap sweep", async () => {
@@ -432,7 +452,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
       return row?.status === "idle";
     });
 
-    run(["send", "coder-1", "TASK", "hello while idle", "--from", "planner"]);
+    run(["send", "coder-1", "TASK", "hello while idle", "--from", "manager"]);
     let msg: any;
     await waitFor(() => {
       msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
@@ -441,6 +461,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
 
     expect(msg.status).toBe("delivered");
     expect(tmuxLogContents()).toContain("hello while idle");
+    expect(out.text()).toContain("[sweep]");
   }, 15000);
 
   test("end_turn with no pending direct mail does not leave a debounce recheck timer", async () => {
@@ -467,7 +488,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
   }, 15000);
 
   test("a watcher event after an agent is stopped does not revive or deliver to it", async () => {
-    run(["send", "coder-1", "TASK", "do not deliver", "--from", "planner"]);
+    run(["send", "coder-1", "TASK", "do not deliver", "--from", "manager"]);
     writeTranscript("sess-coder", "tool_use");
     proc = spawnLiveMonitor(["--debounce", "40", "--interval", "5000"]);
     const out = collectStream(proc.stdout);
@@ -499,6 +520,29 @@ describe("monitor: live event-driven loop (no --once)", () => {
     expect(out.text()).toContain("stopped");
     proc = undefined;
   }, 15000);
+});
+
+describe("monitor: live process lock", () => {
+  beforeEach(() => {
+    run(["init"]);
+  });
+
+  test("refuses to start a second live monitor for the same tmux session", () => {
+    writeFileSync(join(dir, "monitor-team.pid"), `${process.pid}\n`);
+
+    const r = run(["monitor", "--session", "team", "--interval", "30"]);
+
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("monitor already running for tmux session 'team'");
+  });
+
+  test("--once does not take the live monitor lock", () => {
+    writeFileSync(join(dir, "monitor-team.pid"), `${process.pid}\n`);
+
+    const r = run(["monitor", "--once", "--session", "team"]);
+
+    expect(r.exitCode).toBe(0);
+  });
 });
 
 // bootstrap-spec.md #8/#9: `synapse done` is the only thing that ends a run;
@@ -562,10 +606,98 @@ describe("monitor: run lifecycle teardown", () => {
 });
 
 // End-to-end `synapse start` against a real task.yml — templates assembled
-// into CLAUDE.md, a task-scoped tmux session, planner goal routing, all with the same fake
+// into CLAUDE.md, a task-scoped tmux session, manager goal routing, all with the same fake
 // tmux used elsewhere in this file so it doesn't touch a real session.
 describe("start: full agent launch against task.yml", () => {
-  test("writes CLAUDE.md per agent, creates a task-scoped tmux session, and routes the goal to planner", () => {
+  test("uses templates/task.example.yml when no config path is provided", () => {
+    writeFileSync(
+      join(fakeBinDir, "tmux"),
+      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
+    );
+    run(["init"]);
+
+    const r = runFromRepoRoot(["start", "--no-monitor"]);
+    expect(r.exitCode).toBe(0);
+
+    const db = openDb();
+    const runRow = db.query("SELECT * FROM runs").get() as any;
+    expect(runRow.session).toBe("run-1");
+    expect(runRow.goal).toBe("");
+
+    const task = db
+      .query("SELECT * FROM messages WHERE type='TASK' AND from_agent='operator'")
+      .get() as any;
+    expect(task).toBeNull();
+  }, 15000);
+
+  test("routes an explicit --goal to manager when using the default template", () => {
+    writeFileSync(
+      join(fakeBinDir, "tmux"),
+      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
+    );
+    run(["init"]);
+
+    const r = runFromRepoRoot([
+      "start",
+      "--no-monitor",
+      "--goal",
+      "Build feature X",
+    ]);
+    expect(r.exitCode).toBe(0);
+
+    const db = openDb();
+    const runRow = db.query("SELECT * FROM runs").get() as any;
+    expect(runRow.goal).toBe("Build feature X");
+
+    const task = db
+      .query("SELECT * FROM messages WHERE type='TASK' AND from_agent='operator'")
+      .get() as any;
+    expect(task.to_agent).toBe("manager");
+    expect(task.body).toBe("Build feature X");
+  }, 15000);
+
+  test("starts monitor with the shared monitor log", () => {
+    writeFileSync(
+      join(fakeBinDir, "tmux"),
+      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
+    );
+
+    const r = runFromRepoRoot(["start"]);
+    expect(r.exitCode).toBe(0);
+
+    const log = tmuxLogContents();
+    expect(log).toContain("synapse.ts monitor --session run-1 --run-id 1");
+    expect(log).toContain("monitor.log");
+    expect(log).not.toContain("sweep-run-1.log");
+  }, 15000);
+
+  test("accepts any task template filename and stores the run copy as task.yml", () => {
+    writeFileSync(
+      join(fakeBinDir, "tmux"),
+      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
+    );
+    run(["init"]);
+
+    const yaml = join(dir, "team.yaml");
+    writeFileSync(
+      yaml,
+      [
+        "synapse_version: 0.1.0",
+        "workflow: hub-and-spoke",
+        "agents:",
+        "  - role: manager",
+        "",
+      ].join("\n"),
+    );
+
+    const r = run(["start", yaml, "--no-monitor"]);
+    expect(r.exitCode).toBe(0);
+    expect(readFileSync(join(dir, "runs", "run-1", "task.yml"), "utf8")).toContain(
+      "run_id: 1",
+    );
+  }, 15000);
+
+  test("writes CLAUDE.md per agent, creates a task-scoped tmux session, and routes the goal to manager", () => {
     // The shared fake tmux (above) always exits 0, which works for every
     // command this suite uses elsewhere — except `has-session`, where exit
     // code is the actual signal (0 = exists). cmdStart relies on that to
@@ -588,7 +720,7 @@ describe("start: full agent launch against task.yml", () => {
         "workflow: hub-and-spoke",
         'goal: "Build feature X"',
         "agents:",
-        "  - role: planner",
+        "  - role: manager",
         "  - role: coder",
         "    focus: backend",
         "  - role: coder",
@@ -603,25 +735,25 @@ describe("start: full agent launch against task.yml", () => {
     const runRow = db.query("SELECT * FROM runs").get() as any;
     expect(runRow.status).toBe("running");
     expect(runRow.goal).toBe("Build feature X");
-    expect(runRow.session).toBe(taskName);
+    expect(runRow.session).toBe("run-1");
 
     const tmuxSession = runRow.session;
     const log = tmuxLogContents();
     expect(log).toContain(`new-session -d -s ${tmuxSession}`);
     expect(log).toContain(`rename-window -t ${tmuxSession} monitor`);
-    expect(log).toContain(`new-window -t ${tmuxSession} -n planner`);
+    expect(log).toContain(`new-window -t ${tmuxSession} -n manager`);
     expect(log).toContain(`new-window -t ${tmuxSession} -n coder-1`);
     expect(log).toContain(`new-window -t ${tmuxSession} -n coder-2`);
 
-    const plannerAgent = db.query("SELECT * FROM agents WHERE window_name='planner'").get() as any;
+    const managerAgent = db.query("SELECT * FROM agents WHERE window_name='manager'").get() as any;
     const coderAgent = db.query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
-    expect(plannerAgent.role).toBe("planner");
+    expect(managerAgent.role).toBe("manager");
     expect(coderAgent.role).toBe("coder");
 
-    const agentsRoot = join(dir, "agents", taskName);
-    const plannerMd = readFileSync(join(agentsRoot, "planner", "CLAUDE.md"), "utf8");
-    expect(plannerMd).toContain("Synapse Team — Shared Protocol");
-    expect(plannerMd).toContain("Your role: planner");
+    const agentsRoot = join(dir, "agents", tmuxSession);
+    const managerMd = readFileSync(join(agentsRoot, "manager", "CLAUDE.md"), "utf8");
+    expect(managerMd).toContain("Synapse Team — Shared Protocol");
+    expect(managerMd).toContain("Your role: manager");
 
     const coderMd = readFileSync(join(agentsRoot, "coder-1", "CLAUDE.md"), "utf8");
     expect(coderMd).toContain("Your role: coder");
@@ -630,11 +762,15 @@ describe("start: full agent launch against task.yml", () => {
     const secondCoderMd = readFileSync(join(agentsRoot, "coder-2", "CLAUDE.md"), "utf8");
     expect(secondCoderMd).toContain("Your role: coder");
 
-    // Goal routes to planner.
+    const runTask = readFileSync(join(dir, "runs", tmuxSession, "task.yml"), "utf8");
+    expect(runTask).toContain("run_id: 1");
+    expect(runTask).toContain(`agents_dir: ${agentsRoot}`);
+
+    // Goal routes to manager.
     const task = db
       .query("SELECT * FROM messages WHERE type='TASK' AND from_agent='operator'")
       .get() as any;
-    expect(task.to_agent).toBe("planner");
+    expect(task.to_agent).toBe("manager");
     expect(task.body).toBe("Build feature X");
   }, 15000);
 });

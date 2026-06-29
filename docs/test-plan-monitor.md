@@ -41,7 +41,7 @@ write_transcript() {
 
 ```bash
 ./bin/synapse init
-./bin/synapse register planner planner sess-planner
+./bin/synapse register manager manager sess-manager
 ./bin/synapse register coder-1 coder   sess-coder
 ./bin/synapse status
 ```
@@ -53,7 +53,7 @@ write_transcript() {
 ## 2. Send a TASK
 
 ```bash
-./bin/synapse send coder-1 TASK "implement feature X" --from planner
+./bin/synapse send coder-1 TASK "implement feature X" --from manager
 ./bin/synapse pending
 ```
 
@@ -94,7 +94,7 @@ cat /tmp/synapse-tmux.log
 ## 5. Debounce Guard — end_turn within window → no delivery
 
 ```bash
-./bin/synapse send coder-1 INFO "another message" --from planner
+./bin/synapse send coder-1 INFO "another message" --from manager
 write_transcript sess-coder end_turn 0   # timestamp = now
 rm -f /tmp/synapse-tmux.log
 ./bin/synapse monitor --once --debounce 60000
@@ -109,16 +109,16 @@ cat /tmp/synapse-tmux.log   # should be empty
 
 ```bash
 TASK_ID=$(sqlite3 $SYNAPSE_DB "SELECT id FROM messages WHERE type='TASK' LIMIT 1")
-./bin/synapse send planner STATUS "feature X done" --from coder-1 --ref-id $TASK_ID
+./bin/synapse send manager STATUS "feature X done" --from coder-1 --ref-id $TASK_ID
 
-write_transcript sess-planner end_turn 5
+write_transcript sess-manager end_turn 5
 ./bin/synapse monitor --once --debounce 100
 cat /tmp/synapse-tmux.log
 sqlite3 $SYNAPSE_DB "SELECT type,status,ref_id FROM messages"
 ```
 
 **Expected:**
-- tmux log contains `send-keys -t team:planner -l -- feature X done`
+- tmux log contains `send-keys -t team:manager -l -- feature X done`
 - STATUS row has `ref_id` = TASK id
 
 ---

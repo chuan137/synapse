@@ -171,7 +171,7 @@ describe("register", () => {
 describe("send", () => {
   beforeEach(() => {
     run(["init"]);
-    run(["register", "planner", "planner", "sess-p"]);
+    run(["register", "manager", "manager", "sess-p"]);
     run(["register", "coder-1", "coder", "sess-c"]);
   });
 
@@ -180,7 +180,7 @@ describe("send", () => {
   // validate or insert anything.
   test("queues a message for each valid type without crashing", () => {
     for (const type of ["TASK", "STATUS", "REVIEW", "ACK", "INFO"]) {
-      const r = run(["send", "coder-1", type, `a ${type} message`, "--from", "planner"]);
+      const r = run(["send", "coder-1", type, `a ${type} message`, "--from", "manager"]);
       expect(r.exitCode).toBe(0);
       expect(r.stderr).toBe("");
     }
@@ -190,7 +190,7 @@ describe("send", () => {
   });
 
   test("rejects an unrecognized type instead of crashing", () => {
-    const r = run(["send", "coder-1", "BOGUS", "hi", "--from", "planner"]);
+    const r = run(["send", "coder-1", "BOGUS", "hi", "--from", "manager"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("type must be one of");
     expect(r.stderr).not.toContain("ReferenceError");
@@ -203,7 +203,7 @@ describe("send", () => {
   });
 
   test("warns but still sends to an unregistered recipient", () => {
-    const r = run(["send", "nobody", "INFO", "hi", "--from", "planner"]);
+    const r = run(["send", "nobody", "INFO", "hi", "--from", "manager"]);
     expect(r.exitCode).toBe(0);
     expect(r.stderr).toContain("not in agents registry");
     const db = openDb();
@@ -212,9 +212,9 @@ describe("send", () => {
   });
 
   test("stores ref_id when --ref-id is passed", () => {
-    run(["send", "coder-1", "TASK", "do the thing", "--from", "planner"]);
+    run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
     const taskId = (openDb().query("SELECT id FROM messages ORDER BY id DESC LIMIT 1").get() as any).id;
-    run(["send", "planner", "STATUS", "done", "--from", "coder-1", "--ref-id", String(taskId)]);
+    run(["send", "manager", "STATUS", "done", "--from", "coder-1", "--ref-id", String(taskId)]);
     const status = openDb()
       .query("SELECT * FROM messages WHERE type='STATUS'")
       .get() as any;
@@ -257,13 +257,13 @@ describe("status", () => {
 
   test("lists a registered agent with its pending count", () => {
     run(["init"]);
-    run(["register", "planner", "planner", "sess-p"]);
+    run(["register", "manager", "manager", "sess-p"]);
     run(["register", "coder-1", "coder", "sess-c"]);
-    run(["send", "coder-1", "TASK", "hi", "--from", "planner"]);
+    run(["send", "coder-1", "TASK", "hi", "--from", "manager"]);
     const r = run(["status"]);
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain("coder-1");
-    // header + coder-1 row + planner row
+    // header + coder-1 row + manager row
     const lines = r.stdout.trim().split("\n");
     expect(lines.length).toBe(3);
   });
@@ -272,9 +272,9 @@ describe("status", () => {
 describe("pending / deliver", () => {
   beforeEach(() => {
     run(["init"]);
-    run(["register", "planner", "planner", "sess-p"]);
+    run(["register", "manager", "manager", "sess-p"]);
     run(["register", "coder-1", "coder", "sess-c"]);
-    run(["send", "coder-1", "TASK", "do the thing", "--from", "planner"]);
+    run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
   });
 
   test("pending shows the queued message", () => {
@@ -337,19 +337,19 @@ describe("start — task.yml parsing", () => {
     const taskDir = join(dir, ".synapse", "tasks", "no-workflow");
     mkdirSync(taskDir, { recursive: true });
     const yaml = join(taskDir, "task.yml");
-    Bun.write(yaml, "synapse_version: 0.1.0\nagents:\n  - role: planner\n");
+    Bun.write(yaml, "synapse_version: 0.1.0\nagents:\n  - role: manager\n");
     const r = run(["start", yaml, "--no-monitor"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("missing 'workflow'");
   });
 
-  test("fails when config is not named task.yml", () => {
+  test("fails when hub-and-spoke has no manager role", () => {
     run(["init"]);
     const yaml = join(dir, "team.yaml");
-    Bun.write(yaml, "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n  - role: planner\n");
+    Bun.write(yaml, "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n  - role: coder\n");
     const r = run(["start", yaml, "--no-monitor"]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("must be named task.yml");
+    expect(r.stderr).toContain("requires exactly one manager");
   });
 });
 
@@ -379,19 +379,19 @@ describe("ref_id chain", () => {
   beforeEach(() => {
     run(["init"]);
     run(["register", "operator", "operator", null]);
-    run(["register", "planner", "planner", "sess-p"]);
+    run(["register", "manager", "manager", "sess-p"]);
     run(["register", "coder-1", "coder", "sess-c"]);
     run(["register", "reviewer", "reviewer", "sess-r"]);
   });
 
   test("full TASK→STATUS→REVIEW→STATUS chain stores correct ref_id links", () => {
-    // operator -> planner: root TASK
-    run(["send", "planner", "TASK", "Build feature X", "--from", "operator"]);
+    // operator -> manager: root TASK
+    run(["send", "manager", "TASK", "Build feature X", "--from", "operator"]);
     const rootTask = openDb().query("SELECT id FROM messages WHERE type='TASK' AND from_agent='operator'").get() as any;
 
-    // planner -> coder-1: subtask
-    run(["send", "coder-1", "TASK", "Implement X", "--from", "planner", "--ref-id", String(rootTask.id)]);
-    const subTask = openDb().query("SELECT id, ref_id FROM messages WHERE type='TASK' AND from_agent='planner'").get() as any;
+    // manager -> coder-1: subtask
+    run(["send", "coder-1", "TASK", "Implement X", "--from", "manager", "--ref-id", String(rootTask.id)]);
+    const subTask = openDb().query("SELECT id, ref_id FROM messages WHERE type='TASK' AND from_agent='manager'").get() as any;
     expect(subTask.ref_id).toBe(rootTask.id);
 
     // coder-1 -> reviewer: REVIEW
@@ -404,15 +404,15 @@ describe("ref_id chain", () => {
     const reviewStatus = openDb().query("SELECT ref_id FROM messages WHERE type='STATUS' AND from_agent='reviewer'").get() as any;
     expect(reviewStatus.ref_id).toBe(review.id);
 
-    // coder-1 -> planner: final STATUS
-    run(["send", "planner", "STATUS", "Feature X done", "--from", "coder-1", "--ref-id", String(subTask.id)]);
+    // coder-1 -> manager: final STATUS
+    run(["send", "manager", "STATUS", "Feature X done", "--from", "coder-1", "--ref-id", String(subTask.id)]);
     const finalStatus = openDb().query("SELECT ref_id FROM messages WHERE type='STATUS' AND from_agent='coder-1'").get() as any;
     expect(finalStatus.ref_id).toBe(subTask.id);
   });
 
   test("pending shows all undelivered messages across the chain", () => {
-    run(["send", "planner", "TASK", "Do something", "--from", "operator"]);
-    run(["send", "coder-1", "TASK", "Subtask", "--from", "planner"]);
+    run(["send", "manager", "TASK", "Do something", "--from", "operator"]);
+    run(["send", "coder-1", "TASK", "Subtask", "--from", "manager"]);
     run(["send", "reviewer", "REVIEW", "Check this", "--from", "coder-1"]);
 
     const pending = run(["pending"]);
@@ -431,7 +431,7 @@ describe("done", () => {
   beforeEach(() => {
     run(["init"]);
     run(["register", "operator", "operator", null]);
-    run(["register", "planner", "planner", "sess-p"]);
+    run(["register", "manager", "manager", "sess-p"]);
   });
 
   function insertRun(): number {
@@ -445,13 +445,13 @@ describe("done", () => {
 
   test("marks the run completed and sends a final STATUS to operator, ref_id defaulted to the root TASK", () => {
     const runId = insertRun();
-    run(["send", "planner", "TASK", "Build feature X", "--from", "operator"]);
+    run(["send", "manager", "TASK", "Build feature X", "--from", "operator"]);
     const rootTask = openDb()
-      .query("SELECT id FROM messages WHERE type='TASK' AND to_agent='planner'")
+      .query("SELECT id FROM messages WHERE type='TASK' AND to_agent='manager'")
       .get() as any;
 
     const r = run(["done", "All done", "--status", "done", "--run-id", String(runId)], {
-      SYNAPSE_AGENT: "planner",
+      SYNAPSE_AGENT: "manager",
     });
     expect(r.exitCode).toBe(0);
 
@@ -461,7 +461,7 @@ describe("done", () => {
     expect(run_.ended_at).not.toBeNull();
 
     const status = db
-      .query("SELECT * FROM messages WHERE type='STATUS' AND from_agent='planner' AND to_agent='operator'")
+      .query("SELECT * FROM messages WHERE type='STATUS' AND from_agent='manager' AND to_agent='operator'")
       .get() as any;
     expect(status.body).toBe("All done");
     expect(status.ref_id).toBe(rootTask.id);
@@ -470,7 +470,7 @@ describe("done", () => {
   test("--status failed marks the run failed", () => {
     const runId = insertRun();
     const r = run(["done", "Could not finish", "--status", "failed", "--run-id", String(runId)], {
-      SYNAPSE_AGENT: "planner",
+      SYNAPSE_AGENT: "manager",
     });
     expect(r.exitCode).toBe(0);
     const run_ = openDb().query("SELECT status FROM runs WHERE id=?").get(runId) as any;
@@ -479,14 +479,14 @@ describe("done", () => {
 
   test("an explicit --ref-id overrides the root-TASK default", () => {
     const runId = insertRun();
-    run(["send", "planner", "TASK", "Build feature X", "--from", "operator"]);
+    run(["send", "manager", "TASK", "Build feature X", "--from", "operator"]);
     const r = run(
       ["done", "All done", "--status", "done", "--run-id", String(runId), "--ref-id", "999"],
-      { SYNAPSE_AGENT: "planner" },
+      { SYNAPSE_AGENT: "manager" },
     );
     expect(r.exitCode).toBe(0);
     const status = openDb()
-      .query("SELECT ref_id FROM messages WHERE type='STATUS' AND from_agent='planner'")
+      .query("SELECT ref_id FROM messages WHERE type='STATUS' AND from_agent='manager'")
       .get() as any;
     expect(status.ref_id).toBe(999);
   });
