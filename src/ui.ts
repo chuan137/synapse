@@ -31,6 +31,29 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     --tooltip-bg: rgba(240,240,240,0.95);
     --tooltip-text: #111;
     --hover-soft: rgba(255,255,255,0.02);
+    --hover-bg: rgba(255,255,255,0.04);
+    --selected-bg: rgba(112,145,245,0.08);
+    --status-busy: #facc15;
+  }
+  body.light {
+    --bg:      #f5f5f7;
+    --surface: #ffffff;
+    --border:  #d1d1d6;
+    --text:    #1c1c1e;
+    --muted:   #86868b;
+    --accent:  #4a6ef5;
+    --idle:    #16a34a;
+    --working: #d97706;
+    --error:   #dc2626;
+    --p0:      #dc2626;
+    --p0-bg:   #fef2f2;
+    --p0-text: #991b1b;
+    --tooltip-bg: rgba(30,30,30,0.92);
+    --tooltip-text: #f5f5f7;
+    --hover-soft: rgba(0,0,0,0.03);
+    --hover-bg: rgba(0,0,0,0.04);
+    --selected-bg: rgba(74,110,245,0.08);
+    --status-busy: #d97706;
   }
   html, body { height: 100%; }
   body {
@@ -91,6 +114,18 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     font-size: 11px;
     color: var(--muted);
   }
+  #theme-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    line-height: 1;
+  }
+  #theme-btn:hover { color: var(--text); border-color: var(--text); }
   #ack-run-btn {
     display: none;
     background: var(--error);
@@ -110,21 +145,23 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   /* ── Layout ── */
   main {
     display: grid;
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: 140px 1fr;
     flex: 1;
     min-height: 0;
     overflow: hidden;
   }
 
-  /* ── Agents panel ── */
-  #agents-panel {
-    border-right: 2px solid var(--border);
+  /* ── Runs sidebar ── */
+  #runs-sidebar {
+    width: 140px;
+    min-width: 140px;
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     background: var(--bg);
   }
-  .panel-header {
+  .sidebar-header {
     height: 41px;
     flex-shrink: 0;
     padding: 0 14px;
@@ -138,33 +175,104 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     border-bottom: 1px solid var(--border);
     background: var(--surface);
   }
-  #agents-list {
+  #runs-sidebar-list {
     flex: 1;
     overflow-y: auto;
-    padding: 10px;
+    padding: 4px 0;
+  }
+  .run-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 12px;
+    border-left: 2px solid transparent;
+  }
+  .run-item:hover { background: var(--hover-bg); }
+  .run-item.selected { border-left-color: var(--accent); background: var(--selected-bg); }
+  .run-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+  .run-dot[data-state="running"] {
+    background: var(--status-busy);
+    animation: pulse 1.5s infinite;
+  }
+  .run-dot[data-state="done"] {
+    background: var(--muted);
+  }
+  .run-item-info { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .run-label { font-weight: 600; color: var(--text); }
+  .run-session { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .run-status-badge { font-size: 10px; color: var(--muted); }
+  .run-status-running { color: var(--status-busy); }
+  .run-status-completed { color: var(--idle); }
+  .run-status-failed { color: var(--error); }
+  .new-run-btn {
+    margin: 8px;
+    padding: 6px;
+    font-size: 12px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--muted);
+    border-radius: 4px;
+    cursor: not-allowed;
+    opacity: 0.5;
+    font-family: inherit;
+  }
+
+  /* ── Messages panel ── */
+  #messages-panel {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-  }
-  .agent-card {
+    overflow: hidden;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 9px 11px;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
   }
-  .agent-card:hover {
-    background: color-mix(in srgb, var(--muted) 4%, var(--surface));
+  #thread-header {
+    padding: 8px 14px 6px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
   }
-  .agent-card.selected {
-    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-    border-left: 2px solid var(--accent);
-  }
-  .agent-card-header {
+  #thread-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
+  }
+  .thread-goal {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 600px;
+    margin-top: 2px;
+  }
+
+  /* ── Agents strip ── */
+  .agents-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    min-height: 32px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .agent-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
   }
   .agent-state-dot {
     width: 6px;
@@ -176,24 +284,9 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   .agent-state-dot[data-state="idle"]    { background: var(--idle); }
   .agent-state-dot[data-state="busy"]    { background: var(--working); animation: pulse 1.4s ease-in-out infinite; }
   .agent-state-dot[data-state="stopped"] { background: var(--muted); }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.4; transform: scale(0.75); }
-  }
   .agent-name {
     font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-transform: capitalize;
-  }
-  .agent-role {
-    font-size: 10px;
     color: var(--muted);
-    white-space: nowrap;
   }
   .agent-pending {
     background: color-mix(in srgb, var(--working) 25%, transparent);
@@ -204,20 +297,13 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     border-radius: 3px;
     flex-shrink: 0;
   }
-  .empty-state {
-    color: var(--muted);
-    font-size: 12px;
-    text-align: center;
-    padding: 32px 12px;
+  .agents-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.75); }
   }
 
-  /* ── Messages panel ── */
-  #messages-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--surface);
-  }
   #messages-list {
     flex: 1;
     overflow-y: auto;
@@ -238,16 +324,16 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     border-left: 2px solid transparent;
   }
   .message-row.from-human {
-    background: rgba(112,145,245,0.07);
-    border-left-color: rgba(112,145,245,0.35);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    border-left-color: color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .message-row.from-agent {
-    background: rgba(255,255,255,0.025);
+    background: color-mix(in srgb, var(--muted) 6%, var(--surface));
     transition: background 0.15s, border-left-color 0.15s;
   }
   .message-row.from-agent:hover {
-    background: rgba(255,255,255,0.055);
-    border-left-color: rgba(112,145,245,0.4);
+    background: color-mix(in srgb, var(--muted) 12%, var(--surface));
+    border-left-color: color-mix(in srgb, var(--accent) 40%, transparent);
   }
   .message-avatar {
     width: 26px;
@@ -326,6 +412,13 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   .message-content a:hover { text-decoration: underline; }
   .message-content strong { font-weight: 700; color: var(--text); }
 
+  .empty-state {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 32px 12px;
+  }
+
   /* ── Compose ── */
   #compose {
     border-top: 1px solid var(--border);
@@ -335,12 +428,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     flex-direction: column;
     gap: 8px;
   }
-  .compose-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .compose-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
   select, input {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -354,7 +441,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
   select:focus, input:focus { border-color: var(--accent); }
   select option { background: var(--bg); }
-  #input-to { width: 130px; }
   textarea#msg-input {
     width: 100%;
     resize: vertical;
@@ -403,28 +489,26 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 <header id="header">
   <span class="logo">SYNAPSE</span>
   <span id="conn-status" class="disconnected">● connecting</span>
+  <button id="theme-btn" title="Toggle light/dark theme">☀︎</button>
   <button id="ack-run-btn" title="Acknowledge finished task and stop the team">ACK end</button>
   <span id="msg-count-badge"></span>
 </header>
 <main>
-  <div id="agents-panel">
-    <div class="panel-header"><span>Agents</span></div>
-    <div id="agents-list"><div class="empty-state">loading…</div></div>
-  </div>
+  <aside id="runs-sidebar">
+    <div class="sidebar-header"><span>Runs</span></div>
+    <div id="runs-sidebar-list"></div>
+    <button id="new-run-btn" class="new-run-btn" disabled title="Coming soon">+ New Run</button>
+  </aside>
   <div id="messages-panel">
-    <div class="panel-header">
-      <span id="thread-title">Thread</span>
+    <div id="thread-header">
+      <div id="thread-title">Thread</div>
+      <div id="thread-goal" class="thread-goal"></div>
+    </div>
+    <div id="agents-strip" class="agents-strip">
+      <span class="agents-empty">no agents</span>
     </div>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
     <div id="compose">
-      <div class="compose-row">
-        <span class="compose-label">To:</span>
-        <select id="input-to"></select>
-        <span class="compose-label">Type:</span>
-        <select id="input-type">
-          <option>STATUS</option><option>REVIEW</option><option>ACK</option><option>INFO</option>
-        </select>
-      </div>
       <textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>
       <div class="compose-bottom">
         <button id="send-btn">Send</button>
@@ -436,23 +520,36 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 <script>
 (function () {
   const $ = id => document.getElementById(id);
-  const agentsList  = $('agents-list');
   const msgList     = $('messages-list');
   const header      = $('header');
   const connStatus  = $('conn-status');
-  const inputTo     = $('input-to');
-  const inputType   = $('input-type');
   const msgInput    = $('msg-input');
   const sendBtn     = $('send-btn');
   const feedback    = $('send-feedback');
   const countBadge  = $('msg-count-badge');
   const ackRunBtn   = $('ack-run-btn');
 
-  const seenIds = new Set();
   let totalMsgs = 0;
-  let currentRun = null;
 
-  // Markdown: marked + DOMPurify (loaded from CDN in <head>)
+  const state = {
+    runs: [],
+    selectedRunId: null,
+    agents: new Map(),
+    messages: new Map(),
+    seenMsgIds: new Set(),
+  };
+
+  // Theme toggle
+  const themeBtn = $('theme-btn');
+  const savedTheme = localStorage.getItem('synapse-theme') || 'dark';
+  if (savedTheme === 'light') document.body.classList.add('light');
+  themeBtn.textContent = savedTheme === 'light' ? '☽' : '☀︎';
+  themeBtn.addEventListener('click', () => {
+    const isLight = document.body.classList.toggle('light');
+    localStorage.setItem('synapse-theme', isLight ? 'light' : 'dark');
+    themeBtn.textContent = isLight ? '☽' : '☀︎';
+  });
+
   function renderMd(raw) {
     if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
       return '<span class="message-content-plain"></span>';
@@ -487,45 +584,10 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     setTimeout(() => { feedback.textContent = ''; feedback.className = ''; }, 3000);
   }
 
-  function renderAgents(agents) {
-    const cur = inputTo.value;
-    inputTo.innerHTML = agents.map(a => '<option value="' + esc(a.window_name) + '">' + esc(a.window_name) + '</option>').join('');
-    if (cur) inputTo.value = cur;
-
-    if (!agents.length) {
-      agentsList.innerHTML = '<div class="empty-state">No agents connected.</div>';
-      return;
-    }
-    agentsList.innerHTML = agents.map(a => {
-      const st = (a.status || 'unknown').toLowerCase();
-      const dotState = ['idle','busy','stopped'].includes(st) ? st : 'unknown';
-      const badge = a.pending_count > 0
-        ? '<span class="agent-pending">' + a.pending_count + '</span>' : '';
-      return '<div class="agent-card" data-name="' + esc(a.window_name) + '">' +
-        '<div class="agent-card-header">' +
-          '<span class="agent-state-dot" data-state="' + esc(dotState) + '"></span>' +
-          '<span class="agent-name" title="' + esc(a.window_name) + '">' + esc(a.window_name) + '</span>' +
-          '<span class="agent-role">' + esc(a.role || '') + '</span>' +
-          badge +
-        '</div>' +
-      '</div>';
-    }).join('');
-
-    // Click to select
-    agentsList.querySelectorAll('.agent-card').forEach(card => {
-      card.addEventListener('click', () => {
-        agentsList.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        const name = card.dataset.name;
-        if (inputTo) { inputTo.value = name; }
-      });
-    });
-  }
-
   function buildMessageRow(msg) {
     const isHuman = msg.from_agent === 'operator';
     const direction = isHuman ? 'from-human' : 'from-agent';
-    const sender = isHuman ? msg.from_agent : msg.from_agent;
+    const sender = msg.from_agent;
     const avi = initials(sender);
     const t = (msg.type || '').toUpperCase();
     const typeBadge = t ? '<span class="msg-type-badge msg-type-' + esc(t) + '">' + esc(t) + '</span>' : '';
@@ -551,42 +613,136 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
 
   function appendMessage(msg) {
-    if (seenIds.has(msg.id)) return;
-    seenIds.add(msg.id);
     totalMsgs++;
     countBadge.textContent = totalMsgs + ' messages';
     const empty = $('empty-msgs');
     if (empty) empty.remove();
-    // Newest at bottom
     msgList.appendChild(buildMessageRow(msg));
     msgList.scrollTop = msgList.scrollHeight;
   }
 
-  function renderThread(payload) {
-    const messages = Array.isArray(payload) ? payload : (payload.messages || []);
-    const run = Array.isArray(payload) ? null : (payload.run || null);
-    currentRun = run;
-    if (ackRunBtn) {
-      const terminal = run && run.status && run.status !== 'running';
-      ackRunBtn.classList.toggle('visible', !!terminal);
-      ackRunBtn.textContent = terminal ? 'ACK ' + run.status : 'ACK end';
-      ackRunBtn.disabled = false;
-    }
-    const titleEl = $('thread-title');
-    if (titleEl) {
-      titleEl.textContent = run ? 'Thread  run #' + run.id : 'Thread';
-    }
+  function renderMessages(msgs) {
     msgList.innerHTML = '';
-    seenIds.clear();
     totalMsgs = 0;
-    countBadge.textContent = '';
-    if (!messages.length) {
+    if (!msgs.length) {
       const d = document.createElement('div');
       d.className = 'empty-state'; d.id = 'empty-msgs'; d.textContent = 'No messages yet.';
       msgList.appendChild(d);
+      countBadge.textContent = '';
       return;
     }
-    for (const msg of messages) appendMessage(msg);
+    for (const msg of msgs) {
+      const empty = $('empty-msgs');
+      if (empty) empty.remove();
+      msgList.appendChild(buildMessageRow(msg));
+      totalMsgs++;
+    }
+    countBadge.textContent = totalMsgs + ' messages';
+    msgList.scrollTop = msgList.scrollHeight;
+  }
+
+  function renderAgentsStrip(agents) {
+    const strip = $('agents-strip');
+    if (!strip) return;
+    if (!agents || !agents.length) {
+      strip.innerHTML = '<span class="agents-empty">no agents</span>';
+      return;
+    }
+    strip.innerHTML = agents.map(a => {
+      const st = (a.status || 'unknown').toLowerCase();
+      const dotState = ['idle','busy','stopped'].includes(st) ? st : 'unknown';
+      const badge = a.pending_count > 0
+        ? '<span class="agent-pending">' + a.pending_count + '</span>' : '';
+      return '<span class="agent-chip">' +
+        '<span class="agent-state-dot" data-state="' + esc(dotState) + '"></span>' +
+        '<span class="agent-name">' + esc(a.window_name) + '</span>' +
+        badge +
+        '</span>';
+    }).join('');
+  }
+
+  function renderRunsSidebar() {
+    const sidebar = $('runs-sidebar-list');
+    if (!sidebar) return;
+    sidebar.innerHTML = state.runs.map(run => {
+      const isRunning = run.status === 'running';
+      const isSelected = run.id === state.selectedRunId;
+      return '<div class="run-item' + (isSelected ? ' selected' : '') + '" data-run-id="' + run.id + '">' +
+        '<span class="run-dot" data-state="' + (isRunning ? 'running' : 'done') + '"></span>' +
+        '<div class="run-item-info">' +
+          '<span class="run-label">run #' + run.id + '</span>' +
+          '<span class="run-session">' + esc(run.session || '') + '</span>' +
+          (!isRunning ? '<span class="run-status-badge">[' + esc(run.status) + ']</span>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+    sidebar.querySelectorAll('.run-item').forEach(el => {
+      el.addEventListener('click', () => selectRun(Number(el.dataset.runId)));
+    });
+  }
+
+  function updateThreadHeader(run) {
+    const titleEl = $('thread-title');
+    if (!titleEl || !run) return;
+    const badge = '<span class="run-status-badge run-status-' + esc(run.status) + '">[' + esc(run.status) + ']</span>';
+    titleEl.innerHTML = '<span>run #' + run.id + ' · ' + esc(run.session) + '</span> ' + badge;
+    const goalEl = $('thread-goal');
+    if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
+  }
+
+  function updateAckButton(run) {
+    if (!ackRunBtn || !run) return;
+    const terminal = run.status && run.status !== 'running';
+    ackRunBtn.classList.toggle('visible', !!terminal);
+    ackRunBtn.textContent = terminal ? 'ACK ' + run.status : 'ACK end';
+    ackRunBtn.disabled = false;
+    ackRunBtn._currentRun = run;
+  }
+
+  async function selectRun(runId) {
+    state.selectedRunId = runId;
+    renderRunsSidebar();
+
+    const run = state.runs.find(r => r.id === runId);
+    updateThreadHeader(run);
+    updateAckButton(run);
+
+    renderAgentsStrip(state.agents.get(runId) || []);
+
+    const cached = state.messages.get(runId);
+    if (cached) {
+      renderMessages(cached);
+    } else {
+      msgList.innerHTML = '<div class="empty-state">Loading…</div>';
+      try {
+        const res = await fetch('/thread?run_id=' + runId);
+        const data = await res.json();
+        if (data.messages) {
+          const msgs = data.messages;
+          state.messages.set(runId, msgs);
+          msgs.forEach(m => state.seenMsgIds.add(m.id));
+          renderMessages(msgs);
+        }
+      } catch {
+        msgList.innerHTML = '<div class="empty-state">Failed to load thread.</div>';
+      }
+    }
+
+    const isRunning = run && run.status === 'running';
+    msgInput.disabled = !isRunning;
+    sendBtn.disabled = !isRunning;
+    msgInput.placeholder = isRunning
+      ? 'Send a task to manager…'
+      : 'Run ' + (run ? run.status : 'ended') + ' — read only';
+  }
+
+  function handleRunsList(payload) {
+    state.runs = payload.runs || [];
+    renderRunsSidebar();
+    if (state.selectedRunId === null && state.runs.length > 0) {
+      const firstRunning = state.runs.find(r => r.status === 'running');
+      selectRun((firstRunning || state.runs[0]).id);
+    }
   }
 
   function setConnected(ok) {
@@ -597,9 +753,64 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 
   function connectSSE() {
     const es = new EventSource('/events');
-    es.addEventListener('agent-status',   e => { try { renderAgents(JSON.parse(e.data)); } catch {} });
-    es.addEventListener('operator-thread',e => { try { renderThread(JSON.parse(e.data)); } catch {} });
-    es.addEventListener('message-stream', e => { try { appendMessage(JSON.parse(e.data)); } catch {} });
+
+    es.addEventListener('runs-list', e => {
+      try { handleRunsList(JSON.parse(e.data)); } catch {}
+    });
+
+    es.addEventListener('agent-status', e => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload.run_id !== undefined) {
+          state.agents.set(payload.run_id, payload.agents);
+          if (payload.run_id === state.selectedRunId) {
+            renderAgentsStrip(payload.agents);
+          }
+        } else {
+          // legacy fallback
+          renderAgentsStrip(payload);
+        }
+      } catch {}
+    });
+
+    es.addEventListener('operator-thread', e => {
+      try {
+        const payload = JSON.parse(e.data);
+        const messages = Array.isArray(payload) ? payload : (payload.messages || []);
+        const run = Array.isArray(payload) ? null : (payload.run || null);
+        if (run) {
+          // Cache messages for this run
+          state.messages.set(run.id, messages);
+          messages.forEach(m => state.seenMsgIds.add(m.id));
+          // Auto-select if nothing selected yet
+          if (state.selectedRunId === null) {
+            selectRun(run.id);
+          } else if (run.id === state.selectedRunId) {
+            renderMessages(messages);
+            updateThreadHeader(run);
+            updateAckButton(run);
+          }
+        } else {
+          renderMessages(messages);
+        }
+      } catch {}
+    });
+
+    es.addEventListener('message-stream', e => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (!state.messages.has(msg.run_id)) state.messages.set(msg.run_id, []);
+        const runMsgs = state.messages.get(msg.run_id);
+        if (!state.seenMsgIds.has(msg.id)) {
+          state.seenMsgIds.add(msg.id);
+          runMsgs.push(msg);
+          if (msg.run_id === state.selectedRunId) {
+            appendMessage(msg);
+          }
+        }
+      } catch {}
+    });
+
     es.addEventListener('reload', () => { location.reload(); });
     es.onopen  = () => setConnected(true);
     es.onerror = () => { setConnected(false); es.close(); setTimeout(connectSSE, 2000); };
@@ -607,16 +818,20 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   connectSSE();
 
   async function sendMessage() {
-    const to   = inputTo.value.trim();
-    const type = inputType.value;
     const body = msgInput.value.trim();
-    if (!to || !body) { flash('To and body required', false); return; }
+    if (!body) { flash('body required', false); return; }
+    if (!state.selectedRunId) { flash('no run selected', false); return; }
     sendBtn.disabled = true;
     try {
-      const res  = await fetch('/send', {
+      const res = await fetch('/send', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({to, type, body}),
+        body: JSON.stringify({
+          to: 'manager',
+          type: 'TASK',
+          body,
+          run_id: state.selectedRunId,
+        }),
       });
       const json = await res.json();
       if (json.ok) { msgInput.value = ''; flash('sent #' + json.id, true); }
@@ -626,7 +841,8 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
 
   async function ackRun() {
-    if (!currentRun || currentRun.status === 'running') return;
+    const run = ackRunBtn._currentRun;
+    if (!run || run.status === 'running') return;
     ackRunBtn.disabled = true;
     try {
       const res = await fetch('/ack-run', { method: 'POST' });
@@ -650,7 +866,8 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 })();
 </script>
 </body>
-</html>`;
+</html>
+`;
 
 const DEFAULT_UI_PORT = 7700;
 // In dev mode (SYNAPSE_DEV=1), HTML is read from disk on every request.
@@ -676,7 +893,7 @@ export function cmdUi(flags: Record<string, string>) {
   const dev = !!process.env.SYNAPSE_DEV;
   const db = connect();
 
-  let lastMessageId = 0;
+  const lastMessageId = new Map<number, number>(); // runId -> last seen msg id
 
   // SSE client registry
   const clients = new Set<ReadableStreamDefaultController>();
@@ -690,6 +907,10 @@ export function cmdUi(flags: Record<string, string>) {
         clients.delete(ctrl);
       }
     }
+  }
+
+  function push(ctrl: ReadableStreamDefaultController, eventName: string, data: unknown) {
+    ctrl.enqueue(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
   function pushReload() {
@@ -756,51 +977,47 @@ export function cmdUi(flags: Record<string, string>) {
   }
 
   function pollDb() {
-    const run = activeRun();
+    // 1. All running runs
+    const runningRuns = db.query(
+      `SELECT id, session, status, goal, started_at, ended_at
+       FROM runs WHERE status='running' ORDER BY id DESC LIMIT 10`
+    ).all() as any[];
 
-    const agents = db
-      .query(
+    for (const run of runningRuns) {
+      const agents = db.query(
         `SELECT window_name, role, status, last_seen_at,
                 (SELECT COUNT(*) FROM messages m
-                 WHERE m.status='pending'
-                   AND m.to_agent=a.window_name
-                   AND (? IS NULL OR m.run_id = ?)) AS pending_count
+                 WHERE m.status='pending' AND m.to_agent=a.window_name
+                   AND m.run_id = ?) AS pending_count
          FROM agents a
-         WHERE (? IS NULL OR run_id=? OR run_id=0)
+         WHERE run_id=? OR run_id=0
          ORDER BY role, window_name`,
-      )
-      .all(run?.id ?? null, run?.id ?? null, run?.id ?? null, run?.id ?? null);
-    pushToAll("agent-status", agents);
+      ).all(run.id, run.id);
+      pushToAll("agent-status", { run_id: run.id, agents });
 
-    let newMessages: any[];
-    if (run) {
-      newMessages = db
-        .query(
-          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
-           FROM messages
-           WHERE id > ?
-             AND (from_agent='operator' OR to_agent='operator')
-             AND run_id = ?
-           ORDER BY id`,
-        )
-        .all(lastMessageId, run.id) as any[];
-    } else {
-      newMessages = db
-        .query(
-          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
-           FROM messages
-           WHERE id > ?
-             AND (from_agent='operator' OR to_agent='operator')
-           ORDER BY id`,
-        )
-        .all(lastMessageId) as any[];
-    }
-    if (newMessages.length > 0) {
-      lastMessageId = newMessages[newMessages.length - 1].id;
-      for (const msg of newMessages) {
-        pushToAll("message-stream", msg);
+      const lastId = lastMessageId.get(run.id) ?? 0;
+      const newMessages = db.query(
+        `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+         FROM messages
+         WHERE id > ?
+           AND (from_agent='operator' OR to_agent='operator')
+           AND run_id = ?
+         ORDER BY id`,
+      ).all(lastId, run.id) as any[];
+      if (newMessages.length > 0) {
+        lastMessageId.set(run.id, (newMessages[newMessages.length - 1] as any).id);
+        for (const msg of newMessages) {
+          pushToAll("message-stream", msg);
+        }
       }
     }
+
+    // 2. Push runs-list (all runs, not just running)
+    const allRuns = db.query(
+      `SELECT id, session, status, goal, started_at, ended_at
+       FROM runs ORDER BY id DESC LIMIT 20`
+    ).all();
+    pushToAll("runs-list", { runs: allRuns });
   }
 
   const pollTimer = setInterval(pollDb, 1000);
@@ -850,6 +1067,11 @@ export function cmdUi(flags: Record<string, string>) {
             ctrl = c;
             clients.add(ctrl);
             pushOperatorThread(ctrl);
+            const allRuns = db.query(
+              `SELECT id, session, status, goal, started_at, ended_at
+               FROM runs ORDER BY id DESC LIMIT 20`
+            ).all();
+            push(ctrl, "runs-list", { runs: allRuns });
             pollDb();
           },
           cancel() {
@@ -865,11 +1087,35 @@ export function cmdUi(flags: Record<string, string>) {
         });
       }
 
+      if (url.pathname === "/runs" && req.method === "GET") {
+        const runs = db.query(
+          `SELECT id, session, status, goal, started_at, ended_at
+           FROM runs ORDER BY id DESC LIMIT 20`
+        ).all();
+        return Response.json({ runs });
+      }
+
+      if (url.pathname === "/thread" && req.method === "GET") {
+        const runId = Number(url.searchParams.get("run_id"));
+        if (!runId) return Response.json({ error: "missing run_id" }, { status: 400 });
+        const run = db.query(
+          `SELECT id, session, status, goal, started_at, ended_at FROM runs WHERE id=?`
+        ).get(runId) as any;
+        if (!run) return Response.json({ error: "run not found" }, { status: 404 });
+        const messages = db.query(
+          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+           FROM messages
+           WHERE (from_agent='operator' OR to_agent='operator') AND run_id=?
+           ORDER BY id`,
+        ).all(runId);
+        return Response.json({ run, messages });
+      }
+
       if (url.pathname === "/send" && req.method === "POST") {
         return req
           .json()
           .then((body: any) => {
-            const { to, type, body: msgBody } = body ?? {};
+            const { to, type, body: msgBody, run_id } = body ?? {};
             if (!to || !type || !msgBody) {
               return Response.json(
                 { ok: false, error: "missing to, type, or body" },
@@ -885,7 +1131,9 @@ export function cmdUi(flags: Record<string, string>) {
                 { status: 400 },
               );
             }
-            const run = activeRun();
+            const run = run_id
+              ? (db.query(`SELECT id FROM runs WHERE id=?`).get(run_id) as any)
+              : activeRun();
             const known = db
               .query(
                 "SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)",
