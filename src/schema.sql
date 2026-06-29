@@ -3,11 +3,14 @@
 -- time by the CLI (PRAGMA journal_mode=WAL), not stored here.
 
 CREATE TABLE IF NOT EXISTS agents (
-  window_name TEXT PRIMARY KEY,    -- tmux window name == agent address
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  window_name TEXT NOT NULL,
+  run_id      INTEGER NOT NULL,    -- 0 = operator sentinel; N = run id (N ≥ 1)
   role        TEXT NOT NULL,       -- manager | coder | reviewer | operator | ...
   session_id  TEXT,                -- Claude Code session id, for jsonl path
   status      TEXT NOT NULL DEFAULT 'unknown',  -- idle | busy | stopped | unknown
-  last_seen_at TEXT
+  last_seen_at TEXT,
+  UNIQUE(window_name, run_id)
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -43,6 +46,7 @@ CREATE TABLE IF NOT EXISTS runs (
   ended_at   TEXT
 );
 
+CREATE INDEX IF NOT EXISTS idx_messages_run ON messages(run_id);
 CREATE INDEX IF NOT EXISTS idx_messages_to_status ON messages(to_agent, status);
 CREATE INDEX IF NOT EXISTS idx_messages_ref ON messages(ref_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent);

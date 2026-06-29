@@ -1,15 +1,17 @@
 import { connect, fail, nowIso, MESSAGE_TYPES, EVENT_TYPES, c, colorType } from "./commands";
 
-export function cmdRegister(name: string, role: string, sessionId: string | null) {
+export function cmdRegister(name: string, role: string, sessionId: string | null, runId?: number | null) {
   const db = connect();
+  const resolvedRunId = runId ?? null;
   db.run(
-    `INSERT INTO agents (window_name, role, session_id, status, last_seen_at)
-     VALUES (?, ?, ?, 'unknown', ?)
-     ON CONFLICT(window_name) DO UPDATE SET
+    `INSERT INTO agents (window_name, run_id, role, session_id, status, last_seen_at)
+     VALUES (?, ?, ?, ?, 'unknown', ?)
+     ON CONFLICT(window_name, run_id) DO UPDATE SET
        role=excluded.role,
        session_id=excluded.session_id,
+       status='unknown',
        last_seen_at=excluded.last_seen_at`,
-    [name, role, sessionId, nowIso()],
+    [name, resolvedRunId, role, sessionId, nowIso()],
   );
   console.log(
     `synapse: registered '${name}' (role=${role}, session_id=${sessionId ?? "-"})`,
@@ -35,18 +37,20 @@ export function cmdSend(
   }
   const frm = resolveFrom(from);
   const db = connect();
+  // Resolve run_id: explicit arg → SYNAPSE_RUN_ID env → null
+  const resolvedRunId = runId !== undefined && runId !== null
+    ? runId
+    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
   if (to !== "broadcast") {
-    const known = db.query("SELECT 1 FROM agents WHERE window_name=?").get(to);
+    const known = resolvedRunId !== null
+      ? db.query("SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)").get(to, resolvedRunId)
+      : db.query("SELECT 1 FROM agents WHERE window_name=?").get(to);
     if (!known) {
       console.error(
         `synapse: warning — '${to}' not in agents registry yet (sending anyway)`,
       );
     }
   }
-  // Resolve run_id: explicit arg → SYNAPSE_RUN_ID env → null
-  const resolvedRunId = runId !== undefined && runId !== null
-    ? runId
-    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
   const result = db.run(
     `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -79,34 +83,30 @@ export function cmdLog(agent: string, type: string, summary: string) {
 
 export function cmdStatus() {
   const db = connect();
-  const agents = db
-    .query("SELECT * FROM agents ORDER BY role, window_name")
-    .all() as any[];
-  if (agents.length === 0) {
-    console.log("synapse: no agents registered");
-    return;
-  }
-  const pendingStmt = db.query(
-    `SELECT COUNT(*) AS n FROM messages WHERE status='pending'
-     AND (to_agent=? OR to_agent='broadcast')`,
-  );
-
-  // Map each agent to a run via last_seen_at overlap: find the run that was
-  // active (started_at <= last_seen_at, ended_at IS NULL or > last_seen_at).
-  // Falls back to the most recent run overall when no overlap is found.
-  const runForAgentStmt = db.query<{ id: number; session: string }, [string, string]>(
-    `SELECT id, session FROM runs
-     WHERE started_at <= ?
-       AND (ended_at IS NULL OR ended_at >= ?)
-     ORDER BY id DESC LIMIT 1`,
-  );
-  const latestRunStmt = db.query<{ id: number; session: string }, []>(
-    `SELECT id, session FROM runs ORDER BY id DESC LIMIT 1`,
-  );
 
   const activeRun =
     (db.query("SELECT id, session, status, goal FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
     (db.query("SELECT id, session, status, goal FROM runs ORDER BY id DESC LIMIT 1").get() as any);
+
+  const agents = activeRun
+    ? db.query("SELECT * FROM agents WHERE (run_id=? OR run_id=0) ORDER BY role, window_name").all(activeRun.id) as any[]
+    : db.query("SELECT * FROM agents ORDER BY role, window_name").all() as any[];
+
+  if (agents.length === 0) {
+    console.log("synapse: no agents registered");
+    return;
+  }
+  const pendingStmt = activeRun
+    ? db.query(
+        `SELECT COUNT(*) AS n FROM messages WHERE status='pending'
+         AND (to_agent=? OR to_agent='broadcast')
+         AND run_id=?`,
+      )
+    : db.query(
+        `SELECT COUNT(*) AS n FROM messages WHERE status='pending'
+         AND (to_agent=? OR to_agent='broadcast')`,
+      );
+
   if (activeRun) {
     const goal = (activeRun.goal ?? "").replace(/\n.*/s, "").slice(0, 72);
     console.log(`run #${activeRun.id}  ${activeRun.session}  [${activeRun.status}]${goal ? "  " + goal : ""}`);
@@ -115,7 +115,9 @@ export function cmdStatus() {
 
   const headers = ["WINDOW", "ROLE", "STATUS", "LAST_SEEN", "PENDING"];
   const rows = agents.map((a) => {
-    const pending = (pendingStmt.get(a.window_name) as any).n;
+    const pending = activeRun
+      ? (pendingStmt.get(a.window_name, activeRun.id) as any).n
+      : (pendingStmt.get(a.window_name) as any).n;
     return [
       a.window_name,
       a.role,
@@ -160,20 +162,32 @@ export function cmdRuns() {
   for (const r of rows) console.log(fmt(r));
 }
 
-export function cmdPending(agent: string | null) {
+export function cmdPending(agent: string | null, all?: boolean) {
   const db = connect();
+
+  const activeRun = all ? null :
+    (db.query("SELECT id FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
+    (db.query("SELECT id FROM runs ORDER BY id DESC LIMIT 1").get() as any);
+
   const rows = agent
-    ? (db
-        .query(
-          `SELECT * FROM messages WHERE status='pending'
-           AND (to_agent=? OR to_agent='broadcast') ORDER BY created_at`,
-        )
-        .all(agent) as any[])
-    : (db
-        .query(
-          "SELECT * FROM messages WHERE status='pending' ORDER BY created_at",
-        )
-        .all() as any[]);
+    ? (activeRun
+        ? db.query(
+            `SELECT * FROM messages WHERE status='pending'
+             AND (to_agent=? OR to_agent='broadcast') AND run_id=? ORDER BY created_at`,
+          ).all(agent, activeRun.id)
+        : db.query(
+            `SELECT * FROM messages WHERE status='pending'
+             AND (to_agent=? OR to_agent='broadcast') ORDER BY created_at`,
+          ).all(agent)
+      ) as any[]
+    : (activeRun
+        ? db.query(
+            "SELECT * FROM messages WHERE status='pending' AND run_id=? ORDER BY created_at",
+          ).all(activeRun.id)
+        : db.query(
+            "SELECT * FROM messages WHERE status='pending' ORDER BY created_at",
+          ).all()
+      ) as any[];
   if (rows.length === 0) {
     console.log("synapse: no pending messages");
     return;

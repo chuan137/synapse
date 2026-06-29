@@ -42,7 +42,8 @@ export const DEFAULT_DEBOUNCE_MS = 2000;
 // Stored in PRAGMA user_version so detection works before any table exists.
 // v2 added the `runs` table (bootstrap-spec.md #10/#11).
 // v3 added `run_id` column to `messages`.
-export const SCHEMA_VERSION = 3;
+// v4 rebuilt agents table: run_id NOT NULL, sentinel 0 for operator, UNIQUE(window_name, run_id).
+export const SCHEMA_VERSION = 4;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -126,12 +127,14 @@ export function cmdInit() {
     }
     if (hasTables && version === 2) {
       // Migrate v2 → v3: add run_id column to messages (non-destructive).
+      // v3 → v4 cannot use ALTER TABLE (agents PRIMARY KEY changed) — falls through
+      // to the backup+rebuild path below.
       const db = connect(true);
       db.exec(`ALTER TABLE messages ADD COLUMN run_id INTEGER;`);
-      db.exec(`PRAGMA user_version=${SCHEMA_VERSION};`);
+      db.exec(`PRAGMA user_version=3;`);
       db.close();
-      console.log(`synapse: migrated ${path} from schema v2 to v${SCHEMA_VERSION}`);
-      return;
+      console.log(`synapse: migrated ${path} from schema v2 to v3`);
+      // Fall through: if target is v4, the version<SCHEMA_VERSION branch below fires next.
     }
     if (hasTables && version < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that
@@ -364,32 +367,118 @@ function dispatchDirectMessage(
   }
 }
 
+function newestOpenInboundWork(
+  db: Database,
+  agent: any,
+  runId: number,
+): any | null {
+  if (agent.role !== "coder" && agent.role !== "reviewer") return null;
+  const inboundTypes = agent.role === "reviewer" ? ["REVIEW"] : ["TASK", "REVIEW"];
+  const placeholders = inboundTypes.map(() => "?").join(", ");
+  const row = db
+    .query(
+      `SELECT m.*
+       FROM messages m
+       WHERE m.run_id=? AND m.to_agent=? AND m.status='delivered'
+         AND m.type IN (${placeholders})
+         AND NOT EXISTS (
+           SELECT 1 FROM messages r
+           WHERE r.run_id=m.run_id
+             AND r.from_agent=?
+             AND r.to_agent=m.from_agent
+             AND r.type='STATUS'
+             AND r.ref_id=m.id
+         )
+       ORDER BY m.delivered_at DESC, m.id DESC
+       LIMIT 1`,
+    )
+    .get(runId, agent.window_name, ...inboundTypes, agent.window_name) as any;
+  return row ?? null;
+}
+
+function sendBackReminderBody(agentName: string, msg: any): string {
+  return [
+    `Harness enforcement: your previous ${msg.type} #${msg.id} has ended without a STATUS reply.`,
+    "",
+    "Before doing anything else, send the result back to the sender with this exact shape:",
+    "",
+    `synapse send ${msg.from_agent} STATUS "<result: done, blocked, or issues found; include key files/tests>" --ref-id ${msg.id}`,
+    "",
+    `You are ${agentName}; do not start another task until this send-back is complete.`,
+  ].join("\n");
+}
+
+function enforceSendBackBeforeMoreWork(
+  db: Database,
+  tmuxSession: string,
+  agent: any,
+  runId: number,
+  log: (s: string) => void,
+): boolean {
+  const open = newestOpenInboundWork(db, agent, runId);
+  if (!open) return true;
+
+  const existing = db
+    .query(
+      `SELECT * FROM messages
+       WHERE run_id=? AND from_agent='harness' AND to_agent=?
+         AND type='INFO' AND ref_id=?
+       ORDER BY id DESC LIMIT 1`,
+    )
+    .get(runId, agent.window_name, open.id) as any;
+
+  if (existing?.status === "pending") {
+    dispatchDirectMessage(db, tmuxSession, agent.window_name, existing, log);
+  } else {
+    const insert = db.run(
+      `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body)
+       VALUES (?, 'harness', ?, 'INFO', ?, ?)`,
+      [runId, agent.window_name, open.id, sendBackReminderBody(agent.window_name, open)],
+    );
+    const reminder = db
+      .query("SELECT * FROM messages WHERE id=?")
+      .get(Number(insert.lastInsertRowid)) as any;
+    dispatchDirectMessage(db, tmuxSession, agent.window_name, reminder, log);
+  }
+
+  log(
+    `  ${agent.window_name}: send-back required for ${open.type} #${open.id}; held further delivery`,
+  );
+  return false;
+}
+
 // Dispatches the oldest pending direct message for windowName, if any.
 function dispatchNextDirectMessage(
   db: Database,
   tmuxSession: string,
   windowName: string,
+  runId: number,
   log: (s: string) => void,
 ) {
   const msg = db
     .query(
-      `SELECT * FROM messages WHERE status='pending' AND to_agent=?
+      `SELECT * FROM messages WHERE status='pending' AND to_agent=? AND run_id=?
        ORDER BY created_at LIMIT 1`,
     )
-    .get(windowName) as any;
+    .get(windowName, runId) as any;
   if (msg) dispatchDirectMessage(db, tmuxSession, windowName, msg, log);
 }
 
 function hasPendingDirectMessageForWindow(
   db: Database,
   windowName: string,
+  runId: number,
 ): boolean {
   const row = db
     .query(
-      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? LIMIT 1`,
+      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? AND run_id=? LIMIT 1`,
     )
-    .get(windowName);
+    .get(windowName, runId);
   return !!row;
+}
+
+function activeRosterRunId(agents: any[], fallback: number): number {
+  return agents.find((a) => a.run_id !== 0)?.run_id ?? fallback;
 }
 
 // Broadcasts fire only when every non-sender agent is idle simultaneously —
@@ -399,13 +488,14 @@ function broadcastReadyMessages(
   tmuxSession: string,
   agents: any[],
   agentStatuses: Map<string, AgentStatus>,
+  runId: number,
   log: (s: string) => void,
 ) {
   const broadcasts = db
     .query(
-      `SELECT * FROM messages WHERE status='pending' AND to_agent='broadcast' ORDER BY created_at`,
+      `SELECT * FROM messages WHERE status='pending' AND to_agent='broadcast' AND run_id=? ORDER BY created_at`,
     )
-    .all() as any[];
+    .all(runId) as any[];
   for (const msg of broadcasts) {
     const recipients = agents.filter((a) => a.window_name !== msg.from_agent);
     if (recipients.length === 0) continue;
@@ -413,6 +503,15 @@ function broadcastReadyMessages(
       (a) => agentStatuses.get(a.window_name) === "idle",
     );
     if (!allIdle) continue;
+    const blockedRecipient = recipients.find((a) =>
+      newestOpenInboundWork(db, a, runId),
+    );
+    if (blockedRecipient) {
+      log(
+        `  broadcast[${msg.id}] held: ${blockedRecipient.window_name} must send back before receiving broadcast`,
+      );
+      continue;
+    }
     let allOk = true;
     for (const r of recipients) {
       const res = tmuxSendKeys(tmuxSession, r.window_name, msg.body);
@@ -455,6 +554,7 @@ function refreshAgentState(
   agent: any,
   agentStatuses: Map<string, AgentStatus>,
   log: (s: string) => void,
+  runId: number,
   tmuxSession?: string,
 ): AgentState | null {
   let state: AgentState;
@@ -477,8 +577,8 @@ function refreshAgentState(
     log(`  ${agent.window_name}: ${prev} -> ${status} (${detail})`);
     // Guarded so a concurrent deregister wins — don't resurrect a stopped row.
     const update = db.run(
-      "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND status != 'stopped'",
-      [status, nowIso(), agent.window_name],
+      "UPDATE agents SET status=?, last_seen_at=? WHERE window_name=? AND run_id=? AND status != 'stopped'",
+      [status, nowIso(), agent.window_name, runId],
     );
     if (update.changes === 0) {
       agentStatuses.delete(agent.window_name);
@@ -496,13 +596,14 @@ function refreshAgentState(
 function disbandTeam(
   db: Database,
   tmuxSession: string,
+  runId: number,
   log: (s: string) => void,
 ): void {
   const agents = db
     .query(
-      "SELECT window_name FROM agents WHERE window_name != 'operator' AND status != 'stopped'",
+      "SELECT window_name FROM agents WHERE window_name != 'operator' AND status != 'stopped' AND run_id=?",
     )
-    .all() as any[];
+    .all(runId) as any[];
   for (const a of agents) {
     Bun.spawnSync([
       "tmux",
@@ -511,8 +612,8 @@ function disbandTeam(
       `${tmuxSession}:${a.window_name}`,
     ]);
     db.run(
-      "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=?",
-      [nowIso(), a.window_name],
+      "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=? AND run_id=?",
+      [nowIso(), a.window_name, runId],
     );
     log(`  ${a.window_name}: stopped (teardown)`);
   }
@@ -536,7 +637,7 @@ function checkRunTerminal(
   log(
     `run ${runId} reached terminal state '${run.status}' — disbanding team '${tmuxSession}'`,
   );
-  disbandTeam(db, tmuxSession, log);
+  disbandTeam(db, tmuxSession, runId, log);
   return true;
 }
 
@@ -552,8 +653,11 @@ function pollOnce(
     return;
   }
   const agents = db
-    .query("SELECT * FROM agents WHERE status != 'stopped'")
-    .all() as any[];
+    .query(runId !== undefined
+      ? "SELECT * FROM agents WHERE status != 'stopped' AND (run_id=? OR run_id=0)"
+      : "SELECT * FROM agents WHERE status != 'stopped'"
+    )
+    .all(...(runId !== undefined ? [runId] : [])) as any[];
   const agentStatuses = new Map<string, AgentStatus>();
   for (const agent of agents) {
     if (agent.window_name === "operator") continue;
@@ -563,13 +667,23 @@ function pollOnce(
       agent,
       agentStatuses,
       log,
+      agent.run_id,
       tmuxSession,
     );
     if (result?.status === "idle") {
-      dispatchNextDirectMessage(db, tmuxSession, agent.window_name, log);
+      if (enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agent.run_id, log)) {
+        dispatchNextDirectMessage(db, tmuxSession, agent.window_name, agent.run_id, log);
+      }
     }
   }
-  broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, log);
+  broadcastReadyMessages(
+    db,
+    tmuxSession,
+    agents,
+    agentStatuses,
+    runId ?? activeRosterRunId(agents, 0),
+    log,
+  );
 }
 
 // Callers get a single onChange(key, path, source) callback for each fs.watch
@@ -668,9 +782,11 @@ function runLiveMonitor(
   const reloadAgents = () => {
     agents = db
       .query(
-        "SELECT * FROM agents WHERE status != 'stopped' AND session_id IS NOT NULL",
+        runId !== undefined
+          ? "SELECT * FROM agents WHERE status != 'stopped' AND session_id IS NOT NULL AND (run_id=? OR run_id=0)"
+          : "SELECT * FROM agents WHERE status != 'stopped' AND session_id IS NOT NULL",
       )
-      .all() as any[];
+      .all(...(runId !== undefined ? [runId] : [])) as any[];
     agentsByWindow = new Map(agents.map((a) => [a.window_name, a]));
   };
 
@@ -680,20 +796,27 @@ function runLiveMonitor(
   ) => {
     const agent = agentsByWindow.get(windowName);
     if (!agent) return null; // deregistered/stopped between event and update
-    return refreshAgentState(db, debounceMs, agent, agentStatuses, eventLog);
+    return refreshAgentState(db, debounceMs, agent, agentStatuses, eventLog, agent.run_id);
   };
 
   const deliverOrReschedule = (
     windowName: string,
     eventLog: (s: string) => void,
   ) => {
+    const agent = agentsByWindow.get(windowName);
+    const agentRunId = agent?.run_id ?? (runId ?? 0);
     const agentState = refreshAgentStateByWindow(windowName, eventLog);
     if (agentState?.status === "idle") {
-      dispatchNextDirectMessage(db, tmuxSession, windowName, eventLog);
-      broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, eventLog);
+      if (
+        agent &&
+        enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agentRunId, eventLog)
+      ) {
+        dispatchNextDirectMessage(db, tmuxSession, windowName, agentRunId, eventLog);
+        broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, agentRunId, eventLog);
+      }
     } else if (
       agentState?.remainingDebounceMs !== undefined &&
-      hasPendingDirectMessageForWindow(db, windowName)
+      hasPendingDirectMessageForWindow(db, windowName, agentRunId)
     ) {
       // Agent is still debouncing and has mail waiting — reschedule to re-evaluate when the window expires.
       scheduleDelivery(windowName, agentState.remainingDebounceMs);
@@ -785,7 +908,9 @@ function runLiveMonitor(
 
       // Mail can arrive without transcript activity.
       if (agentState?.status === "idle") {
-        dispatchNextDirectMessage(db, tmuxSession, agent.window_name, sweepLog);
+        if (enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
+          dispatchNextDirectMessage(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
+        }
       }
       // Poll until the transcript appears to start watching
       if (!pool.isWatching(agent.window_name)) {
@@ -798,7 +923,14 @@ function runLiveMonitor(
       // Catch transcript changes fs.watch may have missed (coalesced writes, NFS, etc.).
       pool.emitOnTranscriptChange(agent.window_name);
     }
-    broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, sweepLog);
+    broadcastReadyMessages(
+      db,
+      tmuxSession,
+      agents,
+      agentStatuses,
+      runId ?? activeRosterRunId(agents, 0),
+      sweepLog,
+    );
   };
 
   sweep();
@@ -1203,11 +1335,11 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   );
   console.log(`synapse: created run folder ${taskFolder}`);
 
-  // Register operator pseudo-agent
+  // Register operator pseudo-agent (run_id=0 = cross-run sentinel)
   db.run(
-    `INSERT INTO agents (window_name, role, session_id, status, last_seen_at)
-     VALUES ('operator', 'operator', NULL, 'idle', ?)
-     ON CONFLICT(window_name) DO UPDATE SET status='idle', last_seen_at=excluded.last_seen_at`,
+    `INSERT INTO agents (window_name, run_id, role, session_id, status, last_seen_at)
+     VALUES ('operator', 0, 'operator', NULL, 'idle', ?)
+     ON CONFLICT(window_name, run_id) DO UPDATE SET status='idle', last_seen_at=excluded.last_seen_at`,
     [nowIso()],
   );
 
@@ -1254,7 +1386,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
       `synapse: launching window '${agent.name}' (${agent.role}) in ${absCwd}`,
     );
     launchAgentWindow(tmuxSession, taskName, agent, dbFile, claudePath, sessionId, runId);
-    cmdRegister(agent.name, agent.role, sessionId);
+    cmdRegister(agent.name, agent.role, sessionId, runId);
   }
 
   const uiPort = randomEphemeralPort();
@@ -1286,7 +1418,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   // Send initial goal as TASK from operator to the manager agent, if provided.
   if (goal) {
     const manager = config.agents.find((a) => a.role === "manager")!;
-    cmdSend(manager.name, "TASK", goal, "operator", null);
+    cmdSend(manager.name, "TASK", goal, "operator", null, runId);
     console.log(`synapse: initial goal queued as TASK to '${manager.name}'`);
   }
 
@@ -1339,30 +1471,37 @@ export function cmdDone(
   // that's the message this STATUS is closing out.
   let refId = refIdFlag;
   if (refId === null) {
-    const root = db
-      .query(
-        `SELECT id FROM messages WHERE to_agent=? AND type='TASK' AND ref_id IS NULL ORDER BY id DESC LIMIT 1`,
-      )
-      .get(agent) as any;
+    const root = runId !== null
+      ? db
+          .query(
+            `SELECT id FROM messages WHERE to_agent=? AND type='TASK' AND ref_id IS NULL AND run_id=? ORDER BY id DESC LIMIT 1`,
+          )
+          .get(agent, runId) as any
+      : db
+          .query(
+            `SELECT id FROM messages WHERE to_agent=? AND type='TASK' AND ref_id IS NULL ORDER BY id DESC LIMIT 1`,
+          )
+          .get(agent) as any;
     refId = root?.id ?? null;
   }
 
-  cmdSend("operator", "STATUS", summary, agent, refId);
+  cmdSend("operator", "STATUS", summary, agent, refId, runId);
   console.log(
     `synapse: done — run ${runId ?? "?"} marked '${dbStatus}', final STATUS sent to operator`,
   );
 }
 
-export function cmdStop(name: string, tmuxSession: string) {
+export function cmdStop(name: string, tmuxSession: string, runId?: number) {
   const db = connect();
-  const agent = db
-    .query("SELECT * FROM agents WHERE window_name=?")
-    .get(name) as any;
-  if (!agent) fail(`no registered agent named '${name}'`);
+  const resolvedRunId = runId ?? (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
+  const agent = resolvedRunId !== null
+    ? db.query("SELECT * FROM agents WHERE window_name=? AND run_id=?").get(name, resolvedRunId) as any
+    : db.query("SELECT * FROM agents WHERE window_name=?").get(name) as any;
+  if (!agent) fail(`no registered agent named '${name}'${resolvedRunId !== null ? ` in run ${resolvedRunId}` : ""}`);
 
   db.run(
-    "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=?",
-    [nowIso(), name],
+    "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=? AND run_id=?",
+    [nowIso(), name, agent.run_id],
   );
 
   const killResult = Bun.spawnSync([

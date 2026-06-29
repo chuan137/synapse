@@ -66,6 +66,7 @@ function run(args: string[], extraEnv: Record<string, string> = {}) {
       PATH: `${fakeBinDir}:${process.env.PATH}`,
       HOME: dir,
       SYNAPSE_DB: dbFile,
+      SYNAPSE_RUN_ID: "1",
       CLAUDE_PROJECTS_DIR: projectsRoot,
       ...extraEnv,
     },
@@ -85,6 +86,7 @@ function runFromRepoRoot(args: string[], extraEnv: Record<string, string> = {}) 
       PATH: `${fakeBinDir}:${process.env.PATH}`,
       HOME: dir,
       SYNAPSE_DB: dbFile,
+      SYNAPSE_RUN_ID: "1",
       CLAUDE_PROJECTS_DIR: projectsRoot,
       ...extraEnv,
     },
@@ -203,6 +205,8 @@ describe("monitor: direct delivery", () => {
     run(["send", "coder-1", "INFO", "Enter", "--from", "manager"]);
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
+    const task = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1' AND type='TASK'").get() as any;
+    run(["send", "manager", "STATUS", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
     run(["monitor", "--once", "--debounce", "100"]);
     expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- Enter");
   });
@@ -245,6 +249,32 @@ describe("monitor: direct delivery", () => {
     const status = openDb().query("SELECT * FROM messages WHERE type='STATUS'").get() as any;
     expect(status.status).toBe("delivered");
     expect(status.ref_id).toBe(task.id);
+  });
+
+  test("holds new work and reminds coder when a delivered TASK has no STATUS reply", () => {
+    writeTranscript("sess-coder", "end_turn", 5000);
+    run(["monitor", "--once", "--debounce", "100"]);
+
+    const task = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1' AND type='TASK'").get() as any;
+    expect(task.status).toBe("delivered");
+
+    run(["send", "coder-1", "TASK", "next thing", "--from", "manager"]);
+    run(["monitor", "--once", "--debounce", "100"]);
+
+    const log = tmuxLogContents();
+    expect(log).toContain("Harness enforcement: your previous TASK");
+    expect(log).not.toContain("send-keys -t team:coder-1 -l -- next thing");
+
+    const reminder = openDb()
+      .query("SELECT * FROM messages WHERE from_agent='harness' AND to_agent='coder-1'")
+      .get() as any;
+    expect(reminder.status).toBe("delivered");
+    expect(reminder.ref_id).toBe(task.id);
+
+    const next = openDb()
+      .query("SELECT * FROM messages WHERE to_agent='coder-1' AND body='next thing'")
+      .get() as any;
+    expect(next.status).toBe("pending");
   });
 
   test("marks the message failed terminally when the tmux window is gone", () => {
@@ -359,6 +389,7 @@ function spawnLiveMonitor(args: string[]) {
       ...process.env,
       PATH: `${fakeBinDir}:${process.env.PATH}`,
       SYNAPSE_DB: dbFile,
+      SYNAPSE_RUN_ID: "1",
       CLAUDE_PROJECTS_DIR: projectsRoot,
     },
     stdout: "pipe",

@@ -50,7 +50,7 @@ afterEach(() => {
 function run(args: string[], extraEnv: Record<string, string> = {}) {
   const result = Bun.spawnSync([process.execPath, SYNAPSE_CLI, ...args], {
     cwd: import.meta.dir,
-    env: { ...process.env, SYNAPSE_DB: dbFile, ...extraEnv },
+    env: { ...process.env, SYNAPSE_DB: dbFile, SYNAPSE_RUN_ID: "1", ...extraEnv },
   });
   return {
     exitCode: result.exitCode,

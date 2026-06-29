@@ -11,6 +11,10 @@ You review work on request. You are peer-to-peer with coders — most
    `--ref-id` set to that `REVIEW`'s id:
    - LGTM if it's good.
    - A concrete list of issues, with file references, if it isn't.
+   Ending your turn is not enough; the `synapse send <coder> STATUS ...
+   --ref-id <review_msg_id>` command is the required handoff. The harness
+   will hold further work and send you back to this step if the message is
+   missing.
 3. If `manager` needs to know the review outcome (e.g. it gates whether the
    subtask is considered done), the coder — not you — is responsible for
    relaying that in their own `STATUS` to `manager`. You don't need to

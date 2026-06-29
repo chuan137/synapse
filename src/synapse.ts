@@ -89,8 +89,14 @@ function main() {
     case "register": {
       const [name, role, sessionId] = positional;
       if (!name || !role)
-        fail("usage: synapse register <name> <role> [session_id]");
-      return cmdRegister(name, role, sessionId ?? null);
+        fail("usage: synapse register <name> <role> [session_id] [--run-id N]");
+      const runId = flags["run-id"]
+        ? parseInt(flags["run-id"], 10)
+        : process.env.SYNAPSE_RUN_ID
+          ? parseInt(process.env.SYNAPSE_RUN_ID, 10)
+          : null;
+      if (runId === null) fail("missing run id — pass --run-id N or set SYNAPSE_RUN_ID");
+      return cmdRegister(name, role, sessionId ?? null, runId);
     }
     case "send": {
       const [to, type, body] = positional;
@@ -113,7 +119,7 @@ function main() {
     case "runs":
       return cmdRuns();
     case "pending":
-      return cmdPending(positional[0] ?? null);
+      return cmdPending(positional[0] ?? null, !!flags["all"]);
     case "deliver": {
       const [id] = positional;
       if (!id) fail("usage: synapse deliver <id>");
@@ -127,8 +133,9 @@ function main() {
     }
     case "stop": {
       const [name] = positional;
-      if (!name) fail("usage: synapse stop <name> [--session SESSION]");
-      return cmdStop(name, flags["session"] ?? DEFAULT_TMUX_SESSION);
+      if (!name) fail("usage: synapse stop <name> [--session SESSION] [--run-id N]");
+      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : undefined;
+      return cmdStop(name, flags["session"] ?? DEFAULT_TMUX_SESSION, runId);
     }
     case "attach": {
       const [name] = positional;

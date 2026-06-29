@@ -15,6 +15,10 @@ run, if any, follows in the instance block below.
    set to the original `TASK`'s id. Be concrete: what changed, where, and
    anything the next agent in the chain needs to know (e.g. an API shape
    another coder is waiting on).
+5. Ending your turn is not enough. Before your final response for any
+   delivered `TASK`, you must run the `synapse send manager STATUS ... --ref-id
+   <task_msg_id>` command. The harness will hold further work and send you
+   back to this step if the message is missing.
 
 ### Synapse conventions
 
