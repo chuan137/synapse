@@ -85,21 +85,36 @@ export function cmdStatus() {
     `SELECT COUNT(*) AS n FROM messages WHERE status='pending'
      AND (to_agent=? OR to_agent='broadcast')`,
   );
-  const headers = [
-    "WINDOW",
-    "ROLE",
-    "STATUS",
-    "SESSION_ID",
-    "LAST_SEEN",
-    "PENDING",
-  ];
+
+  // Map each agent to a run via last_seen_at overlap: find the run that was
+  // active (started_at <= last_seen_at, ended_at IS NULL or > last_seen_at).
+  // Falls back to the most recent run overall when no overlap is found.
+  const runForAgentStmt = db.query<{ id: number; session: string }, [string, string]>(
+    `SELECT id, session FROM runs
+     WHERE started_at <= ?
+       AND (ended_at IS NULL OR ended_at >= ?)
+     ORDER BY id DESC LIMIT 1`,
+  );
+  const latestRunStmt = db.query<{ id: number; session: string }, []>(
+    `SELECT id, session FROM runs ORDER BY id DESC LIMIT 1`,
+  );
+
+  const activeRun =
+    (db.query("SELECT id, session, status, goal FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
+    (db.query("SELECT id, session, status, goal FROM runs ORDER BY id DESC LIMIT 1").get() as any);
+  if (activeRun) {
+    const goal = (activeRun.goal ?? "").replace(/\n.*/s, "").slice(0, 72);
+    console.log(`run #${activeRun.id}  ${activeRun.session}  [${activeRun.status}]${goal ? "  " + goal : ""}`);
+    console.log("");
+  }
+
+  const headers = ["WINDOW", "ROLE", "STATUS", "LAST_SEEN", "PENDING"];
   const rows = agents.map((a) => {
     const pending = (pendingStmt.get(a.window_name) as any).n;
     return [
       a.window_name,
       a.role,
       a.status,
-      a.session_id ?? "-",
       a.last_seen_at ?? "-",
       String(pending),
     ];
