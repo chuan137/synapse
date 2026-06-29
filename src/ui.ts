@@ -207,6 +207,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
   .run-item-info { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
   .run-label { font-weight: 600; color: var(--text); }
+  .run-unread { display: inline-block; margin-left: 4px; padding: 0 4px; font-size: 10px; font-weight: 700; background: var(--accent); color: #fff; border-radius: 8px; vertical-align: middle; }
   .run-session { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .run-status-badge { font-size: 10px; color: var(--muted); }
   .run-status-running { color: var(--status-busy); }
@@ -537,7 +538,9 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     agents: new Map(),
     messages: new Map(),
     seenMsgIds: new Set(),
+    unreadCounts: new Map(), // runId -> count of unseen messages
   };
+  let _selectToken = 0; // race guard for selectRun fetches
 
   // Theme toggle
   const themeBtn = $('theme-btn');
@@ -667,10 +670,12 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     sidebar.innerHTML = state.runs.map(run => {
       const isRunning = run.status === 'running';
       const isSelected = run.id === state.selectedRunId;
+      const unread = !isSelected && (state.unreadCounts.get(run.id) || 0);
+      const badge = unread ? '<span class="run-unread">' + unread + '</span>' : '';
       return '<div class="run-item' + (isSelected ? ' selected' : '') + '" data-run-id="' + run.id + '">' +
         '<span class="run-dot" data-state="' + (isRunning ? 'running' : 'done') + '"></span>' +
         '<div class="run-item-info">' +
-          '<span class="run-label">run #' + run.id + '</span>' +
+          '<span class="run-label">run #' + run.id + badge + '</span>' +
           '<span class="run-session">' + esc(run.session || '') + '</span>' +
           (!isRunning ? '<span class="run-status-badge">[' + esc(run.status) + ']</span>' : '') +
         '</div>' +
@@ -701,6 +706,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 
   async function selectRun(runId) {
     state.selectedRunId = runId;
+    state.unreadCounts.delete(runId);
     renderRunsSidebar();
 
     const run = state.runs.find(r => r.id === runId);
@@ -714,9 +720,11 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       renderMessages(cached);
     } else {
       msgList.innerHTML = '<div class="empty-state">Loading…</div>';
+      const token = ++_selectToken;
       try {
         const res = await fetch('/thread?run_id=' + runId);
         const data = await res.json();
+        if (token !== _selectToken) return; // stale fetch, another run was selected
         if (data.messages) {
           const msgs = data.messages;
           state.messages.set(runId, msgs);
@@ -724,7 +732,8 @@ const FRONTEND_HTML = `<!DOCTYPE html>
           renderMessages(msgs);
         }
       } catch {
-        msgList.innerHTML = '<div class="empty-state">Failed to load thread.</div>';
+        if (token === _selectToken)
+          msgList.innerHTML = '<div class="empty-state">Failed to load thread.</div>';
       }
     }
 
@@ -806,6 +815,9 @@ const FRONTEND_HTML = `<!DOCTYPE html>
           runMsgs.push(msg);
           if (msg.run_id === state.selectedRunId) {
             appendMessage(msg);
+          } else {
+            state.unreadCounts.set(msg.run_id, (state.unreadCounts.get(msg.run_id) || 0) + 1);
+            renderRunsSidebar();
           }
         }
       } catch {}
@@ -845,7 +857,11 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     if (!run || run.status === 'running') return;
     ackRunBtn.disabled = true;
     try {
-      const res = await fetch('/ack-run', { method: 'POST' });
+      const res = await fetch('/ack-run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ run_id: run.id }),
+      });
       const json = await res.json();
       if (json.ok) flash('acked run #' + json.run_id, true);
       else {
@@ -1162,30 +1178,35 @@ export function cmdUi(flags: Record<string, string>) {
       }
 
       if (url.pathname === "/ack-run" && req.method === "POST") {
-        const run = activeRun();
-        if (!run) {
-          return Response.json(
-            { ok: false, error: "no run to acknowledge" },
-            { status: 404 },
+        return req.json().then((body: any) => {
+          const reqRunId = body?.run_id ? Number(body.run_id) : null;
+          const run = reqRunId
+            ? (db.query(`SELECT id, session, status, goal, started_at, ended_at FROM runs WHERE id=?`).get(reqRunId) as any)
+            : activeRun();
+          if (!run) {
+            return Response.json(
+              { ok: false, error: "no run to acknowledge" },
+              { status: 404 },
+            );
+          }
+          if (run.status === "running") {
+            return Response.json(
+              { ok: false, error: "run is still running" },
+              { status: 409 },
+            );
+          }
+          const runId = Number(run.id);
+          const session = run.session;
+          db.run(
+            "INSERT INTO events (agent, type, summary, created_at) VALUES ('operator', 'decision', ?, ?)",
+            [`acknowledged terminal run ${runId}; tearing down team ${session}`, nowIso()],
           );
-        }
-        if (run.status === "running") {
-          return Response.json(
-            { ok: false, error: "run is still running" },
-            { status: 409 },
-          );
-        }
-        const runId = Number(run.id);
-        const session = run.session;
-        db.run(
-          "INSERT INTO events (agent, type, summary, created_at) VALUES ('operator', 'decision', ?, ?)",
-          [`acknowledged terminal run ${runId}; tearing down team ${session}`, nowIso()],
-        );
-        setTimeout(() => {
-          disbandTeam(db, session, runId, (s) => console.log(`[ack-run] ${s}`));
-          shutdown();
-        }, 50);
-        return Response.json({ ok: true, run_id: runId, session });
+          setTimeout(() => {
+            disbandTeam(db, session, runId, (s) => console.log(`[ack-run] ${s}`));
+            shutdown();
+          }, 50);
+          return Response.json({ ok: true, run_id: runId, session });
+        });
       }
 
       return new Response("Not Found", { status: 404 });
