@@ -159,9 +159,9 @@ start / monitor 等 Claude Code 加载完成后，把初始 prompt（可以很�
 - 方案 a（推荐）：manager 收尾时显式调用 `synapse done [--status done|failed] "<summary>"`，写入终态标记并把最终 STATUS 发回 operator。
 - 方案 b：monitor 从“出现一条 ref_id=根任务、to=operator 的 STATUS”推断——需额外约定如何区分完成与中间进度，较脆。
 
-**(2) 谁执行解散。** manager 不宜杀掉自己所在的 session。由 **monitor** 观察到终态标记后解散最干净（独立进程、本就编排 session）：落定最后的消息 → 各 agent window 置 stopped 并 kill → monitor 自身退出 → kill tmux session。operator（人）始终保留手动强制解散的兜底。
+**(2) 谁执行解散。** manager 不宜杀掉自己所在的 session。`synapse done` 只落定 run 终态并把最终 STATUS 发回 operator；**monitor** 观察到终态后保持运行并继续投递 operator 后续消息，不杀 team，方便 operator 检查现场或补充信息继续同一 session。最终解散由 **UI/operator ACK** 显式触发：各 agent window 置 stopped 并 kill → kill tmux session。operator（人）始终保留手动强制解散的兜底。
 
-**(3) 解散动作与保留物（沿用 `synapse-spec.md` §6.5）。** kill 各 window、monitor 退出、kill session；**DB 与 audit 日志不删**，跑完/中止后仍可复盘。
+**(3) 解散动作与保留物（沿用 `synapse-spec.md` §6.5）。** ACK 后 kill 各 agent window、kill session（monitor 所在 window 随 session 一起结束）；**DB 与 audit 日志不删**，跑完/中止后仍可复盘。
 
 **(4) 任务是否升为一等实体。** 1:1 下最小做法是“根 TASK 消息 + 这个 session 即任务”，无需新表。但为记录结果/时序、支持“列出历史运行”，建议加一张轻量 `runs` 表：
 ```sql

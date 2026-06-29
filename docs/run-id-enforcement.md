@@ -102,12 +102,15 @@ risk). Only SELECT and the `cmdDone` root-task lookup need scoping.
 
 ## run_id threading in monitor
 
-`runId` is already threaded through the monitor call chain:
+`runId` is already threaded through the monitor/UI call chain:
 
 ```
 cmdMonitor → pollOnce / runLiveMonitor
-          → disbandTeam / refreshAgentState
+          → refreshAgentState
           → dispatchNextDirectMessage / broadcastReadyMessages
+
+cmdUi POST /ack-run
+          → disbandTeam
 ```
 
 Each function needs `runId` added to its signature and passed into SQL.

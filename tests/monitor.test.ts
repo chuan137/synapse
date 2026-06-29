@@ -576,11 +576,9 @@ describe("monitor: live process lock", () => {
   });
 });
 
-// bootstrap-spec.md #8/#9: `synapse done` is the only thing that ends a run;
-// the monitor's job is just to notice `runs.status` left 'running' and
-// disband the team (kill agent windows + the tmux session, mark agents
-// stopped) — it never deletes DB rows.
-describe("monitor: run lifecycle teardown", () => {
+// `synapse done` ends the run, but the monitor and tmux team stay alive so
+// the operator can inspect, send follow-up messages, and ACK from the UI.
+describe("monitor: terminal run handling", () => {
   function insertRun(status: string): number {
     const db = new Database(dbFile);
     const result = db.run(
@@ -607,32 +605,34 @@ describe("monitor: run lifecycle teardown", () => {
     expect(agent.status).not.toBe("stopped");
   });
 
-  test("--once disbands the team once the run is terminal", () => {
+  test("--once leaves the team alive and still delivers messages once the run is terminal", () => {
     const runId = insertRun("completed");
+    run(["send", "manager", "INFO", "follow up", "--from", "operator", "--run-id", String(runId)]);
+    writeTranscript("sess-manager", "end_turn", 5000);
+
     const r = run(["monitor", "--once", "--session", "team", "--run-id", String(runId)]);
     expect(r.exitCode).toBe(0);
-    const log = tmuxLogContents();
-    expect(log).toContain("kill-window -t team:manager");
-    expect(log).toContain("kill-window -t team:coder-1");
-    expect(log).toContain("kill-session -t team");
-    expect(log).not.toContain("team:operator"); // operator isn't a tmux window
+    expect(r.stdout).toContain("monitor remains active until UI ACK");
+    expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- follow up");
 
     const db = openDb();
     const manager = db.query("SELECT status FROM agents WHERE window_name='manager'").get() as any;
     const coder = db.query("SELECT status FROM agents WHERE window_name='coder-1'").get() as any;
-    expect(manager.status).toBe("stopped");
-    expect(coder.status).toBe("stopped");
+    expect(manager.status).not.toBe("stopped");
+    expect(coder.status).not.toBe("stopped");
+    const msg = db.query("SELECT status FROM messages WHERE body='follow up'").get() as any;
+    expect(msg.status).toBe("delivered");
   });
 
-  test("the live loop notices a terminal run at startup and exits on its own, no signal needed", async () => {
+  test("the live loop notices a terminal run and stays alive until signaled", async () => {
     const runId = insertRun("failed");
-    // No --once and nothing kills it — if teardown didn't self-exit, this
-    // spawnSync-style wait (via run(), which blocks for the process to
-    // finish) would hang until bun's test timeout.
-    const r = run(["monitor", "--session", "team", "--run-id", String(runId), "--interval", "30"]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("disbanding team");
-    expect(tmuxLogContents()).toContain("kill-session -t team");
+    const proc = spawnLiveMonitor(["--session", "team", "--run-id", String(runId), "--interval", "30"]);
+    const out = collectStream(proc.stdout);
+    await waitFor(() => out.text().includes("monitor remains active until UI ACK"));
+    expect(proc.exitCode).toBeNull();
+    expect(tmuxLogContents()).toBe("");
+    proc.kill("SIGTERM");
+    expect(await proc.exited).toBe(0);
   }, 15000);
 });
 

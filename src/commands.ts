@@ -593,7 +593,7 @@ function refreshAgentState(
 // Kills every non-operator agent window and the tmux session itself. The DB
 // (agents/messages/events/runs) is left intact — only the live tmux process
 // tree is torn down, never the audit trail (bootstrap-spec.md #9).
-function disbandTeam(
+export function disbandTeam(
   db: Database,
   tmuxSession: string,
   runId: number,
@@ -621,24 +621,25 @@ function disbandTeam(
   log(`synapse monitor: tmux session '${tmuxSession}' killed`);
 }
 
-// Returns true (after disbanding the team) once `runs.status` for runId has
-// left 'running'. The only thing that sets a terminal status is the
-// manager's `synapse done` — nothing else ends a run.
-function checkRunTerminal(
+function terminalRunStatus(db: Database, runId: number): string | null {
+  const run = db.query("SELECT status FROM runs WHERE id=?").get(runId) as
+    | any
+    | undefined;
+  if (!run || run.status === "running") return null;
+  return run.status;
+}
+
+function logTerminalRun(
   db: Database,
   tmuxSession: string,
   runId: number,
   log: (s: string) => void,
-): boolean {
-  const run = db.query("SELECT status FROM runs WHERE id=?").get(runId) as
-    | any
-    | undefined;
-  if (!run || run.status === "running") return false;
+): void {
+  const status = terminalRunStatus(db, runId);
+  if (!status) return;
   log(
-    `run ${runId} reached terminal state '${run.status}' — disbanding team '${tmuxSession}'`,
+    `run ${runId} reached terminal state '${status}' — monitor remains active until UI ACK`,
   );
-  disbandTeam(db, tmuxSession, runId, log);
-  return true;
 }
 
 // Single synchronous snapshot — evaluate every live agent, then broadcast if ready.
@@ -649,8 +650,8 @@ function pollOnce(
   log: (s: string) => void,
   runId?: number,
 ) {
-  if (runId !== undefined && checkRunTerminal(db, tmuxSession, runId, log)) {
-    return;
+  if (runId !== undefined && terminalRunStatus(db, runId)) {
+    logTerminalRun(db, tmuxSession, runId, log);
   }
   const agents = db
     .query(runId !== undefined
@@ -876,17 +877,20 @@ function runLiveMonitor(
     `synapse monitor: watching tmux session '${tmuxSession}' via fs.watch (debounce=${debounceMs}ms, mail-sweep=${sweepMs}ms)`,
   );
 
+  let terminalLogged = false;
+
   // Sweep syncs watcher/timer state with the live roster, cleans up stopped
   // agents, retries pending delivery for agents already idle, and broadcasts
   // ready messages.
   const sweep = () => {
     const sweepLog = sourceLog("sweep");
-    if (
-      runId !== undefined &&
-      checkRunTerminal(db, tmuxSession, runId, sweepLog)
-    ) {
-      shutdown();
-      return;
+    if (runId !== undefined && terminalRunStatus(db, runId)) {
+      if (!terminalLogged) {
+        logTerminalRun(db, tmuxSession, runId, sweepLog);
+        terminalLogged = true;
+      }
+    } else {
+      terminalLogged = false;
     }
     reloadAgents();
     const liveNames = new Set(agents.map((a) => a.window_name));
@@ -1435,10 +1439,9 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 
 // The hub agent's signal that the root task has reached a terminal outcome
 // (bootstrap-spec.md #8/#13). Writes the run's terminal state and sends the
-// final STATUS back to operator. This is the only thing that triggers
-// teardown — the monitor watches `runs.status` and disbands the team once it
-// leaves 'running' (kill agent windows, exit, kill the tmux session; DB and
-// audit logs are kept, never deleted).
+// final STATUS back to operator. The monitor stays alive after terminal state
+// and keeps dispatching operator follow-ups until UI/operator ACK tears down
+// the team.
 export function cmdDone(
   status: string,
   summary: string,

@@ -1,6 +1,6 @@
 import { readFileSync, watch } from "fs";
 import { dirname, resolve } from "path";
-import { connect, MESSAGE_TYPES } from "./commands";
+import { connect, disbandTeam, MESSAGE_TYPES, nowIso } from "./commands";
 
 // ---------- ui ----------
 
@@ -91,6 +91,21 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     font-size: 11px;
     color: var(--muted);
   }
+  #ack-run-btn {
+    display: none;
+    background: var(--error);
+    border: 1px solid color-mix(in srgb, var(--error) 70%, transparent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 3px 8px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  #ack-run-btn.visible { display: inline-flex; }
+  #ack-run-btn:hover { opacity: 0.85; }
+  #ack-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* ── Layout ── */
   main {
@@ -388,6 +403,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 <header id="header">
   <span class="logo">SYNAPSE</span>
   <span id="conn-status" class="disconnected">● connecting</span>
+  <button id="ack-run-btn" title="Acknowledge finished task and stop the team">ACK end</button>
   <span id="msg-count-badge"></span>
 </header>
 <main>
@@ -430,9 +446,11 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   const sendBtn     = $('send-btn');
   const feedback    = $('send-feedback');
   const countBadge  = $('msg-count-badge');
+  const ackRunBtn   = $('ack-run-btn');
 
   const seenIds = new Set();
   let totalMsgs = 0;
+  let currentRun = null;
 
   // Markdown: marked + DOMPurify (loaded from CDN in <head>)
   function renderMd(raw) {
@@ -547,6 +565,13 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   function renderThread(payload) {
     const messages = Array.isArray(payload) ? payload : (payload.messages || []);
     const run = Array.isArray(payload) ? null : (payload.run || null);
+    currentRun = run;
+    if (ackRunBtn) {
+      const terminal = run && run.status && run.status !== 'running';
+      ackRunBtn.classList.toggle('visible', !!terminal);
+      ackRunBtn.textContent = terminal ? 'ACK ' + run.status : 'ACK end';
+      ackRunBtn.disabled = false;
+    }
     const titleEl = $('thread-title');
     if (titleEl) {
       titleEl.textContent = run ? 'Thread  run #' + run.id : 'Thread';
@@ -600,7 +625,25 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     finally { sendBtn.disabled = false; }
   }
 
+  async function ackRun() {
+    if (!currentRun || currentRun.status === 'running') return;
+    ackRunBtn.disabled = true;
+    try {
+      const res = await fetch('/ack-run', { method: 'POST' });
+      const json = await res.json();
+      if (json.ok) flash('acked run #' + json.run_id, true);
+      else {
+        ackRunBtn.disabled = false;
+        flash(json.error || 'error', false);
+      }
+    } catch (err) {
+      ackRunBtn.disabled = false;
+      flash(String(err), false);
+    }
+  }
+
   sendBtn.addEventListener('click', sendMessage);
+  ackRunBtn.addEventListener('click', ackRun);
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
   });
@@ -868,6 +911,33 @@ export function cmdUi(flags: Record<string, string>) {
               { status: 400 },
             ),
           );
+      }
+
+      if (url.pathname === "/ack-run" && req.method === "POST") {
+        const run = activeRun();
+        if (!run) {
+          return Response.json(
+            { ok: false, error: "no run to acknowledge" },
+            { status: 404 },
+          );
+        }
+        if (run.status === "running") {
+          return Response.json(
+            { ok: false, error: "run is still running" },
+            { status: 409 },
+          );
+        }
+        const runId = Number(run.id);
+        const session = run.session;
+        db.run(
+          "INSERT INTO events (agent, type, summary, created_at) VALUES ('operator', 'decision', ?, ?)",
+          [`acknowledged terminal run ${runId}; tearing down team ${session}`, nowIso()],
+        );
+        setTimeout(() => {
+          disbandTeam(db, session, runId, (s) => console.log(`[ack-run] ${s}`));
+          shutdown();
+        }, 50);
+        return Response.json({ ok: true, run_id: runId, session });
       }
 
       return new Response("Not Found", { status: 404 });
