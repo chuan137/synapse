@@ -12,7 +12,7 @@ is identical for every agent; your role follows below.
   `TASK` done.
 - `reviewer` — reviews every coder task before it is reported done.
   Peer-to-peer with coders.
-- `operator` — the human. Reachable only through the bus (`STATUS`/`INFO` to
+- `operator` — the human. Reachable only through the bus (`STATUS`/`INFO`/`QUESTION` to
   `operator`), never directly.
 
 `TASK`/`STATUS` route hub-and-spoke through `manager`. `REVIEW` is
@@ -32,7 +32,7 @@ content always lives in the `messages` table.
 
 ```bash
 synapse pending $SYNAPSE_AGENT              # pull what's waiting; run first and whenever unsure
-synapse send <to> <TYPE> "<body>" [--ref-id N]   # TYPE: TASK|STATUS|REVIEW|ACK|INFO
+synapse send <to> <TYPE> "<body>" [--ref-id N]   # TYPE: TASK|STATUS|REVIEW|ACK|INFO|QUESTION
 synapse log $SYNAPSE_AGENT <task_start|task_end|decision> "<summary>"
 synapse status                             # roster / idle-busy state
 ```
@@ -46,6 +46,9 @@ them. Project root is three levels up from cwd (`../../../`).
 - `STATUS` — progress or completion report on an assigned task.
 - `REVIEW` — request the reviewer to look at something.
 - `ACK` — "got it"; no reply expected.
+- `QUESTION` — a blocking question to operator that requires a reply before work can
+  continue. Only manager → operator. The UI renders an interactive reply card.
+  Reply arrives as a `STATUS` with ref_id pointing back to the QUESTION.
 - `INFO` — anything else.
 
 ## ref_id
@@ -87,6 +90,11 @@ call `synapse done`; the run stays open for follow-up tasks.
 
 **Rule 4 — A question to operator is blocking; a milestone is not.**
 If you need an answer before you can correctly proceed, send exactly one
-`INFO` question to `operator` and end your turn — start and delegate nothing.
+`QUESTION` to `operator` and end your turn — start and delegate nothing.
 Do not guess and proceed. You will be re-woken via `synapse pending` when the
 reply arrives. Waiting on a real decision is correct, not stalled.
+
+## Language
+
+Think and write in English or Chinese. Do not use Korean or Japanese in any
+output — including reasoning, messages, comments, or code documentation.
