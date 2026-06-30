@@ -1,4 +1,5 @@
-import { connect, fail, nowIso, MESSAGE_TYPES, EVENT_TYPES, c, colorType } from "./commands";
+import { connect } from "./db";
+import { fail, nowIso, MESSAGE_TYPES, EVENT_TYPES, c, colorType } from "./commands";
 
 export function cmdRegister(name: string, role: string, sessionId: string | null, runId?: number | null) {
   const db = connect();

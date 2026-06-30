@@ -7,7 +7,6 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
-  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -15,13 +14,13 @@ import {
 } from "fs";
 import { homedir } from "os";
 import { dirname, join, relative, resolve } from "path";
-import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 import SHARED_MD from "../templates/shared.md" with { type: "text" };
 import ROLE_MANAGER_MD from "../templates/role-manager.md" with { type: "text" };
 import ROLE_CODER_MD from "../templates/role-coder.md" with { type: "text" };
 import ROLE_REVIEWER_MD from "../templates/role-reviewer.md" with {
   type: "text",
 };
+import { connect, dbPath, defaultAgentDir, initDb } from "./db";
 import { cmdRegister, cmdSend, resolveFrom } from "./mailbox";
 
 const ROLE_TEMPLATES: Record<string, string> = {
@@ -38,38 +37,6 @@ export const DEFAULT_TASK_TEMPLATE = "templates/task.example.yml";
 // Cheap mailbox/roster sweep — idle detection is event-driven, not on this timer.
 export const DEFAULT_SWEEP_INTERVAL_MS = 1000;
 export const DEFAULT_DEBOUNCE_MS = 2000;
-
-// Stored in PRAGMA user_version so detection works before any table exists.
-// v2 added the `runs` table (bootstrap-spec.md #10/#11).
-// v3 added `run_id` column to `messages`.
-// v4 rebuilt agents table: run_id NOT NULL, sentinel 0 for operator, UNIQUE(window_name, run_id).
-export const SCHEMA_VERSION = 4;
-
-export function dbPath(): string {
-  return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
-}
-
-// Synapse-managed per-agent scratch directory for a task:
-// .synapse/agents/<task-name>/<agent-name>, sibling to the shared DB.
-export function defaultAgentDir(taskName: string, name: string): string {
-  return join(dirname(dbPath()), "agents", taskName, name);
-}
-
-export function connect(createParent = false): Database {
-  const path = dbPath();
-  if (createParent) {
-    mkdirSync(dirname(path), { recursive: true });
-  } else if (!existsSync(path)) {
-    console.error(
-      `synapse: no DB at ${path} — run \`synapse init\` first (or set SYNAPSE_DB).`,
-    );
-    process.exit(1);
-  }
-  const db = new Database(path);
-  db.exec("PRAGMA journal_mode=WAL;");
-  db.exec("PRAGMA foreign_keys=ON;");
-  return db;
-}
 
 export function nowIso(): string {
   return new Date().toISOString().slice(0, 19);
@@ -101,59 +68,9 @@ export function colorType(t: string): string {
   return `${color}${t}${c.reset}`;
 }
 
-// Returns schema version (0 = never set) and whether tables exist.
-function probeSchema(db: Database): { version: number; hasTables: boolean } {
-  const version = (db.query("PRAGMA user_version").get() as any)
-    .user_version as number;
-  const hasTables = !!db
-    .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agents'")
-    .get();
-  return { version, hasTables };
-}
-
 export function cmdInit() {
-  const path = dbPath();
-  const dataDir = dirname(path);
-
-  if (existsSync(path)) {
-    const probe = new Database(path);
-    const { version, hasTables } = probeSchema(probe);
-    probe.close();
-
-    if (version > SCHEMA_VERSION) {
-      fail(
-        `DB at ${path} is schema v${version}, newer than this binary supports (v${SCHEMA_VERSION}). Upgrade synapse before running init.`,
-      );
-    }
-    if (hasTables && version === 2) {
-      // Migrate v2 → v3: add run_id column to messages (non-destructive).
-      // v3 → v4 cannot use ALTER TABLE (agents PRIMARY KEY changed) — falls through
-      // to the backup+rebuild path below.
-      const db = connect(true);
-      db.exec(`ALTER TABLE messages ADD COLUMN run_id INTEGER;`);
-      db.exec(`PRAGMA user_version=3;`);
-      db.close();
-      console.log(`synapse: migrated ${path} from schema v2 to v3`);
-      // Fall through: if target is v4, the version<SCHEMA_VERSION branch below fires next.
-    }
-    if (hasTables && version < SCHEMA_VERSION) {
-      // Move the whole data directory aside — it may also hold audit logs that
-      // belong with the old DB, not mixed into the fresh one.
-      const backupDir = `${dataDir}.v${version}.bak-${Date.now()}`;
-      renameSync(dataDir, backupDir);
-      console.log(
-        `synapse: found pre-v${SCHEMA_VERSION} data (schema v${version}) at ${dataDir} — moved entire folder to ${backupDir}`,
-      );
-    }
-    // hasTables===false or already current version: fall through, schema creation is idempotent.
-  }
-
-  const db = connect(true);
-  db.exec(SCHEMA_SQL);
-  db.exec(`PRAGMA user_version=${SCHEMA_VERSION};`);
-  console.log(`synapse: initialized ${path} (schema v${SCHEMA_VERSION})`);
+  initDb();
 }
-
 
 function safeFileSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9_.-]/g, "_");

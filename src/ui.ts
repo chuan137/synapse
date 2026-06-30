@@ -1,13 +1,12 @@
 import { readFileSync, watch } from "fs";
 import { dirname, resolve } from "path";
 import {
-  connect,
-  dbPath,
   DEFAULT_TASK_TEMPLATE,
   disbandTeam,
   MESSAGE_TYPES,
   nowIso,
 } from "./commands";
+import { connect, dbPath } from "./db";
 
 // ---------- ui ----------
 
