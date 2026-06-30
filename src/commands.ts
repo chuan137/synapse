@@ -29,7 +29,7 @@ const ROLE_TEMPLATES: Record<string, string> = {
   reviewer: ROLE_REVIEWER_MD,
 };
 
-export const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO"]);
+export const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO", "QUESTION"]);
 export const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
 
 export const DEFAULT_TMUX_SESSION = "team";
@@ -315,9 +315,9 @@ function newestOpenInboundWork(
 
 function sendBackReminderBody(agentName: string, msg: any): string {
   return [
-    `Harness enforcement: your previous ${msg.type} #${msg.id} has ended without a STATUS reply.`,
+    `Harness enforcement: ${msg.type} #${msg.id} from ${msg.from_agent} is still awaiting your STATUS reply.`,
     "",
-    "Before doing anything else, send the result back to the sender with this exact shape:",
+    `Please send a STATUS to ${msg.from_agent} referencing msg #${msg.id} before doing anything else:`,
     "",
     `synapse send ${msg.from_agent} STATUS "<result: done, blocked, or issues found; include key files/tests>" --ref-id ${msg.id}`,
     "",
@@ -546,6 +546,20 @@ function terminalRunStatus(db: Database, runId: number): string | null {
   return run.status;
 }
 
+function markOperatorMessagesDelivered(
+  db: Database,
+  runId: number,
+  log: (s: string) => void,
+): void {
+  const result = db.run(
+    "UPDATE messages SET status='delivered', delivered_at=? WHERE to_agent='operator' AND run_id=? AND status='pending'",
+    [nowIso(), runId],
+  );
+  if (result.changes > 0) {
+    log(`  operator: ${result.changes} message(s) marked delivered`);
+  }
+}
+
 function logTerminalRun(
   db: Database,
   tmuxSession: string,
@@ -594,6 +608,7 @@ function pollOnce(
       }
     }
   }
+  if (runId !== undefined) markOperatorMessagesDelivered(db, runId, log);
   broadcastReadyMessages(
     db,
     tmuxSession,
@@ -842,6 +857,7 @@ function runLiveMonitor(
       // Recheck for real mtime changes fs.watch may have missed.
       pool.emitOnTranscriptChange(agent.window_name);
     }
+    if (runId !== undefined) markOperatorMessagesDelivered(db, runId, sweepLog);
     broadcastReadyMessages(
       db,
       tmuxSession,
