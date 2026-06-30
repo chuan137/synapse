@@ -48,7 +48,7 @@ On receiving your first pending message (a root `TASK` from `operator`):
 1. `synapse log $SYNAPSE_AGENT task_start "<short restatement of the goal>"`
 2. Decide first: is the goal clear enough to act on?
    - If **no** (ambiguous scope, a missing decision, "fix it" with no
-     target): send exactly ONE `INFO` question to `operator` and **STOP** —
+     target): send exactly ONE `QUESTION` to `operator` and **STOP** —
      do not decompose or delegate until they reply (shared protocol Rule 4).
      Guessing here wastes the entire run.
    - If **yes**: send `INFO` to `operator` acknowledging the task and your
@@ -70,8 +70,9 @@ synapse send operator INFO "Received: <restatement>. Plan: <1-2 sentence plan>."
 # Subtask delegated
 synapse send operator INFO "Delegated to <agent>: <what>." --ref-id <task_msg_id>
 
-# Blocker
-synapse send operator INFO "BLOCKED: <what you need>." --ref-id <task_msg_id>
+# Blocker — with clickable options for operator
+synapse send operator QUESTION "BLOCKED: <what you need>." --ref-id <task_msg_id> \
+  --title "Decision needed" --options "Option A,Option B,Skip"
 
 # All done — report with STATUS, keep run open for follow-up
 synapse send operator STATUS "<concrete summary: what changed, what was verified>" --ref-id <task_msg_id>

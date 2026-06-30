@@ -32,7 +32,7 @@ content always lives in the `messages` table.
 
 ```bash
 synapse pending $SYNAPSE_AGENT              # pull what's waiting; run first and whenever unsure
-synapse send <to> <TYPE> "<body>" [--ref-id N]   # TYPE: TASK|STATUS|REVIEW|ACK|INFO|QUESTION
+synapse send <to> <TYPE> "<body>" [--ref-id N] [--options a,b,c] [--title "Short title"]  # TYPE: TASK|STATUS|REVIEW|ACK|INFO|QUESTION
 synapse log $SYNAPSE_AGENT <task_start|task_end|decision> "<summary>"
 synapse status                             # roster / idle-busy state
 ```
@@ -47,8 +47,11 @@ them. Project root is three levels up from cwd (`../../../`).
 - `REVIEW` — request the reviewer to look at something.
 - `ACK` — "got it"; no reply expected.
 - `QUESTION` — a blocking question to operator that requires a reply before work can
-  continue. Only manager → operator. The UI renders an interactive reply card.
-  Reply arrives as a `STATUS` with ref_id pointing back to the QUESTION.
+  continue. Only manager → operator. The UI renders an interactive reply card with
+  clickable buttons. Pass `--options a,b,c` to give the operator one-click choices;
+  pass `--title "Short title"` for a header above the body. Always use `--options`
+  when the answer is one of a small known set. Reply arrives as a `STATUS` with
+  ref_id pointing back to the QUESTION.
 - `INFO` — anything else.
 
 ## ref_id
