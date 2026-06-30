@@ -275,11 +275,12 @@ function dispatchDirectMessage(
       `  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) delivered`,
     );
   } else {
-    // Delivery failures are terminal in v1. Operators can inspect failed rows;
-    // automatic retry would need retry_count/next_retry_at plus a redelivery path.
-    db.run("UPDATE messages SET status='failed' WHERE id=?", [msg.id]);
+    db.run(
+      "UPDATE messages SET status='failed', retry_count=1 WHERE id=?",
+      [msg.id],
+    );
     log(
-      `  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) FAILED: ${res.error}`,
+      `  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) FAILED (terminal): ${res.error}`,
     );
   }
 }
@@ -388,9 +389,10 @@ function hasPendingDirectMessageForWindow(
 ): boolean {
   const row = db
     .query(
-      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? AND run_id=? LIMIT 1`,
+      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? AND run_id=?
+         AND (next_retry_at IS NULL OR next_retry_at <= ?) LIMIT 1`,
     )
-    .get(windowName, runId);
+    .get(windowName, runId, nowIso());
   return !!row;
 }
 
@@ -811,12 +813,22 @@ function runLiveMonitor(
   // Sweep syncs watcher/timer state with the live roster, cleans up stopped
   // agents, retries pending delivery for agents already idle, and broadcasts
   // ready messages.
-  const sweep = () => {
+  const sweepInner = () => {
     const sweepLog = sourceLog("sweep");
     if (runId !== undefined && terminalRunStatus(db, runId)) {
       if (!terminalLogged) {
         logTerminalRun(db, tmuxSession, runId, sweepLog);
         terminalLogged = true;
+      }
+      // Auto-teardown fallback: if UI never sends ack-run, disband after 60s.
+      const run = db.query("SELECT ended_at FROM runs WHERE id=?").get(runId) as any;
+      if (run?.ended_at) {
+        const endedMs = new Date(run.ended_at + "Z").getTime();
+        if (Date.now() - endedMs > 60_000) {
+          sweepLog(`run ${runId}: auto-teardown after 60s without UI ACK`);
+          disbandTeam(db, tmuxSession, runId, sweepLog);
+          return;
+        }
       }
     } else {
       terminalLogged = false;
@@ -866,6 +878,20 @@ function runLiveMonitor(
       runId ?? activeRosterRunId(agents, 0),
       sweepLog,
     );
+  };
+
+  // A transient DB error (e.g. SQLITE_IOERR from WAL/disk pressure) must not
+  // kill the monitor; log it and let the next interval tick retry.
+  const sweep = () => {
+    try {
+      sweepInner();
+    } catch (err) {
+      sourceLog("sweep")(
+        `  DB error during sweep (transient, retrying next tick): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   };
 
   sweep();
