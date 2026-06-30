@@ -978,12 +978,12 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     }
   }
 
-  async function selectRun(runId) {
+  async function selectRun(runId, knownRun?) {
     state.selectedRunId = runId;
     state.unreadCounts.delete(runId);
     renderRunsSidebar();
 
-    const run = state.runs.find(r => r.id === runId);
+    const run = state.runs.find(r => r.id === runId) || knownRun;
     updateThreadHeader(run);
     updateKillSessionButton(run);
 
@@ -1078,7 +1078,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
           messages.forEach(m => state.seenMsgIds.add(m.id));
           // Auto-select if nothing selected yet
           if (state.selectedRunId === null) {
-            selectRun(run.id);
+            selectRun(run.id, run);
           } else if (run.id === state.selectedRunId) {
             renderMessages(messages);
             updateThreadHeader(run);
