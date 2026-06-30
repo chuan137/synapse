@@ -534,7 +534,7 @@ describe("monitor: live process lock", () => {
 });
 
 // `synapse done` ends the run, but the monitor and tmux team stay alive so
-// the operator can inspect, send follow-up messages, and ACK from the UI.
+// the operator can inspect, send follow-up messages, and explicitly kill the session.
 describe("monitor: terminal run handling", () => {
   function insertRun(status: string): number {
     const db = new Database(dbFile);
@@ -569,7 +569,7 @@ describe("monitor: terminal run handling", () => {
 
     const r = run(["monitor", "--once", "--session", "team", "--run-id", String(runId)]);
     expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("monitor remains active until UI ACK");
+    expect(r.stdout).toContain("monitor remains active until the session is killed");
     expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- synapse pending manager");
 
     const db = openDb();
@@ -585,7 +585,7 @@ describe("monitor: terminal run handling", () => {
     const runId = insertRun("failed");
     const proc = spawnLiveMonitor(["--session", "team", "--run-id", String(runId), "--interval", "30"]);
     const out = collectStream(proc.stdout);
-    await waitFor(() => out.text().includes("monitor remains active until UI ACK"));
+    await waitFor(() => out.text().includes("monitor remains active until the session is killed"));
     expect(proc.exitCode).toBeNull();
     expect(tmuxLogContents()).toBe("");
     proc.kill("SIGTERM");

@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS runs (
   goal       TEXT,
   status     TEXT NOT NULL DEFAULT 'running', -- running|completed|failed|aborted
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
-  ended_at   TEXT
+  ended_at   TEXT,
+  session_killed_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_run ON messages(run_id);

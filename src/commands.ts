@@ -735,8 +735,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 // The hub agent's signal that the root task has reached a terminal outcome
 // (bootstrap-spec.md #8/#13). Writes the run's terminal state and sends the
 // final STATUS back to operator. The monitor stays alive after terminal state
-// and keeps dispatching operator follow-ups until UI/operator ACK tears down
-// the team.
+// and keeps dispatching operator follow-ups until the tmux session is killed.
 export function cmdDone(
   status: string,
   summary: string,

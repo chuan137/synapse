@@ -18,6 +18,12 @@ import { fail, nowIso, DEFAULT_TMUX_SESSION } from "./commands";
 // Cheap mailbox/roster sweep — idle detection is event-driven, not on this timer.
 export const DEFAULT_SWEEP_INTERVAL_MS = 1000;
 export const DEFAULT_DEBOUNCE_MS = 2000;
+export const DEFAULT_AUTO_TEARDOWN_MS = 30 * 60 * 1000;
+
+export type DisbandResult = {
+  sessionKilled: boolean;
+  error?: string;
+};
 
 type AgentStatus = "idle" | "busy" | "unknown";
 type AgentState = {
@@ -25,6 +31,30 @@ type AgentState = {
   detail: string;
   remainingDebounceMs?: number;
 };
+
+function autoTeardownMs(): number {
+  const raw = process.env.SYNAPSE_AUTO_TEARDOWN_MS;
+  if (raw === undefined) return DEFAULT_AUTO_TEARDOWN_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_AUTO_TEARDOWN_MS;
+}
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function tmuxSessionExists(tmuxSession: string): boolean {
+  return Bun.spawnSync(["tmux", "has-session", "-t", tmuxSession]).exitCode === 0;
+}
+
+function waitForTmuxSessionGone(tmuxSession: string, timeoutMs = 2000): boolean {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (!tmuxSessionExists(tmuxSession)) return true;
+    sleepSync(50);
+  } while (Date.now() < deadline);
+  return !tmuxSessionExists(tmuxSession);
+}
 
 function safeFileSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9_.-]/g, "_");
@@ -376,7 +406,7 @@ export function disbandTeam(
   tmuxSession: string,
   runId: number,
   log: (s: string) => void,
-): void {
+): DisbandResult {
   const agents = db
     .query(
       "SELECT window_name FROM agents WHERE window_name != 'operator' AND status != 'stopped' AND run_id=?",
@@ -395,8 +425,16 @@ export function disbandTeam(
     );
     log(`  ${a.window_name}: stopped (teardown)`);
   }
-  Bun.spawnSync(["tmux", "kill-session", "-t", tmuxSession]);
+  const killSession = Bun.spawnSync(["tmux", "kill-session", "-t", tmuxSession]);
+  if (!waitForTmuxSessionGone(tmuxSession)) {
+    const stderr = killSession.stderr.toString().trim();
+    const error = stderr || `tmux session '${tmuxSession}' still exists after kill-session`;
+    log(`synapse monitor: tmux session '${tmuxSession}' still exists after kill-session`);
+    return { sessionKilled: false, error };
+  }
+  db.run("UPDATE runs SET session_killed_at=? WHERE id=?", [nowIso(), runId]);
   log(`synapse monitor: tmux session '${tmuxSession}' killed`);
+  return { sessionKilled: true };
 }
 
 function terminalRunStatus(db: Database, runId: number): string | null {
@@ -430,7 +468,7 @@ function logTerminalRun(
   const status = terminalRunStatus(db, runId);
   if (!status) return;
   log(
-    `run ${runId} reached terminal state '${status}' — monitor remains active until UI ACK`,
+    `run ${runId} reached terminal state '${status}' — monitor remains active until the session is killed`,
   );
 }
 
@@ -661,6 +699,7 @@ function runLiveMonitor(
   );
 
   let terminalLogged = false;
+  const teardownMs = autoTeardownMs();
 
   // Sweep syncs watcher/timer state with the live roster, cleans up stopped
   // agents, and retries pending nudges for agents already idle.
@@ -671,12 +710,13 @@ function runLiveMonitor(
         logTerminalRun(db, tmuxSession, runId, sweepLog);
         terminalLogged = true;
       }
-      // Auto-teardown fallback: if UI never sends ack-run, disband after 60s.
-      const run = db.query("SELECT ended_at FROM runs WHERE id=?").get(runId) as any;
-      if (run?.ended_at) {
+      // Auto-teardown fallback: keep completed runs inspectable, but prevent
+      // orphaned sessions from living forever if nobody kills the session.
+      const run = db.query("SELECT ended_at, session_killed_at FROM runs WHERE id=?").get(runId) as any;
+      if (run?.ended_at && !run.session_killed_at) {
         const endedMs = new Date(run.ended_at + "Z").getTime();
-        if (Date.now() - endedMs > 60_000) {
-          sweepLog(`run ${runId}: auto-teardown after 60s without UI ACK`);
+        if (Date.now() - endedMs > teardownMs) {
+          sweepLog(`run ${runId}: auto-teardown after ${Math.round(teardownMs / 1000)}s without session kill`);
           disbandTeam(db, tmuxSession, runId, sweepLog);
           return;
         }

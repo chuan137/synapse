@@ -132,21 +132,27 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     line-height: 1;
   }
   #theme-btn:hover { color: var(--text); border-color: var(--text); }
-  #ack-run-btn {
+  #session-actions {
     display: none;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 10px 16px;
+    justify-content: flex-end;
+  }
+  #session-actions.visible { display: flex; }
+  #kill-session-btn {
     background: var(--error);
     border: 1px solid color-mix(in srgb, var(--error) 70%, transparent);
     color: #fff;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     border-radius: 4px;
-    padding: 3px 8px;
+    padding: 6px 12px;
     cursor: pointer;
     line-height: 1;
   }
-  #ack-run-btn.visible { display: inline-flex; }
-  #ack-run-btn:hover { opacity: 0.85; }
-  #ack-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  #kill-session-btn:hover { opacity: 0.85; }
+  #kill-session-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* ── Layout ── */
   main {
@@ -549,7 +555,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   <span class="logo">SYNAPSE</span>
   <span id="conn-status" class="disconnected">● connecting</span>
   <button id="theme-btn" title="Toggle light/dark theme">☀︎</button>
-  <button id="ack-run-btn" title="Acknowledge finished task and stop the team">ACK end</button>
   <span id="msg-count-badge"></span>
 </header>
 <main>
@@ -575,6 +580,9 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       <span class="agents-empty">no agents</span>
     </div>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
+    <div id="session-actions">
+      <button id="kill-session-btn" title="Kill the tmux session for this completed run">Kill tmux session</button>
+    </div>
     <div id="compose">
       <textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>
       <div class="compose-bottom">
@@ -594,7 +602,8 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   const sendBtn     = $('send-btn');
   const feedback    = $('send-feedback');
   const countBadge  = $('msg-count-badge');
-  const ackRunBtn   = $('ack-run-btn');
+  const sessionActions = $('session-actions');
+  const killSessionBtn = $('kill-session-btn');
   const newRunBtn   = $('new-run-btn');
   const startPanel  = $('start-run-panel');
   const startGoal   = $('start-goal-input');
@@ -874,13 +883,18 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
   }
 
-  function updateAckButton(run) {
-    if (!ackRunBtn || !run) return;
-    const terminal = run.status && run.status !== 'running';
-    ackRunBtn.classList.toggle('visible', !!terminal);
-    ackRunBtn.textContent = terminal ? 'ACK ' + run.status : 'ACK end';
-    ackRunBtn.disabled = false;
-    ackRunBtn._currentRun = run;
+  function updateKillSessionButton(run) {
+    if (!sessionActions || !killSessionBtn) return;
+    if (!run) {
+      sessionActions.classList.remove('visible');
+      killSessionBtn._currentRun = null;
+      return;
+    }
+    const canKill = run.status && run.status !== 'running' && !run.session_killed_at;
+    sessionActions.classList.toggle('visible', !!canKill);
+    killSessionBtn.textContent = canKill ? 'Kill tmux session' : 'Kill tmux session';
+    killSessionBtn.disabled = false;
+    killSessionBtn._currentRun = run;
   }
 
   async function selectRun(runId) {
@@ -890,7 +904,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 
     const run = state.runs.find(r => r.id === runId);
     updateThreadHeader(run);
-    updateAckButton(run);
+    updateKillSessionButton(run);
 
     renderAgentsStrip(state.agents.get(runId) || []);
 
@@ -934,7 +948,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       selectRun(state.runs[0].id);
     } else if (state.selectedRunId !== null) {
       const run = state.runs.find(r => r.id === state.selectedRunId);
-      if (run) updateAckButton(run);
+      if (run) updateKillSessionButton(run);
     }
   }
 
@@ -981,7 +995,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
           } else if (run.id === state.selectedRunId) {
             renderMessages(messages);
             updateThreadHeader(run);
-            updateAckButton(run);
+            updateKillSessionButton(run);
           }
         } else {
           renderMessages(messages);
@@ -1059,24 +1073,32 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     finally { sendBtn.disabled = false; }
   }
 
-  async function ackRun() {
-    const run = ackRunBtn._currentRun;
+  async function killSession() {
+    if (!killSessionBtn || !sessionActions) return;
+    const run = killSessionBtn._currentRun;
     if (!run || run.status === 'running') return;
-    ackRunBtn.disabled = true;
+    killSessionBtn.disabled = true;
+    killSessionBtn.textContent = 'Killing...';
     try {
-      const res = await fetch('/ack-run', {
+      const res = await fetch('/kill-session', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ run_id: run.id }),
       });
       const json = await res.json();
-      if (json.ok) flash('acked run #' + json.run_id, true);
+      if (json.ok) {
+        run.session_killed_at = json.session_killed_at || new Date().toISOString();
+        sessionActions.classList.remove('visible');
+        flash('killed session ' + json.session, true);
+      }
       else {
-        ackRunBtn.disabled = false;
+        killSessionBtn.disabled = false;
+        killSessionBtn.textContent = 'Kill tmux session';
         flash(json.error || 'error', false);
       }
     } catch (err) {
-      ackRunBtn.disabled = false;
+      killSessionBtn.disabled = false;
+      killSessionBtn.textContent = 'Kill tmux session';
       flash(String(err), false);
     }
   }
@@ -1119,7 +1141,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     setStartStatus('', true);
   });
   sendBtn.addEventListener('click', sendMessage);
-  ackRunBtn.addEventListener('click', ackRun);
+  killSessionBtn.addEventListener('click', killSession);
   msgInput.addEventListener('input', () => { sendBtn._overrideWarning = false; });
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
@@ -1199,7 +1221,7 @@ export function cmdUi(flags: Record<string, string>) {
     return (
       (db
         .query(
-          `SELECT id, session, status, goal, started_at, ended_at
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
            FROM runs
            WHERE status='running'
            ORDER BY id DESC LIMIT 1`,
@@ -1207,7 +1229,7 @@ export function cmdUi(flags: Record<string, string>) {
         .get() as any) ??
       (db
         .query(
-          `SELECT id, session, status, goal, started_at, ended_at
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
            FROM runs
            ORDER BY id DESC LIMIT 1`,
         )
@@ -1250,7 +1272,7 @@ export function cmdUi(flags: Record<string, string>) {
   function pollDb() {
     // 1. All running runs
     const runningRuns = db.query(
-      `SELECT id, session, status, goal, started_at, ended_at
+      `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
        FROM runs WHERE status='running' ORDER BY id DESC LIMIT 10`
     ).all() as any[];
 
@@ -1285,7 +1307,7 @@ export function cmdUi(flags: Record<string, string>) {
 
     // 2. Push runs-list (all runs, not just running)
     const allRuns = db.query(
-      `SELECT id, session, status, goal, started_at, ended_at
+      `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
        FROM runs ORDER BY id DESC LIMIT 20`
     ).all();
     pushToAll("runs-list", { runs: allRuns });
@@ -1339,7 +1361,7 @@ export function cmdUi(flags: Record<string, string>) {
             clients.add(ctrl);
             pushOperatorThread(ctrl);
             const allRuns = db.query(
-              `SELECT id, session, status, goal, started_at, ended_at
+              `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
                FROM runs ORDER BY id DESC LIMIT 20`
             ).all();
             push(ctrl, "runs-list", { runs: allRuns });
@@ -1360,7 +1382,7 @@ export function cmdUi(flags: Record<string, string>) {
 
       if (url.pathname === "/runs" && req.method === "GET") {
         const runs = db.query(
-          `SELECT id, session, status, goal, started_at, ended_at
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
            FROM runs ORDER BY id DESC LIMIT 20`
         ).all();
         return Response.json({ runs });
@@ -1370,7 +1392,7 @@ export function cmdUi(flags: Record<string, string>) {
         const runId = Number(url.searchParams.get("run_id"));
         if (!runId) return Response.json({ error: "missing run_id" }, { status: 400 });
         const run = db.query(
-          `SELECT id, session, status, goal, started_at, ended_at FROM runs WHERE id=?`
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at FROM runs WHERE id=?`
         ).get(runId) as any;
         if (!run) return Response.json({ error: "run not found" }, { status: 404 });
         const messages = db.query(
@@ -1494,15 +1516,15 @@ export function cmdUi(flags: Record<string, string>) {
           );
       }
 
-      if (url.pathname === "/ack-run" && req.method === "POST") {
+      if (url.pathname === "/kill-session" && req.method === "POST") {
         return req.json().then((body: any) => {
           const reqRunId = body?.run_id ? Number(body.run_id) : null;
           const run = reqRunId
-            ? (db.query(`SELECT id, session, status, goal, started_at, ended_at FROM runs WHERE id=?`).get(reqRunId) as any)
+            ? (db.query(`SELECT id, session, status, goal, started_at, ended_at, session_killed_at FROM runs WHERE id=?`).get(reqRunId) as any)
             : activeRun();
           if (!run) {
             return Response.json(
-              { ok: false, error: "no run to acknowledge" },
+              { ok: false, error: "no run selected" },
               { status: 404 },
             );
           }
@@ -1516,13 +1538,20 @@ export function cmdUi(flags: Record<string, string>) {
           const session = run.session;
           db.run(
             "INSERT INTO events (agent, type, summary, created_at) VALUES ('operator', 'decision', ?, ?)",
-            [`acknowledged terminal run ${runId}; tearing down team ${session}`, nowIso()],
+            [`requested tmux session kill for terminal run ${runId}; session ${session}`, nowIso()],
           );
-          setTimeout(() => {
-            disbandTeam(db, session, runId, (s) => console.log(`[ack-run] ${s}`));
-            pollDb();
-          }, 50);
-          return Response.json({ ok: true, run_id: runId, session });
+          const result = disbandTeam(db, session, runId, (s) => console.log(`[kill-session] ${s}`));
+          pollDb();
+          if (!result.sessionKilled) {
+            return Response.json(
+              { ok: false, run_id: runId, session, error: result.error || "tmux session still exists" },
+              { status: 500 },
+            );
+          }
+          const updated = db
+            .query("SELECT session_killed_at FROM runs WHERE id=?")
+            .get(runId) as any;
+          return Response.json({ ok: true, run_id: runId, session, session_killed_at: updated?.session_killed_at ?? null });
         });
       }
 
