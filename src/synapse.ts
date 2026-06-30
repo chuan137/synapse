@@ -156,7 +156,7 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "send",
-    usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...]",
+    usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...] [--title \"Short title\"]",
     summary: "Queue a message for an agent.",
     help: [
       {
@@ -174,6 +174,7 @@ const COMMANDS: CommandSpec[] = [
           "--ref-id N            Message id this message replies to or closes.",
           "--run-id N            Store the message on a specific run.",
           "--options a,b,c       Choice labels for QUESTION messages.",
+          "--title TEXT          Short title shown above the body in QUESTION cards.",
         ],
       },
     ],
@@ -186,7 +187,8 @@ const COMMANDS: CommandSpec[] = [
       const options = flags["options"]
         ? flags["options"].split(",").map(s => s.trim()).filter(Boolean)
         : null;
-      return cmdSend(to, type, body, flags["from"] ?? null, refId, runId, options);
+      const title = flags["title"] ?? null;
+      return cmdSend(to, type, body, flags["from"] ?? null, refId, runId, options, title);
     },
   },
   {

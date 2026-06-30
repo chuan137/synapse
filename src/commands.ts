@@ -98,6 +98,7 @@ export function cmdSend(
   refId: number | null,
   runId?: number | null,
   options?: string[] | null,
+  title?: string | null,
 ) {
   if (!MESSAGE_TYPES.has(type)) {
     fail(`type must be one of ${[...MESSAGE_TYPES].sort()}, got '${type}'`);
@@ -121,9 +122,9 @@ export function cmdSend(
   }
   const optionsJson = options && options.length > 0 ? JSON.stringify(options) : null;
   const result = db.run(
-    `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body, options)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [resolvedRunId, frm, to, type, refId, body, optionsJson],
+    `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body, options, title)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [resolvedRunId, frm, to, type, refId, body, optionsJson, title ?? null],
   );
   console.log(
     `synapse: message ${result.lastInsertRowid} queued (${frm} -> ${to}, ${type}${

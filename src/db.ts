@@ -11,7 +11,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v6 added options column to messages (JSON array for QUESTION type).
 // v7 added session_killed_at to runs so UI teardown state survives refresh/SSE updates.
 // v8 renamed an intermediate session-completion column to session_killed_at.
-export const SCHEMA_VERSION = 8;
+// v9 added title column to messages (optional short title for QUESTION cards).
+export const SCHEMA_VERSION = 9;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -120,6 +121,15 @@ export function initDb() {
       db.close();
       currentVersion = 8;
       console.log(`synapse: migrated ${path} from schema v7 to v8`);
+    }
+    if (hasTables && currentVersion === 8) {
+      // Migrate v8 → v9: add title column to messages (non-destructive).
+      const db = connect(true);
+      db.exec(`ALTER TABLE messages ADD COLUMN title TEXT;`);
+      db.exec(`PRAGMA user_version=9;`);
+      db.close();
+      currentVersion = 9;
+      console.log(`synapse: migrated ${path} from schema v8 to v9`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

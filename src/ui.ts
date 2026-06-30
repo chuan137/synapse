@@ -165,6 +165,20 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
   #finish-run-btn:hover { opacity: 0.85; }
   #finish-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  #stop-run-btn {
+    background: var(--error);
+    border: 1px solid color-mix(in srgb, var(--error) 70%, transparent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    line-height: 1;
+    margin-left: 8px;
+  }
+  #stop-run-btn:hover { opacity: 0.85; }
+  #stop-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* ── Layout ── */
   main {
@@ -450,6 +464,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   .msg-type-ACK, .msg-type-INFO { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
   .msg-type-QUESTION { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
   .question-card { margin-top: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; }
+  .question-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text); }
   .question-options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .question-opt-btn { padding: 4px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; font-family: inherit; font-size: 12px; }
   .question-opt-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -593,8 +608,13 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   </aside>
   <div id="messages-panel">
     <div id="thread-header">
-      <div id="thread-title">Thread</div>
-      <div id="thread-goal" class="thread-goal"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div id="thread-title">Thread</div>
+          <div id="thread-goal" class="thread-goal"></div>
+        </div>
+        <button id="stop-run-btn" style="display:none" title="Stop this run and kill tmux session">Stop Run</button>
+      </div>
     </div>
     <div id="agents-strip" class="agents-strip">
       <span class="agents-empty">no agents</span>
@@ -626,6 +646,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   const sessionActions = $('session-actions');
   const killSessionBtn = $('kill-session-btn');
   const finishRunBtn   = $('finish-run-btn');
+  const stopRunBtn     = $('stop-run-btn');
   const newRunBtn   = $('new-run-btn');
   const startPanel  = $('start-run-panel');
   const startGoal   = $('start-goal-input');
@@ -657,10 +678,14 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   });
 
   function renderMd(raw) {
+    const normalized = (raw ?? '').replace(/\\n/g, '\n');
     if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
-      return '<span class="message-content-plain"></span>';
+      const el = document.createElement('div');
+      el.className = 'message-content';
+      el.textContent = normalized;
+      return el.outerHTML;
     }
-    const html = DOMPurify.sanitize(marked.parse(raw ?? ''));
+    const html = DOMPurify.sanitize(marked.parse(normalized, { gfm: true, breaks: true }));
     const el = document.createElement('div');
     el.className = 'message-content';
     el.innerHTML = html;
@@ -739,24 +764,30 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     card.className = 'question-card';
     card.dataset.msgId = msg.id;
 
+    if (msg.title) {
+      const titleEl = document.createElement('div');
+      titleEl.className = 'question-title';
+      titleEl.textContent = msg.title;
+      card.appendChild(titleEl);
+    }
+
     let options = [];
     if (msg.options) {
       try { options = JSON.parse(msg.options); } catch {}
     }
 
-    if (options.length > 0) {
-      const optDiv = document.createElement('div');
-      optDiv.className = 'question-options';
-      for (const opt of options) {
-        const btn = document.createElement('button');
-        btn.className = 'question-opt-btn';
-        btn.dataset.option = opt;
-        btn.textContent = opt;
-        btn.addEventListener('click', () => submitQuestionReply(msg, opt, card));
-        optDiv.appendChild(btn);
-      }
-      card.appendChild(optDiv);
+    const displayOptions = options.length > 0 ? options : ['Yes', 'No', 'OK'];
+    const optDiv = document.createElement('div');
+    optDiv.className = 'question-options';
+    for (const opt of displayOptions) {
+      const btn = document.createElement('button');
+      btn.className = 'question-opt-btn';
+      btn.dataset.option = opt;
+      btn.textContent = opt;
+      btn.addEventListener('click', () => submitQuestionReply(msg, opt, card));
+      optDiv.appendChild(btn);
     }
+    card.appendChild(optDiv);
 
     const compose = document.createElement('div');
     compose.className = 'question-compose';
@@ -928,18 +959,23 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       sessionActions.classList.remove('visible');
       killSessionBtn._currentRun = null;
       finishRunBtn._currentRun = null;
+      if (stopRunBtn) { stopRunBtn.style.display = 'none'; stopRunBtn._currentRun = null; }
       return;
     }
     const isRunning = run.status === 'running';
     const canKill = !isRunning && run.status && !run.session_killed_at;
     const canFinish = isRunning && !run.session_killed_at;
-    sessionActions.classList.toggle('visible', !!(canKill || canFinish));
+    sessionActions.classList.toggle('visible', !!canKill);
     killSessionBtn.style.display = canKill ? '' : 'none';
     killSessionBtn.disabled = false;
     killSessionBtn._currentRun = run;
-    finishRunBtn.style.display = canFinish ? '' : 'none';
-    finishRunBtn.disabled = false;
+    finishRunBtn.style.display = 'none';
     finishRunBtn._currentRun = run;
+    if (stopRunBtn) {
+      stopRunBtn.style.display = canFinish ? '' : 'none';
+      stopRunBtn.disabled = false;
+      stopRunBtn._currentRun = run;
+    }
   }
 
   async function selectRun(runId) {
@@ -1155,8 +1191,10 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
 
   async function finishRun() {
-    const run = finishRunBtn._currentRun;
+    const run = (stopRunBtn && stopRunBtn._currentRun) || finishRunBtn._currentRun;
     if (!run) return;
+    if (!confirm('Stop this run and kill its tmux session?')) return;
+    if (stopRunBtn) { stopRunBtn.disabled = true; stopRunBtn.textContent = 'Stopping...'; }
     finishRunBtn.disabled = true;
     finishRunBtn.textContent = 'Finishing...';
     try {
@@ -1173,11 +1211,13 @@ const FRONTEND_HTML = `<!DOCTYPE html>
         flash('run finished and session killed', true);
       } else {
         flash('finish failed: ' + (json.error || 'unknown'), false);
+        if (stopRunBtn) { stopRunBtn.disabled = false; stopRunBtn.textContent = 'Stop Run'; }
         finishRunBtn.disabled = false;
         finishRunBtn.textContent = 'Finish Run';
       }
     } catch (e) {
       flash('finish failed: ' + e.message, false);
+      if (stopRunBtn) { stopRunBtn.disabled = false; stopRunBtn.textContent = 'Stop Run'; }
       finishRunBtn.disabled = false;
       finishRunBtn.textContent = 'Finish Run';
     }
@@ -1223,6 +1263,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   sendBtn.addEventListener('click', sendMessage);
   killSessionBtn.addEventListener('click', killSession);
   finishRunBtn.addEventListener('click', finishRun);
+  if (stopRunBtn) stopRunBtn.addEventListener('click', finishRun);
   msgInput.addEventListener('input', () => { sendBtn._overrideWarning = false; });
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
@@ -1352,7 +1393,7 @@ export function cmdUi(flags: Record<string, string>) {
     if (!run) {
       return db
         .query(
-          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
+          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, title, options, status, created_at
            FROM messages
            WHERE (from_agent='operator' OR to_agent='operator')
            ORDER BY id DESC LIMIT 200`,
@@ -1362,7 +1403,7 @@ export function cmdUi(flags: Record<string, string>) {
     }
     return db
       .query(
-        `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
+        `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, title, options, status, created_at
          FROM messages
          WHERE (from_agent='operator' OR to_agent='operator')
            AND run_id = ?
@@ -1400,7 +1441,7 @@ export function cmdUi(flags: Record<string, string>) {
 
       const lastId = lastMessageId.get(run.id) ?? 0;
       const newMessages = db.query(
-        `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
+        `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, title, options, status, created_at
          FROM messages
          WHERE id > ?
            AND (from_agent='operator' OR to_agent='operator')
@@ -1506,7 +1547,7 @@ export function cmdUi(flags: Record<string, string>) {
         ).get(runId) as any;
         if (!run) return Response.json({ error: "run not found" }, { status: 404 });
         const messages = db.query(
-          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
+          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, title, options, status, created_at
            FROM messages
            WHERE (from_agent='operator' OR to_agent='operator') AND run_id=?
            ORDER BY id`,

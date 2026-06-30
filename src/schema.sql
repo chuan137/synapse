@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS messages (
   type       TEXT NOT NULL DEFAULT 'INFO',  -- TASK | STATUS | REVIEW | ACK | INFO | QUESTION
   ref_id     INTEGER,             -- id of the message this one replies to/closes
   body       TEXT NOT NULL,
+  title      TEXT,                -- optional short title for QUESTION cards
   options    TEXT,                -- JSON array of strings, nullable (used by QUESTION type)
   status     TEXT NOT NULL DEFAULT 'pending',  -- pending | read | failed; delivered is legacy
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
