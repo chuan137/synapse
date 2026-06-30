@@ -687,39 +687,30 @@ function pollOnce(
   );
 }
 
-// Callers get a single onChange(key, path, source) callback for each fs.watch
-// event, initial watch registration, and mtime-based recheck.
+// Tracks transcript files for activity-driven delivery, combining fs.watch
+// events with sweep rechecks so missed watcher events still get noticed.
 class FileWatchPool {
   private watchers = new Map<string, ReturnType<typeof fsWatch>>();
   private paths = new Map<string, string>();
-  private mtimes = new Map<string, number>();
 
-  constructor(
-    private onChange: (
-      key: string,
-      path: string,
-      source: "sweep" | "watch",
-    ) => void,
-  ) {}
+  constructor(private onChange: (key: string, source: "sweep" | "watch") => void) {}
 
   // Idempotent. Fires onChange immediately so callers don't need a separate
   // initial-evaluation step.
   watch(key: string, path: string): void {
     if (this.watchers.has(key)) return;
     this.paths.set(key, path);
-    this.recordMtime(key, path);
     this.watchers.set(
       key,
-      fsWatch(path, () => this.emitChange(key, "watch")),
+      fsWatch(path, () => this.onChange(key, "watch")),
     );
-    this.onChange(key, path, "sweep");
+    this.onChange(key, "sweep");
   }
 
   unwatch(key: string): void {
     this.watchers.get(key)?.close();
     this.watchers.delete(key);
     this.paths.delete(key);
-    this.mtimes.delete(key);
   }
 
   isWatching(key: string): boolean {
@@ -730,35 +721,14 @@ class FileWatchPool {
     return this.watchers.keys();
   }
 
+  // Sweep's fallback recheck — catches fs.watch events missed via coalesced
+  // writes, NFS, etc. Only fires for keys we're actually watching.
   emitOnTranscriptChange(key: string): void {
-    const path = this.paths.get(key);
-    if (!path) return;
-    let mtime: number;
-    try {
-      mtime = statSync(path).mtimeMs;
-    } catch {
-      return;
-    }
-    if (mtime !== this.mtimes.get(key)) this.emitChange(key, "sweep");
+    if (this.paths.has(key)) this.onChange(key, "sweep");
   }
 
   closeAll(): void {
     for (const key of [...this.watchers.keys()]) this.unwatch(key);
-  }
-
-  private emitChange(key: string, source: "sweep" | "watch"): void {
-    const path = this.paths.get(key);
-    if (!path) return;
-    this.recordMtime(key, path);
-    this.onChange(key, path, source);
-  }
-
-  private recordMtime(key: string, path: string): void {
-    try {
-      this.mtimes.set(key, statSync(path).mtimeMs);
-    } catch {
-      // Mid-write/rotate — next fs.watch event or sweep mtime check will retry.
-    }
   }
 }
 
@@ -774,6 +744,7 @@ function runLiveMonitor(
 ) {
   const agentStatuses = new Map<string, AgentStatus>();
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const lastSeenMtimes = new Map<string, number>();
   let agents: any[] = [];
   let agentsByWindow = new Map<string, any>();
   const sourceLog =
@@ -800,7 +771,7 @@ function runLiveMonitor(
     return refreshAgentState(db, debounceMs, agent, agentStatuses, eventLog, agent.run_id);
   };
 
-  const deliverOrReschedule = (
+  const deliverOrRescheduleInner = (
     windowName: string,
     eventLog: (s: string) => void,
   ) => {
@@ -824,7 +795,24 @@ function runLiveMonitor(
     }
   };
 
-  const cancelScheduledDelivery = (windowName: string) => {
+  // Deliver pending messages when an agent is idle, or reschedule while it is
+  // still debouncing; keep transient DB errors from stopping this path.
+  const deliverOrReschedule = (
+    windowName: string,
+    eventLog: (s: string) => void,
+  ) => {
+    try {
+      deliverOrRescheduleInner(windowName, eventLog);
+    } catch (err) {
+      eventLog(
+        `  ${windowName}: DB error during delivery (transient, will retry): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  };
+
+  const clearDebounceTimer = (windowName: string) => {
     const existing = debounceTimers.get(windowName);
     if (existing) clearTimeout(existing);
     debounceTimers.delete(windowName);
@@ -843,21 +831,30 @@ function runLiveMonitor(
     );
   };
 
-  // On new transcript activity, reset the debounce window and re-evaluate.
-  // Delivery only fires once the agent has been quiet for the full debounce period,
-  // ensuring the agent is truly idle before a message is sent.
-  const onTranscriptActivity = (
-    windowName: string,
-    source: "sweep" | "watch",
-  ) => {
-    sourceLog(source)(`  ${windowName}: transcript activity`);
-    cancelScheduledDelivery(windowName);
+  // Handles transcript activity from watch/sweep by confirming the transcript
+  // mtime changed, then resetting debounce delivery and logging the update.
+  const onTranscriptActivity = (windowName: string, source: "sweep" | "watch") => {
+    const agent = agentsByWindow.get(windowName);
+    const path = agent ? findTranscriptPath(agent.session_id) : undefined;
+    if (!path) return;
+    let mtime: number;
+    try {
+      mtime = statSync(path).mtimeMs;
+    } catch {
+      return;
+    }
+    const prevMtime = lastSeenMtimes.get(windowName);
+    if (mtime === prevMtime) return;
+    lastSeenMtimes.set(windowName, mtime);
+    const fmt = (ms: number | undefined) => (ms === undefined ? "none" : new Date(ms).toISOString());
+    sourceLog(source)(
+      `  ${windowName}: transcript activity (mtime ${fmt(prevMtime)} -> ${fmt(mtime)})`,
+    );
+    clearDebounceTimer(windowName);
     deliverOrReschedule(windowName, sourceLog(source));
   };
 
-  const pool = new FileWatchPool((windowName, _path, source) =>
-    onTranscriptActivity(windowName, source),
-  );
+  const pool = new FileWatchPool(onTranscriptActivity);
 
   let sweepTimer: ReturnType<typeof setInterval> | undefined;
   let stopping = false;
@@ -898,19 +895,20 @@ function runLiveMonitor(
       ...agentStatuses.keys(),
       ...pool.watchedKeys(),
       ...debounceTimers.keys(),
+      ...lastSeenMtimes.keys(),
     ]);
     // Clean up stopped agents
     for (const name of trackedNames) {
       if (liveNames.has(name)) continue;
       pool.unwatch(name);
       agentStatuses.delete(name);
-      cancelScheduledDelivery(name);
+      clearDebounceTimer(name);
+      lastSeenMtimes.delete(name);
       sweepLog(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
-      const agentState = refreshAgentStateByWindow(agent.window_name, sweepLog);
-
       // Mail can arrive without transcript activity.
+      const agentState = refreshAgentStateByWindow(agent.window_name, sweepLog);
       if (agentState?.status === "idle") {
         if (enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
           dispatchNextDirectMessage(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
@@ -924,7 +922,7 @@ function runLiveMonitor(
           sweepLog(`  ${agent.window_name}: watching ${path}`);
         }
       }
-      // Catch transcript changes fs.watch may have missed (coalesced writes, NFS, etc.).
+      // Recheck for real mtime changes fs.watch may have missed.
       pool.emitOnTranscriptChange(agent.window_name);
     }
     broadcastReadyMessages(
