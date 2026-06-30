@@ -1,6 +1,7 @@
 import { readFileSync, watch } from "fs";
 import { dirname, resolve } from "path";
 import {
+  cmdDone,
   DEFAULT_TASK_TEMPLATE,
   MESSAGE_TYPES,
   nowIso,
@@ -153,6 +154,17 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
   #kill-session-btn:hover { opacity: 0.85; }
   #kill-session-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  #finish-run-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  #finish-run-btn:hover { opacity: 0.85; }
+  #finish-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* ── Layout ── */
   main {
@@ -214,6 +226,9 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     background: var(--status-busy);
     animation: pulse 1.5s infinite;
   }
+  .run-dot[data-state="standby"] {
+    background: var(--idle);
+  }
   .run-dot[data-state="done"] {
     background: var(--muted);
   }
@@ -223,8 +238,13 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   .run-session { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .run-status-badge { font-size: 10px; color: var(--muted); }
   .run-status-running { color: var(--status-busy); }
+  .run-status-busy { color: var(--status-busy); }
+  .run-status-idle { color: var(--status-idle, #4caf50); }
   .run-status-completed { color: var(--idle); }
   .run-status-failed { color: var(--error); }
+  .run-idle-label { font-size: 0.7em; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }
+  .run-idle-busy { color: var(--status-busy); }
+  .run-idle-idle { color: var(--status-idle, #4caf50); }
   .new-run-btn {
     margin: 8px;
     padding: 6px;
@@ -582,6 +602,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
     <div id="session-actions">
       <button id="kill-session-btn" title="Kill the tmux session for this completed run">Kill tmux session</button>
+      <button id="finish-run-btn" title="Mark run done and kill tmux session">Finish Run</button>
     </div>
     <div id="compose">
       <textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>
@@ -604,6 +625,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   const countBadge  = $('msg-count-badge');
   const sessionActions = $('session-actions');
   const killSessionBtn = $('kill-session-btn');
+  const finishRunBtn   = $('finish-run-btn');
   const newRunBtn   = $('new-run-btn');
   const startPanel  = $('start-run-panel');
   const startGoal   = $('start-goal-input');
@@ -852,6 +874,16 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     }
   }
 
+  function runHasBusyAgent(runId) {
+    const agents = state.agents.get(runId) || [];
+    return agents.some(a => (a.status || '').toLowerCase() === 'busy');
+  }
+
+  function runIdleLabel(run) {
+    if (run.status !== 'running') return null;
+    return runHasBusyAgent(run.id) ? 'Busy' : 'Idle';
+  }
+
   function renderRunsSidebar() {
     const sidebar = $('runs-sidebar-list');
     if (!sidebar) return;
@@ -860,10 +892,14 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       const isSelected = run.id === state.selectedRunId;
       const unread = !isSelected && (state.unreadCounts.get(run.id) || 0);
       const badge = unread ? '<span class="run-unread">' + unread + '</span>' : '';
+      const dotState = !isRunning ? 'done' : runHasBusyAgent(run.id) ? 'running' : 'standby';
+      const idleLabel = runIdleLabel(run);
       return '<div class="run-item' + (isSelected ? ' selected' : '') + '" data-run-id="' + run.id + '">' +
-        '<span class="run-dot" data-state="' + (isRunning ? 'running' : 'done') + '"></span>' +
+        '<span class="run-dot" data-state="' + dotState + '"></span>' +
         '<div class="run-item-info">' +
-          '<span class="run-label">run #' + run.id + badge + '</span>' +
+          '<span class="run-label">run #' + run.id + badge +
+            (idleLabel ? '<span class="run-idle-label run-idle-' + idleLabel.toLowerCase() + '">' + idleLabel + '</span>' : '') +
+          '</span>' +
           '<span class="run-session">' + esc(run.session || '') + '</span>' +
           (!isRunning ? '<span class="run-status-badge">[' + esc(run.status) + ']</span>' : '') +
         '</div>' +
@@ -877,24 +913,33 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   function updateThreadHeader(run) {
     const titleEl = $('thread-title');
     if (!titleEl || !run) return;
-    const badge = '<span class="run-status-badge run-status-' + esc(run.status) + '">[' + esc(run.status) + ']</span>';
+    const idleLabel = runIdleLabel(run);
+    const badge = idleLabel
+      ? '<span class="run-status-badge run-status-' + idleLabel.toLowerCase() + '">[' + idleLabel + ']</span>'
+      : '<span class="run-status-badge run-status-' + esc(run.status) + '">[' + esc(run.status) + ']</span>';
     titleEl.innerHTML = '<span>run #' + run.id + ' · ' + esc(run.session) + '</span> ' + badge;
     const goalEl = $('thread-goal');
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
   }
 
   function updateKillSessionButton(run) {
-    if (!sessionActions || !killSessionBtn) return;
+    if (!sessionActions || !killSessionBtn || !finishRunBtn) return;
     if (!run) {
       sessionActions.classList.remove('visible');
       killSessionBtn._currentRun = null;
+      finishRunBtn._currentRun = null;
       return;
     }
-    const canKill = run.status && run.status !== 'running' && !run.session_killed_at;
-    sessionActions.classList.toggle('visible', !!canKill);
-    killSessionBtn.textContent = canKill ? 'Kill tmux session' : 'Kill tmux session';
+    const isRunning = run.status === 'running';
+    const canKill = !isRunning && run.status && !run.session_killed_at;
+    const canFinish = isRunning && !run.session_killed_at;
+    sessionActions.classList.toggle('visible', !!(canKill || canFinish));
+    killSessionBtn.style.display = canKill ? '' : 'none';
     killSessionBtn.disabled = false;
     killSessionBtn._currentRun = run;
+    finishRunBtn.style.display = canFinish ? '' : 'none';
+    finishRunBtn.disabled = false;
+    finishRunBtn._currentRun = run;
   }
 
   async function selectRun(runId) {
@@ -948,7 +993,10 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       selectRun(state.runs[0].id);
     } else if (state.selectedRunId !== null) {
       const run = state.runs.find(r => r.id === state.selectedRunId);
-      if (run) updateKillSessionButton(run);
+      if (run) {
+        updateThreadHeader(run);
+        updateKillSessionButton(run);
+      }
     }
   }
 
@@ -972,7 +1020,10 @@ const FRONTEND_HTML = `<!DOCTYPE html>
           state.agents.set(payload.run_id, payload.agents);
           if (payload.run_id === state.selectedRunId) {
             renderAgentsStrip(payload.agents);
+            const run = state.runs.find(r => r.id === payload.run_id);
+            if (run) updateThreadHeader(run);
           }
+          renderRunsSidebar();
         } else {
           // legacy fallback
           renderAgentsStrip(payload);
@@ -1103,6 +1154,35 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     }
   }
 
+  async function finishRun() {
+    const run = finishRunBtn._currentRun;
+    if (!run) return;
+    finishRunBtn.disabled = true;
+    finishRunBtn.textContent = 'Finishing...';
+    try {
+      const res = await fetch('/finish-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: run.id }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        run.status = 'completed';
+        run.session_killed_at = json.session_killed_at || new Date().toISOString();
+        updateKillSessionButton(run);
+        flash('run finished and session killed', true);
+      } else {
+        flash('finish failed: ' + (json.error || 'unknown'), false);
+        finishRunBtn.disabled = false;
+        finishRunBtn.textContent = 'Finish Run';
+      }
+    } catch (e) {
+      flash('finish failed: ' + e.message, false);
+      finishRunBtn.disabled = false;
+      finishRunBtn.textContent = 'Finish Run';
+    }
+  }
+
   async function startRun() {
     const goal = startGoal.value.trim();
     if (!goal) { setStartStatus('goal required', false); return; }
@@ -1142,6 +1222,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   });
   sendBtn.addEventListener('click', sendMessage);
   killSessionBtn.addEventListener('click', killSession);
+  finishRunBtn.addEventListener('click', finishRun);
   msgInput.addEventListener('input', () => { sendBtn._overrideWarning = false; });
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
@@ -1156,6 +1237,35 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 `;
 
 const DEFAULT_UI_PORT = 7700;
+
+/** Try to raise the terminal window on macOS using AppleScript. Best-effort; swallows errors. */
+function raiseTerminal(): void {
+  const TERMINALS = ['iTerm2', 'Terminal', 'Ghostty', 'Warp', 'Alacritty', 'kitty'];
+  // Detect the running terminal via System Events, then activate it in a separate
+  // tell block to avoid iTerm2 race where nested tell fires before System Events resolves.
+  const script = `
+tell application "System Events"
+  set runningNames to name of every process whose background only is false
+end tell
+repeat with appName in {${TERMINALS.map(t => `"${t}"`).join(', ')}}
+  if runningNames contains appName then
+    set appStr to appName as text
+    tell application appStr
+      activate
+      reopen
+    end tell
+    return appStr
+  end if
+end repeat`;
+  try {
+    const result = Bun.spawnSync(["osascript", "-e", script]);
+    if (result.exitCode === 0) {
+      const raised = new TextDecoder().decode(result.stdout).trim();
+      if (raised) process.stderr.write(`[Synapse] raised ${raised}\n`);
+    }
+  } catch { /* AppleScript failed, not fatal */ }
+}
+
 // In dev mode (SYNAPSE_DEV=1), HTML is read from disk on every request.
 // When running as a compiled binary, import.meta.filename is a virtual /$bunfs
 // path, so resolve relative to the real executable instead.
@@ -1283,7 +1393,7 @@ export function cmdUi(flags: Record<string, string>) {
                  WHERE m.status='pending' AND m.to_agent=a.window_name
                    AND m.run_id = ?) AS pending_count
          FROM agents a
-         WHERE run_id=? OR run_id=0
+         WHERE (run_id=? OR run_id=0) AND window_name != 'operator'
          ORDER BY role, window_name`,
       ).all(run.id, run.id);
       pushToAll("agent-status", { run_id: run.id, agents });
@@ -1469,11 +1579,28 @@ export function cmdUi(flags: Record<string, string>) {
           if (!session || !win) {
             return Response.json({ ok: false, error: "missing session or window" }, { status: 400 });
           }
-          const result = Bun.spawnSync(["tmux", "select-window", "-t", `${session}:${win}`]);
-          if (result.exitCode !== 0) {
-            const stderr = new TextDecoder().decode(result.stderr).trim();
-            return Response.json({ ok: false, error: stderr || `exit ${result.exitCode}` }, { status: 500 });
+          const target = `${session}:${win}`;
+          const selectResult = Bun.spawnSync(["tmux", "select-window", "-t", target]);
+          if (selectResult.exitCode !== 0) {
+            const stderr = new TextDecoder().decode(selectResult.stderr).trim();
+            return Response.json({ ok: false, error: stderr || `exit ${selectResult.exitCode}` }, { status: 500 });
           }
+          // Redirect all tmux clients (regardless of their current session) to the target window
+          const listResult = Bun.spawnSync(["tmux", "list-clients", "-F", "#{client_name} #{session_name}"]);
+          const clientLines = new TextDecoder().decode(listResult.stdout).trim().split('\n').filter(Boolean);
+          if (clientLines.length === 0) {
+            process.stderr.write(`[Synapse] switch-client: no tmux clients found\n`);
+          } else {
+            for (const line of clientLines) {
+              const clientName = line.split(' ')[0];
+              const switchResult = Bun.spawnSync(["tmux", "switch-client", "-c", clientName, "-t", target]);
+              if (switchResult.exitCode !== 0) {
+                const stderr = new TextDecoder().decode(switchResult.stderr).trim();
+                process.stderr.write(`[Synapse] switch-client -c ${clientName} failed: ${stderr}\n`);
+              }
+            }
+          }
+          raiseTerminal();
           return Response.json({ ok: true });
         }).catch(() => Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }));
       }
@@ -1541,6 +1668,42 @@ export function cmdUi(flags: Record<string, string>) {
             [`requested tmux session kill for terminal run ${runId}; session ${session}`, nowIso()],
           );
           const result = disbandTeam(db, session, runId, (s) => console.log(`[kill-session] ${s}`));
+          pollDb();
+          if (!result.sessionKilled) {
+            return Response.json(
+              { ok: false, run_id: runId, session, error: result.error || "tmux session still exists" },
+              { status: 500 },
+            );
+          }
+          const updated = db
+            .query("SELECT session_killed_at FROM runs WHERE id=?")
+            .get(runId) as any;
+          return Response.json({ ok: true, run_id: runId, session, session_killed_at: updated?.session_killed_at ?? null });
+        });
+      }
+
+      if (url.pathname === "/finish-run" && req.method === "POST") {
+        return req.json().then((body: any) => {
+          const reqRunId = body?.run_id ? Number(body.run_id) : null;
+          const run = reqRunId
+            ? (db.query(`SELECT id, session, status, goal, started_at, ended_at, session_killed_at FROM runs WHERE id=?`).get(reqRunId) as any)
+            : activeRun();
+          if (!run) {
+            return Response.json(
+              { ok: false, error: "no run selected" },
+              { status: 404 },
+            );
+          }
+          if (run.status !== "running") {
+            return Response.json(
+              { ok: false, error: "run is not running" },
+              { status: 409 },
+            );
+          }
+          const runId = Number(run.id);
+          const session = run.session;
+          cmdDone("done", "Operator finished the run from UI.", "operator", null, runId);
+          const result = disbandTeam(db, session, runId, (s) => console.log(`[finish-run] ${s}`));
           pollDb();
           if (!result.sessionKilled) {
             return Response.json(

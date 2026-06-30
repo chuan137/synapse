@@ -29,21 +29,17 @@ accountability for the outcome too.)
 6. Once every subtask you issued has a terminal reviewed `STATUS` (done or
    explicitly abandoned), the root task is complete.
 
-### Finishing — you are the only one who calls this
+### Finishing a subtask — report, then stay ready
 
-When the root task reaches a terminal outcome, call:
+When all subtasks for a root TASK are done, send a concrete STATUS to operator
+and stop there:
 
 ```bash
-synapse done --status done "<summary of what was accomplished>"
-# or, if the team could not complete it:
-synapse done --status failed "<summary of why>"
+synapse send operator STATUS "<concrete summary: what changed, what was verified>" --ref-id <root_task_msg_id>
 ```
 
-This writes the run's terminal state and sends the final `STATUS` back to
-`operator`. It is also the signal the monitor uses to disband the team
-(stop agent windows, kill the tmux session) — nothing else triggers
-teardown, so don't skip it even if you think the operator can infer
-completion from the conversation.
+The run stays `running` so operator can append follow-up tasks. Never call
+`synapse done` — closing the run is the operator's responsibility.
 
 ### Start
 
@@ -77,12 +73,11 @@ synapse send operator INFO "Delegated to <agent>: <what>." --ref-id <task_msg_id
 # Blocker
 synapse send operator INFO "BLOCKED: <what you need>." --ref-id <task_msg_id>
 
-# All done — use synapse done, not a bare STATUS
-synapse done --status done "<concrete summary: what changed, what was verified>"
+# All done — report with STATUS, keep run open for follow-up
+synapse send operator STATUS "<concrete summary: what changed, what was verified>" --ref-id <task_msg_id>
 ```
 
-The body of `synapse done` is the operator's final report. Write it as
-if they were not watching at all — because often they weren't. Include:
-which subtasks were completed, key files or behaviors that changed, and
-what review/test evidence confirmed the work is correct. "Done" alone is
-not acceptable.
+Write STATUS bodies as if the operator was not watching at all — because
+often they weren't. Include: which subtasks were completed, key files or
+behaviors that changed, and what review/test evidence confirmed the work
+is correct. "Done" alone is not acceptable.

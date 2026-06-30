@@ -255,6 +255,25 @@ function newestOpenInboundWork(
   if (agent.role !== "coder" && agent.role !== "reviewer") return null;
   const inboundTypes = agent.role === "reviewer" ? ["REVIEW"] : ["TASK", "REVIEW"];
   const placeholders = inboundTypes.map(() => "?").join(", ");
+  // For coder role: also exclude TASKs where coder already sent a REVIEW that
+  // has no STATUS reply yet — coder is legitimately blocking on the reviewer.
+  const coderReviewWaitClause = agent.role === "coder"
+    ? `AND NOT EXISTS (
+           SELECT 1 FROM messages rev
+           WHERE rev.run_id = m.run_id
+             AND rev.from_agent = ?
+             AND rev.type = 'REVIEW'
+             AND rev.ref_id = m.id
+             AND NOT EXISTS (
+               SELECT 1 FROM messages s
+               WHERE s.run_id = m.run_id
+                 AND s.from_agent = rev.to_agent
+                 AND s.to_agent = rev.from_agent
+                 AND s.type = 'STATUS'
+                 AND s.ref_id = rev.id
+             )
+         )`
+    : "";
   const row = db
     .query(
       `SELECT m.*
@@ -269,10 +288,17 @@ function newestOpenInboundWork(
              AND r.type='STATUS'
              AND r.ref_id=m.id
          )
+         ${coderReviewWaitClause}
        ORDER BY m.delivered_at DESC, m.id DESC
        LIMIT 1`,
     )
-    .get(runId, agent.window_name, ...inboundTypes, agent.window_name) as any;
+    .get(
+      runId,
+      agent.window_name,
+      ...inboundTypes,
+      agent.window_name,
+      ...(agent.role === "coder" ? [agent.window_name] : []),
+    ) as any;
   return row ?? null;
 }
 

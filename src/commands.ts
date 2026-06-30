@@ -668,7 +668,17 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
       `tmux session '${tmuxSession}' already exists — check for a stuck session (tmux kill-session -t ${tmuxSession}) and retry`,
     );
   }
-  const newSession = Bun.spawnSync(["tmux", "new-session", "-d", "-s", tmuxSession]);
+  // Probe the calling terminal's dimensions; fall back to 220×50 if unavailable.
+  const colsResult = Bun.spawnSync(["tput", "cols"]);
+  const linesResult = Bun.spawnSync(["tput", "lines"]);
+  const termCols = colsResult.exitCode === 0 ? colsResult.stdout.toString().trim() : "220";
+  const termLines = linesResult.exitCode === 0 ? linesResult.stdout.toString().trim() : "50";
+
+  const newSession = Bun.spawnSync([
+    "tmux", "new-session", "-d", "-s", tmuxSession,
+    "-x", termCols,
+    "-y", termLines,
+  ]);
   if (newSession.exitCode !== 0) {
     abort(
       `failed to create tmux session '${tmuxSession}': ${newSession.stderr.toString().trim()}`,
@@ -676,6 +686,8 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   }
   // Rename the default window created with the session (base-index agnostic)
   Bun.spawnSync(["tmux", "rename-window", "-t", tmuxSession, "monitor"]);
+  // Use largest-client sizing so attaching a wide terminal fills the windows
+  Bun.spawnSync(["tmux", "set-option", "-t", tmuxSession, "window-size", "largest"]);
 
   const synapseCliPath = resolve(
     process.execPath === process.argv[0]
