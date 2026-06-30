@@ -262,7 +262,7 @@ describe("monitor: direct delivery", () => {
     run(["monitor", "--once", "--debounce", "100"]);
 
     const log = tmuxLogContents();
-    expect(log).toContain("Harness enforcement: your previous TASK");
+    expect(log).toContain("Harness enforcement: TASK #");
     expect(log).not.toContain("send-keys -t team:coder-1 -l -- next thing");
 
     const reminder = openDb()
@@ -277,17 +277,21 @@ describe("monitor: direct delivery", () => {
     expect(next.status).toBe("pending");
   });
 
-  test("marks the message failed terminally when the tmux window is gone", () => {
+  test("marks message failed immediately on first tmux failure", () => {
     writeFileSync(join(fakeBinDir, "tmux"), `#!/bin/sh\necho "no such window" >&2\nexit 1\n`);
     chmodSync(join(fakeBinDir, "tmux"), 0o755);
 
     writeTranscript("sess-coder", "end_turn", 5000);
+
+    // Single attempt: first failure is immediately terminal.
     const r = run(["monitor", "--once", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
 
-    const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
-    expect(msg.status).toBe("failed");
+    const msg1 = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(msg1.status).toBe("failed");
+    expect(msg1.retry_count).toBe(1);
 
+    // Restore good tmux; a subsequent monitor pass must NOT re-deliver the failed message.
     writeFileSync(
       join(fakeBinDir, "tmux"),
       `#!/bin/sh\necho "$@" >> "${tmuxLog}"\nexit 0\n`

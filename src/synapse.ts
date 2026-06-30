@@ -3,6 +3,7 @@
  * synapse — CLI for the Claude Team Synapse message bus.
  *
  * Commands:
+ *   synapse help [command]
  *   synapse init
  *   synapse register <name> <role> [session_id]
  *   synapse send <to> <type> <body> [--from NAME] [--ref-id N]
@@ -24,24 +25,22 @@
  */
 import {
   cmdAttach,
+  cmdDeliver,
   cmdDone,
   cmdInit,
-  cmdMonitor,
-  cmdStart,
-  cmdStop,
-  DEFAULT_TASK_TEMPLATE,
-  DEFAULT_TMUX_SESSION,
-  fail,
-} from "./commands";
-import {
-  cmdDeliver,
   cmdLog,
   cmdPending,
   cmdRegister,
   cmdRuns,
   cmdSend,
+  cmdStart,
   cmdStatus,
-} from "./mailbox";
+  cmdStop,
+  DEFAULT_TASK_TEMPLATE,
+  DEFAULT_TMUX_SESSION,
+  fail,
+} from "./commands";
+import { cmdMonitor } from "./monitor";
 import { cmdUi } from "./ui";
 
 // Injected at compile time via `bun build --define SYNAPSE_VERSION=...`
@@ -52,12 +51,82 @@ declare const SYNAPSE_VERSION: string | undefined;
 const VERSION: string =
   typeof SYNAPSE_VERSION !== "undefined" ? SYNAPSE_VERSION : "dev";
 
+const COMMAND_USAGE: Record<string, string> = {
+  help: "synapse help [command]",
+  init: "synapse init",
+  register: "synapse register <name> <role> [session_id] [--run-id N]",
+  send: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...]",
+  log: "synapse log <agent> <type> <summary>",
+  status: "synapse status",
+  runs: "synapse runs",
+  pending: "synapse pending [agent] [--all]",
+  deliver: "synapse deliver <id>",
+  monitor: "synapse monitor [--session NAME] [--interval MS] [--debounce MS] [--once]",
+  start: 'synapse start [task.yml] [--goal "text"] [--no-monitor]',
+  stop: "synapse stop <name> [--session SESSION] [--run-id N]",
+  attach: "synapse attach <name> [--session SESSION]",
+  ui: "synapse ui [--port N]",
+  done: 'synapse done --status done|failed "<summary>" [--from NAME] [--run-id N] [--ref-id N]',
+  version: "synapse version",
+};
+
+const COMMAND_DESCRIPTIONS: Record<string, string> = {
+  help: "Show general help or help for one command.",
+  init: "Create or migrate the Synapse database.",
+  register: "Register or update an agent for a run.",
+  send: "Queue a message for an agent.",
+  log: "Record an event in the run log.",
+  status: "Show registered agents and pending counts.",
+  runs: "List known runs.",
+  pending: "Show pending messages.",
+  deliver: "Mark one pending message delivered.",
+  monitor: "Poll tmux windows and deliver queued messages.",
+  start: "Start a task from a task manifest.",
+  stop: "Mark an agent stopped and close its tmux window.",
+  attach: "Attach to an agent tmux window.",
+  ui: "Start the operator web UI.",
+  done: "Mark the active run done or failed.",
+  version: "Print the synapse version.",
+};
+
+const COMMANDS = Object.keys(COMMAND_USAGE);
+
+function commandList() {
+  return COMMANDS.map((name) => {
+    const padded = name.padEnd(10);
+    return `  ${padded} ${COMMAND_DESCRIPTIONS[name]}`;
+  }).join("\n");
+}
+
+function printHelp(command?: string) {
+  if (command) {
+    const usage = COMMAND_USAGE[command];
+    if (!usage) fail(`unknown command '${command}'. Run 'synapse help' for available commands.`);
+    console.log(`Usage: ${usage}\n\n${COMMAND_DESCRIPTIONS[command]}`);
+    return;
+  }
+
+  console.log(`synapse ${VERSION}
+
+Usage:
+  synapse <command> [args]
+  synapse help [command]
+
+Commands:
+${commandList()}
+
+DB location: $SYNAPSE_DB, else ./.synapse/synapse.db
+Transcript root: $CLAUDE_PROJECTS_DIR, else ~/.claude/projects`);
+}
+
 function parseFlags(args: string[]) {
   const positional: string[] = [];
   const flags: Record<string, string> = {};
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a.startsWith("--")) {
+    if (a === "-h") {
+      flags.h = "true";
+    } else if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = args[i + 1];
       // Boolean flag (--once): treat as true when no value follows or next is also a flag.
@@ -77,6 +146,16 @@ function parseFlags(args: string[]) {
 function main() {
   const [command, ...rest] = process.argv.slice(2);
   const { positional, flags } = parseFlags(rest);
+
+  if (command === undefined || command === "help" || command === "--help" || command === "-h") {
+    printHelp(positional[0]);
+    return;
+  }
+
+  if (flags["help"] || flags["h"]) {
+    printHelp(command);
+    return;
+  }
 
   switch (command) {
     case "version":
@@ -102,11 +181,14 @@ function main() {
       const [to, type, body] = positional;
       if (!to || !type || !body)
         fail(
-          "usage: synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N]",
+          "usage: synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...]",
         );
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
-      return cmdSend(to, type, body, flags["from"] ?? null, refId, runId);
+      const options = flags["options"]
+        ? flags["options"].split(",").map(s => s.trim()).filter(Boolean)
+        : null;
+      return cmdSend(to, type, body, flags["from"] ?? null, refId, runId, options);
     }
     case "log": {
       const [agent, type, summary] = positional;
@@ -156,7 +238,7 @@ function main() {
     }
     default:
       fail(
-        `unknown command '${command}'. Expected one of: init, register, send, log, status, runs, pending, deliver, monitor, start, stop, attach, ui, done, version`,
+        `unknown command '${command}'. Run 'synapse help' for available commands.`,
       );
   }
 }

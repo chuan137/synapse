@@ -2,11 +2,11 @@ import { readFileSync, watch } from "fs";
 import { dirname, resolve } from "path";
 import {
   DEFAULT_TASK_TEMPLATE,
-  disbandTeam,
   MESSAGE_TYPES,
   nowIso,
 } from "./commands";
 import { connect, dbPath } from "./db";
+import { disbandTeam } from "./monitor";
 
 // ---------- ui ----------
 
@@ -422,6 +422,17 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   .msg-type-STATUS { background: color-mix(in srgb, var(--idle) 18%, transparent); color: var(--idle); }
   .msg-type-REVIEW { background: color-mix(in srgb, var(--working) 18%, transparent); color: var(--working); }
   .msg-type-ACK, .msg-type-INFO { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+  .msg-type-QUESTION { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .question-card { margin-top: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; }
+  .question-options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .question-opt-btn { padding: 4px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; font-family: inherit; font-size: 12px; }
+  .question-opt-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .question-compose { display: flex; gap: 6px; }
+  .question-input { flex: 1; padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: inherit; font-size: 12px; }
+  .question-input:focus { border-color: var(--accent); outline: none; }
+  .question-send-btn { padding: 4px 12px; background: var(--accent); border: none; border-radius: 4px; color: #fff; cursor: pointer; font-family: inherit; font-size: 12px; }
+  .question-send-btn:hover { opacity: 0.85; }
+  .question-resolved { font-size: 11px; color: var(--muted); margin-top: 6px; }
   .message-content {
     font-size: 12px;
     color: var(--text);
@@ -678,7 +689,97 @@ const FRONTEND_HTML = `<!DOCTYPE html>
         '</div>' +
         renderMd(msg.body || '') +
       '</div>';
+
+    // Render interactive question card for unread QUESTION messages to operator
+    if (t === 'QUESTION' && msg.to_agent === 'operator' && msg.status !== 'read') {
+      const run = state.runs.find(r => r.id === (msg.run_id || state.selectedRunId));
+      const isActive = !run || run.status === 'running';
+      if (isActive) {
+        const card = buildQuestionCard(msg);
+        div.querySelector('.message-body').appendChild(card);
+      }
+    }
+
     return div;
+  }
+
+  function buildQuestionCard(msg) {
+    const card = document.createElement('div');
+    card.className = 'question-card';
+    card.dataset.msgId = msg.id;
+
+    let options = [];
+    if (msg.options) {
+      try { options = JSON.parse(msg.options); } catch {}
+    }
+
+    if (options.length > 0) {
+      const optDiv = document.createElement('div');
+      optDiv.className = 'question-options';
+      for (const opt of options) {
+        const btn = document.createElement('button');
+        btn.className = 'question-opt-btn';
+        btn.dataset.option = opt;
+        btn.textContent = opt;
+        btn.addEventListener('click', () => submitQuestionReply(msg, opt, card));
+        optDiv.appendChild(btn);
+      }
+      card.appendChild(optDiv);
+    }
+
+    const compose = document.createElement('div');
+    compose.className = 'question-compose';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'question-input';
+    input.placeholder = 'Or type a reply…';
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'question-send-btn';
+    sendBtn.textContent = 'Reply';
+    sendBtn.addEventListener('click', () => {
+      const val = input.value.trim();
+      if (val) submitQuestionReply(msg, val, card);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); const val = input.value.trim(); if (val) submitQuestionReply(msg, val, card); }
+    });
+    compose.appendChild(input);
+    compose.appendChild(sendBtn);
+    card.appendChild(compose);
+
+    return card;
+  }
+
+  async function submitQuestionReply(msg, replyText, card) {
+    card.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    const input = card.querySelector('.question-input');
+    if (input) input.disabled = true;
+    try {
+      const res = await fetch('/send', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          to: msg.from_agent,
+          type: 'STATUS',
+          body: replyText,
+          run_id: msg.run_id || state.selectedRunId,
+          ref_id: msg.id,
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        card.dataset.resolved = 'true';
+        card.innerHTML = '<div class="question-resolved">↩ replied: ' + esc(replyText) + '</div>';
+      } else {
+        card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        if (input) input.disabled = false;
+        flash((json.error || 'reply failed'), false);
+      }
+    } catch (err) {
+      card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+      if (input) input.disabled = false;
+      flash(String(err), false);
+    }
   }
 
   function appendMessage(msg) {
@@ -902,6 +1003,19 @@ const FRONTEND_HTML = `<!DOCTYPE html>
             state.unreadCounts.set(msg.run_id, (state.unreadCounts.get(msg.run_id) || 0) + 1);
             renderRunsSidebar();
           }
+        } else if (msg.status === 'read' && msg.type === 'QUESTION' && msg.to_agent === 'operator') {
+          // Collapse any unresolved question card for this message
+          const row = msgList.querySelector('.message-row[data-msg-id="' + msg.id + '"]');
+          if (row) {
+            const card = row.querySelector('.question-card:not([data-resolved])');
+            if (card) {
+              card.dataset.resolved = 'true';
+              card.innerHTML = '<div class="question-resolved">↩ resolved</div>';
+            }
+          }
+          // Update cached message status
+          const cached = runMsgs.find(m => m.id === msg.id);
+          if (cached) cached.status = 'read';
         }
       } catch {}
     });
@@ -916,6 +1030,16 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     const body = msgInput.value.trim();
     if (!body) { flash('body required', false); return; }
     if (!state.selectedRunId) { flash('no run selected', false); return; }
+    const hasNewlines = body.includes('\n');
+    const tooLong = body.length > 500;
+    if ((hasNewlines || tooLong) && !sendBtn._overrideWarning) {
+      const reason = hasNewlines && tooLong ? 'multiline and >500 chars'
+        : hasNewlines ? 'multiline' : '>500 chars';
+      flash('Warning: message is ' + reason + ' — paste into a file and send a pointer instead. Click Send again to override.', false);
+      sendBtn._overrideWarning = true;
+      return;
+    }
+    sendBtn._overrideWarning = false;
     sendBtn.disabled = true;
     try {
       const res = await fetch('/send', {
@@ -996,6 +1120,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   });
   sendBtn.addEventListener('click', sendMessage);
   ackRunBtn.addEventListener('click', ackRun);
+  msgInput.addEventListener('input', () => { sendBtn._overrideWarning = false; });
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
   });
@@ -1095,7 +1220,7 @@ export function cmdUi(flags: Record<string, string>) {
     if (!run) {
       return db
         .query(
-          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
            FROM messages
            WHERE (from_agent='operator' OR to_agent='operator')
            ORDER BY id DESC LIMIT 200`,
@@ -1105,7 +1230,7 @@ export function cmdUi(flags: Record<string, string>) {
     }
     return db
       .query(
-        `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+        `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
          FROM messages
          WHERE (from_agent='operator' OR to_agent='operator')
            AND run_id = ?
@@ -1143,7 +1268,7 @@ export function cmdUi(flags: Record<string, string>) {
 
       const lastId = lastMessageId.get(run.id) ?? 0;
       const newMessages = db.query(
-        `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+        `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
          FROM messages
          WHERE id > ?
            AND (from_agent='operator' OR to_agent='operator')
@@ -1249,7 +1374,7 @@ export function cmdUi(flags: Record<string, string>) {
         ).get(runId) as any;
         if (!run) return Response.json({ error: "run not found" }, { status: 404 });
         const messages = db.query(
-          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, options, status, created_at
            FROM messages
            WHERE (from_agent='operator' OR to_agent='operator') AND run_id=?
            ORDER BY id`,
@@ -1261,7 +1386,7 @@ export function cmdUi(flags: Record<string, string>) {
         return req
           .json()
           .then((body: any) => {
-            const { to, type, body: msgBody, run_id } = body ?? {};
+            const { to, type, body: msgBody, run_id, ref_id } = body ?? {};
             if (!to || !type || !msgBody) {
               return Response.json(
                 { ok: false, error: "missing to, type, or body" },
@@ -1291,8 +1416,8 @@ export function cmdUi(flags: Record<string, string>) {
               );
             }
             const result = db.run(
-              `INSERT INTO messages (run_id, from_agent, to_agent, type, body) VALUES (?, 'operator', ?, ?, ?)`,
-              [run?.id ?? null, to, type, msgBody],
+              `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body) VALUES (?, 'operator', ?, ?, ?, ?)`,
+              [run?.id ?? null, to, type, ref_id ?? null, msgBody],
             );
             return Response.json({
               ok: true,
@@ -1386,7 +1511,7 @@ export function cmdUi(flags: Record<string, string>) {
           );
           setTimeout(() => {
             disbandTeam(db, session, runId, (s) => console.log(`[ack-run] ${s}`));
-            shutdown();
+            pollDb();
           }, 50);
           return Response.json({ ok: true, run_id: runId, session });
         });

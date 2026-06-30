@@ -50,7 +50,7 @@ afterEach(() => {
 function run(args: string[], extraEnv: Record<string, string> = {}) {
   const result = Bun.spawnSync([process.execPath, SYNAPSE_CLI, ...args], {
     cwd: import.meta.dir,
-    env: { ...process.env, SYNAPSE_DB: dbFile, SYNAPSE_RUN_ID: "1", ...extraEnv },
+    env: { ...process.env, SYNAPSE_DB: dbFile, SYNAPSE_RUN_ID: "1", SYNAPSE_AGENT: undefined, ...extraEnv },
   });
   return {
     exitCode: result.exitCode,
@@ -220,6 +220,38 @@ describe("send", () => {
       .get() as any;
     expect(status.ref_id).toBe(taskId);
   });
+
+  test("QUESTION round-trip: stores options as JSON and is retrievable", () => {
+    const r = run([
+      "send", "operator", "QUESTION", "Approve destructive migration?",
+      "--from", "manager",
+      "--options", "yes,no,abort",
+    ]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).not.toContain("ReferenceError");
+
+    const db = openDb();
+    const msg = db.query("SELECT * FROM messages WHERE type='QUESTION'").get() as any;
+    expect(msg).toBeTruthy();
+    expect(msg.body).toBe("Approve destructive migration?");
+    expect(msg.to_agent).toBe("operator");
+    expect(msg.from_agent).toBe("manager");
+
+    // options must be stored as a JSON array
+    const opts = JSON.parse(msg.options);
+    expect(opts).toEqual(["yes", "no", "abort"]);
+  });
+
+  test("QUESTION without --options has null options column", () => {
+    const r = run([
+      "send", "operator", "QUESTION", "Any freeform thoughts?",
+      "--from", "manager",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const db = openDb();
+    const msg = db.query("SELECT * FROM messages WHERE type='QUESTION'").get() as any;
+    expect(msg.options).toBeNull();
+  });
 });
 
 describe("log", () => {
@@ -306,6 +338,40 @@ describe("unknown command", () => {
     const r = run(["bogus-command"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("unknown command");
+    expect(r.stderr).toContain("synapse help");
+    expect(r.stderr).not.toContain("ReferenceError");
+  });
+});
+
+describe("help", () => {
+  test("bare synapse prints general help", () => {
+    const r = run([]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("Usage:");
+    expect(r.stdout).toContain("synapse <command> [args]");
+    expect(r.stdout).toContain("Commands:");
+    expect(r.stdout).toContain("send");
+  });
+
+  test("synapse help prints general help", () => {
+    const r = run(["help"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("Commands:");
+    expect(r.stdout).toContain("synapse help [command]");
+  });
+
+  test("synapse help send prints command usage", () => {
+    const r = run(["help", "send"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("Usage: synapse send <to> <type> <body>");
+    expect(r.stdout).toContain("Queue a message");
+  });
+
+  test("command --help prints command usage without touching the DB", () => {
+    const r = run(["register", "--help"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("Usage: synapse register <name> <role>");
+    expect(r.stderr).toBe("");
   });
 });
 

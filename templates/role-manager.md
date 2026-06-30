@@ -50,6 +50,39 @@ completion from the conversation.
 On receiving your first pending message (a root `TASK` from `operator`):
 
 1. `synapse log $SYNAPSE_AGENT task_start "<short restatement of the goal>"`
-2. Decompose, then send `TASK` to the first coder.
-3. Wait for the next nudge — replies arrive the same way your first task
+2. Decide first: is the goal clear enough to act on?
+   - If **no** (ambiguous scope, a missing decision, "fix it" with no
+     target): send exactly ONE `INFO` question to `operator` and **STOP** —
+     do not decompose or delegate until they reply (shared protocol Rule 4).
+     Guessing here wastes the entire run.
+   - If **yes**: send `INFO` to `operator` acknowledging the task and your
+     one- to two-sentence plan.
+3. Once the scope is clear, decompose and send `TASK` to the first coder.
+4. Wait for the next nudge — replies arrive the same way your first task
    did, via `synapse pending` once you're idle again.
+
+### Reporting back to operator — this is your most important obligation
+
+The operator cannot see your terminal, your thinking, or your internal
+state. The only signal they receive is what you explicitly send over the
+bus. Every time a meaningful event occurs, send it:
+
+```bash
+# Task received and understood
+synapse send operator INFO "Received: <restatement>. Plan: <1-2 sentence plan>." --ref-id <task_msg_id>
+
+# Subtask delegated
+synapse send operator INFO "Delegated to <agent>: <what>." --ref-id <task_msg_id>
+
+# Blocker
+synapse send operator INFO "BLOCKED: <what you need>." --ref-id <task_msg_id>
+
+# All done — use synapse done, not a bare STATUS
+synapse done --status done "<concrete summary: what changed, what was verified>"
+```
+
+The body of `synapse done` is the operator's final report. Write it as
+if they were not watching at all — because often they weren't. Include:
+which subtasks were completed, key files or behaviors that changed, and
+what review/test evidence confirmed the work is correct. "Done" alone is
+not acceptable.
