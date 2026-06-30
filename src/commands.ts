@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from "fs";
 import { homedir } from "os";
-import { dirname, join, relative, resolve } from "path";
+import { basename, dirname, join, relative, resolve } from "path";
 import SHARED_MD from "../templates/shared.md" with { type: "text" };
 import ROLE_MANAGER_MD from "../templates/role-manager.md" with { type: "text" };
 import ROLE_CODER_MD from "../templates/role-coder.md" with { type: "text" };
@@ -620,12 +620,24 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   cmdInit();
   const db = connect();
 
+  const projectRoot = dirname(dirname(dbFile));
+  const projectSlug = basename(projectRoot).slice(0, 3).toLowerCase().replace(/[^a-z0-9]/g, "x");
+
+  // Reserve a run id so we can name the task folder, but keep status='pending'
+  // until everything is ready. We delete this row on any failure so no orphan
+  // runs accumulate.
   const runResult = db.run(
-    `INSERT INTO runs (session, goal, status) VALUES ('', ?, 'running')`,
+    `INSERT INTO runs (session, goal, status) VALUES ('', ?, 'pending')`,
     [goal ?? ""],
   );
   const runId = Number(runResult.lastInsertRowid);
-  const taskName = `run-${runId}`;
+  const pathHash = Bun.hash(projectRoot).toString(16).slice(0, 4);
+  const taskName = `${projectSlug}-${pathHash}-${runId}`;
+
+  const abort = (msg: string): never => {
+    db.run(`DELETE FROM runs WHERE id=?`, [runId]);
+    fail(msg);
+  };
 
   // Create the durable run folder and copy task.yml into it with generated
   // links back to this run's scratch tree.
@@ -649,17 +661,16 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   );
 
   const tmuxSession = taskName;
-  db.run(`UPDATE runs SET session=? WHERE id=?`, [tmuxSession, runId]);
 
   const sessionExists = Bun.spawnSync(["tmux", "has-session", "-t", tmuxSession]);
   if (sessionExists.exitCode === 0) {
-    fail(
-      `tmux session '${tmuxSession}' already exists for a fresh run id — this shouldn't happen; check for a stuck session (tmux kill-session -t ${tmuxSession}) and retry`,
+    abort(
+      `tmux session '${tmuxSession}' already exists — check for a stuck session (tmux kill-session -t ${tmuxSession}) and retry`,
     );
   }
   const newSession = Bun.spawnSync(["tmux", "new-session", "-d", "-s", tmuxSession]);
   if (newSession.exitCode !== 0) {
-    fail(
+    abort(
       `failed to create tmux session '${tmuxSession}': ${newSession.stderr.toString().trim()}`,
     );
   }
@@ -721,8 +732,10 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     console.log(`synapse: initial goal queued as TASK to '${manager.name}'`);
   }
 
+  // All agents launched successfully — commit the run as active.
+  db.run(`UPDATE runs SET session=?, status='running' WHERE id=?`, [tmuxSession, runId]);
+
   console.log(
-    `synapse: team '${tmuxSession}' (run #${runId}) started with ${config.agents.length} agent(s)`,
   );
   console.log(`  Attach: tmux attach -t ${tmuxSession}`);
   console.log(`  Status: synapse status`);
