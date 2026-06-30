@@ -10,6 +10,7 @@ PASS=0; FAIL=0
 setup() {
   DIR=$(mktemp -d)
   export SYNAPSE_DB="$DIR/synapse.db"
+  export SYNAPSE_RUN_ID=1
   export CLAUDE_PROJECTS_DIR="$DIR/projects"
   TMUX_LOG="$DIR/tmux.log"
   FAKEBIN="$DIR/fakebin"
@@ -85,13 +86,16 @@ section3() {
 }
 
 section4() {
-  echo "[4] end_turn past debounce -> idle + delivery"
+  echo "[4] end_turn past debounce -> idle + pending nudge"
   write_transcript sess-coder end_turn 5
   run monitor --once --debounce 100
   assert "coder-1 idle"       "$(run status)"  "idle"
-  assert "message delivered"  "$(run pending)" "no pending"
-  assert "tmux body sent"     "$(cat "$TMUX_LOG")" "send-keys -t team:coder-1 -l -- implement feature X"
+  assert "message still pending before agent pull" "$(run pending)" "implement feature X"
+  assert "tmux pending nudge sent" "$(cat "$TMUX_LOG")" "send-keys -t team:coder-1 -l -- synapse pending coder-1"
   assert "tmux Enter sent"    "$(cat "$TMUX_LOG")" "send-keys -t team:coder-1 Enter"
+  SYNAPSE_AGENT=coder-1 run pending coder-1 > /dev/null
+  assert "agent pull marks read" \
+    "$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM messages WHERE body='implement feature X'")" "read"
 }
 
 section5() {
@@ -114,24 +118,27 @@ section6() {
   # coder-1 must be idle to not block; backdate its transcript too
   write_transcript sess-coder end_turn 5
   run monitor --once --debounce 100
-  assert "STATUS delivered to manager" "$(cat "$TMUX_LOG")" "send-keys -t team:manager -l -- feature X done"
+  assert "STATUS nudged to manager" "$(cat "$TMUX_LOG")" "send-keys -t team:manager -l -- synapse pending manager"
   local ref_id; ref_id=$(sqlite3 "$SYNAPSE_DB" "SELECT ref_id FROM messages WHERE type='STATUS'")
   assert "STATUS ref_id = TASK id"    "$ref_id" "$task_id"
 }
 
 section7() {
-  echo "[7] tmux failure -> failed, no retry"
+  echo "[7] tmux failure leaves message pending for retry"
   fake_tmux_fail
   run send coder-1 INFO "test failure" --from manager > /dev/null
   write_transcript sess-coder end_turn 5
   run monitor --once --debounce 100
   local st; st=$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM messages WHERE body='test failure'")
-  assert "message marked failed" "$st" "failed"
+  assert "message remains pending" "$st" "pending"
 
-  # second run — must not retry
+  printf '#!/bin/sh\necho "$@" >> "%s"\nexit 0\n' "$TMUX_LOG" > "$FAKEBIN/tmux"
+  chmod +x "$FAKEBIN/tmux"
+  rm -f "$TMUX_LOG"
   run monitor --once --debounce 100
   st=$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM messages WHERE body='test failure'")
-  assert "no retry after failure" "$st" "failed"
+  assert "retry still leaves pending until agent pull" "$st" "pending"
+  assert "retry sends pending nudge" "$(cat "$TMUX_LOG")" "send-keys -t team:coder-1 -l -- synapse pending coder-1"
 }
 
 # ── main ─────────────────────────────────────────────────────────────────────

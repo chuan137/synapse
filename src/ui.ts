@@ -1402,6 +1402,15 @@ export function cmdUi(flags: Record<string, string>) {
                 { status: 400 },
               );
             }
+            if (to === "broadcast") {
+              return Response.json(
+                {
+                  ok: false,
+                  error: "broadcast messages are no longer supported; send to a specific agent",
+                },
+                { status: 400 },
+              );
+            }
             const run = run_id
               ? (db.query(`SELECT id FROM runs WHERE id=?`).get(run_id) as any)
               : activeRun();

@@ -203,30 +203,17 @@ function tmuxSendKeys(
   return { ok: true };
 }
 
-function dispatchDirectMessage(
-  db: Database,
+function nudgeAgent(
   tmuxSession: string,
   windowName: string,
-  msg: any,
+  prompt: string,
   log: (s: string) => void,
 ) {
-  const res = tmuxSendKeys(tmuxSession, windowName, msg.body);
+  const res = tmuxSendKeys(tmuxSession, windowName, prompt);
   if (res.ok) {
-    db.run(
-      "UPDATE messages SET status='delivered', delivered_at=? WHERE id=?",
-      [nowIso(), msg.id],
-    );
-    log(
-      `  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) delivered`,
-    );
+    log(`  ${windowName}: nudged (${prompt})`);
   } else {
-    db.run(
-      "UPDATE messages SET status='failed', retry_count=1 WHERE id=?",
-      [msg.id],
-    );
-    log(
-      `  [${msg.id}] ${msg.from_agent} -> ${windowName} (${msg.type}) FAILED (terminal): ${res.error}`,
-    );
+    log(`  ${windowName}: nudge FAILED: ${res.error}`);
   }
 }
 
@@ -242,7 +229,7 @@ function newestOpenInboundWork(
     .query(
       `SELECT m.*
        FROM messages m
-       WHERE m.run_id=? AND m.to_agent=? AND m.status='delivered'
+       WHERE m.run_id=? AND m.to_agent=? AND m.status IN ('read', 'delivered')
          AND m.type IN (${placeholders})
          AND NOT EXISTS (
            SELECT 1 FROM messages r
@@ -262,13 +249,10 @@ function newestOpenInboundWork(
 function sendBackReminderBody(agentName: string, msg: any): string {
   return [
     `Harness enforcement: ${msg.type} #${msg.id} from ${msg.from_agent} is still awaiting your STATUS reply.`,
-    "",
-    `Please send a STATUS to ${msg.from_agent} referencing msg #${msg.id} before doing anything else:`,
-    "",
+    `Send a STATUS to ${msg.from_agent} referencing msg #${msg.id} before doing anything else:`,
     `synapse send ${msg.from_agent} STATUS "<result: done, blocked, or issues found; include key files/tests>" --ref-id ${msg.id}`,
-    "",
     `You are ${agentName}; do not start another task until this send-back is complete.`,
-  ].join("\n");
+  ].join(" ");
 }
 
 function enforceSendBackBeforeMoreWork(
@@ -281,28 +265,12 @@ function enforceSendBackBeforeMoreWork(
   const open = newestOpenInboundWork(db, agent, runId);
   if (!open) return true;
 
-  const existing = db
-    .query(
-      `SELECT * FROM messages
-       WHERE run_id=? AND from_agent='harness' AND to_agent=?
-         AND type='INFO' AND ref_id=?
-       ORDER BY id DESC LIMIT 1`,
-    )
-    .get(runId, agent.window_name, open.id) as any;
-
-  if (existing?.status === "pending") {
-    dispatchDirectMessage(db, tmuxSession, agent.window_name, existing, log);
-  } else {
-    const insert = db.run(
-      `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body)
-       VALUES (?, 'harness', ?, 'INFO', ?, ?)`,
-      [runId, agent.window_name, open.id, sendBackReminderBody(agent.window_name, open)],
-    );
-    const reminder = db
-      .query("SELECT * FROM messages WHERE id=?")
-      .get(Number(insert.lastInsertRowid)) as any;
-    dispatchDirectMessage(db, tmuxSession, agent.window_name, reminder, log);
-  }
+  nudgeAgent(
+    tmuxSession,
+    agent.window_name,
+    sendBackReminderBody(agent.window_name, open),
+    log,
+  );
 
   log(
     `  ${agent.window_name}: send-back required for ${open.type} #${open.id}; held further delivery`,
@@ -310,21 +278,20 @@ function enforceSendBackBeforeMoreWork(
   return false;
 }
 
-// Dispatches the oldest pending direct message for windowName, if any.
-function dispatchNextDirectMessage(
+function nudgeForPendingWork(
   db: Database,
   tmuxSession: string,
   windowName: string,
   runId: number,
   log: (s: string) => void,
 ) {
-  const msg = db
+  const row = db
     .query(
-      `SELECT * FROM messages WHERE status='pending' AND to_agent=? AND run_id=?
+      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? AND run_id=?
        ORDER BY created_at LIMIT 1`,
     )
     .get(windowName, runId) as any;
-  if (msg) dispatchDirectMessage(db, tmuxSession, windowName, msg, log);
+  if (row) nudgeAgent(tmuxSession, windowName, `synapse pending ${windowName}`, log);
 }
 
 function hasPendingDirectMessageForWindow(
@@ -339,59 +306,6 @@ function hasPendingDirectMessageForWindow(
     )
     .get(windowName, runId, nowIso());
   return !!row;
-}
-
-function activeRosterRunId(agents: any[], fallback: number): number {
-  return agents.find((a) => a.run_id !== 0)?.run_id ?? fallback;
-}
-
-// Broadcasts fire only when every non-sender agent is idle simultaneously —
-// a single row can't track partial delivery, so it's all-or-nothing.
-function broadcastReadyMessages(
-  db: Database,
-  tmuxSession: string,
-  agents: any[],
-  agentStatuses: Map<string, AgentStatus>,
-  runId: number,
-  log: (s: string) => void,
-) {
-  const broadcasts = db
-    .query(
-      `SELECT * FROM messages WHERE status='pending' AND to_agent='broadcast' AND run_id=? ORDER BY created_at`,
-    )
-    .all(runId) as any[];
-  for (const msg of broadcasts) {
-    const recipients = agents.filter((a) => a.window_name !== msg.from_agent);
-    if (recipients.length === 0) continue;
-    const allIdle = recipients.every(
-      (a) => agentStatuses.get(a.window_name) === "idle",
-    );
-    if (!allIdle) continue;
-    const blockedRecipient = recipients.find((a) =>
-      newestOpenInboundWork(db, a, runId),
-    );
-    if (blockedRecipient) {
-      log(
-        `  broadcast[${msg.id}] held: ${blockedRecipient.window_name} must send back before receiving broadcast`,
-      );
-      continue;
-    }
-    let allOk = true;
-    for (const r of recipients) {
-      const res = tmuxSendKeys(tmuxSession, r.window_name, msg.body);
-      log(
-        `  broadcast[${msg.id}] ${msg.from_agent} -> ${r.window_name}: ${
-          res.ok ? "delivered" : "FAILED: " + res.error
-        }`,
-      );
-      if (!res.ok) allOk = false;
-    }
-    db.run("UPDATE messages SET status=?, delivered_at=? WHERE id=?", [
-      allOk ? "delivered" : "failed",
-      nowIso(),
-      msg.id,
-    ]);
-  }
 }
 
 function readTmuxPaneState(
@@ -520,7 +434,7 @@ function logTerminalRun(
   );
 }
 
-// Single synchronous snapshot — evaluate every live agent, then broadcast if ready.
+// Single synchronous snapshot — evaluate every live agent and nudge ready agents with work.
 function pollOnce(
   db: Database,
   tmuxSession: string,
@@ -551,19 +465,11 @@ function pollOnce(
     );
     if (result?.status === "idle") {
       if (enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agent.run_id, log)) {
-        dispatchNextDirectMessage(db, tmuxSession, agent.window_name, agent.run_id, log);
+        nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, log);
       }
     }
   }
   if (runId !== undefined) markOperatorMessagesDelivered(db, runId, log);
-  broadcastReadyMessages(
-    db,
-    tmuxSession,
-    agents,
-    agentStatuses,
-    runId ?? activeRosterRunId(agents, 0),
-    log,
-  );
 }
 
 // Tracks transcript files for activity-driven delivery, combining fs.watch
@@ -662,12 +568,13 @@ function runLiveMonitor(
         agent &&
         enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agentRunId, eventLog)
       ) {
-        dispatchNextDirectMessage(db, tmuxSession, windowName, agentRunId, eventLog);
-        broadcastReadyMessages(db, tmuxSession, agents, agentStatuses, agentRunId, eventLog);
+        nudgeForPendingWork(db, tmuxSession, windowName, agentRunId, eventLog);
       }
     } else if (
       agentState?.remainingDebounceMs !== undefined &&
-      hasPendingDirectMessageForWindow(db, windowName, agentRunId)
+      agent &&
+      (hasPendingDirectMessageForWindow(db, windowName, agentRunId) ||
+        !!newestOpenInboundWork(db, agent, agentRunId))
     ) {
       // Agent is still debouncing and has mail waiting — reschedule to re-evaluate when the window expires.
       scheduleDelivery(windowName, agentState.remainingDebounceMs);
@@ -756,8 +663,7 @@ function runLiveMonitor(
   let terminalLogged = false;
 
   // Sweep syncs watcher/timer state with the live roster, cleans up stopped
-  // agents, retries pending delivery for agents already idle, and broadcasts
-  // ready messages.
+  // agents, and retries pending nudges for agents already idle.
   const sweepInner = () => {
     const sweepLog = sourceLog("sweep");
     if (runId !== undefined && terminalRunStatus(db, runId)) {
@@ -800,7 +706,7 @@ function runLiveMonitor(
       const agentState = refreshAgentStateByWindow(agent.window_name, sweepLog);
       if (agentState?.status === "idle") {
         if (enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
-          dispatchNextDirectMessage(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
+          nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
         }
       }
       // Poll until the transcript appears to start watching
@@ -815,14 +721,6 @@ function runLiveMonitor(
       pool.emitOnTranscriptChange(agent.window_name);
     }
     if (runId !== undefined) markOperatorMessagesDelivered(db, runId, sweepLog);
-    broadcastReadyMessages(
-      db,
-      tmuxSession,
-      agents,
-      agentStatuses,
-      runId ?? activeRosterRunId(agents, 0),
-      sweepLog,
-    );
   };
 
   // A transient DB error (e.g. SQLITE_IOERR from WAL/disk pressure) must not

@@ -102,21 +102,22 @@ export function cmdSend(
   if (!MESSAGE_TYPES.has(type)) {
     fail(`type must be one of ${[...MESSAGE_TYPES].sort()}, got '${type}'`);
   }
+  if (to === "broadcast") {
+    fail("broadcast messages are no longer supported; send to a specific agent");
+  }
   const frm = resolveFrom(from);
   const db = connect();
   // Resolve run_id: explicit arg -> SYNAPSE_RUN_ID env -> null
   const resolvedRunId = runId !== undefined && runId !== null
     ? runId
     : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
-  if (to !== "broadcast") {
-    const known = resolvedRunId !== null
-      ? db.query("SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)").get(to, resolvedRunId)
-      : db.query("SELECT 1 FROM agents WHERE window_name=?").get(to);
-    if (!known) {
-      console.error(
-        `synapse: warning — '${to}' not in agents registry yet (sending anyway)`,
-      );
-    }
+  const known = resolvedRunId !== null
+    ? db.query("SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)").get(to, resolvedRunId)
+    : db.query("SELECT 1 FROM agents WHERE window_name=?").get(to);
+  if (!known) {
+    console.error(
+      `synapse: warning — '${to}' not in agents registry yet (sending anyway)`,
+    );
   }
   const optionsJson = options && options.length > 0 ? JSON.stringify(options) : null;
   const result = db.run(
@@ -167,12 +168,12 @@ export function cmdStatus() {
   const pendingStmt = activeRun
     ? db.query(
         `SELECT COUNT(*) AS n FROM messages WHERE status='pending'
-         AND (to_agent=? OR to_agent='broadcast')
+         AND to_agent=?
          AND run_id=?`,
       )
     : db.query(
         `SELECT COUNT(*) AS n FROM messages WHERE status='pending'
-         AND (to_agent=? OR to_agent='broadcast')`,
+         AND to_agent=?`,
       );
 
   if (activeRun) {
@@ -232,21 +233,24 @@ export function cmdRuns() {
 
 export function cmdPending(agent: string | null, all?: boolean) {
   const db = connect();
+  const envAgent = process.env.SYNAPSE_AGENT ?? null;
+  const targetAgent = agent ?? envAgent;
+  const shouldConsume = !!targetAgent && envAgent === targetAgent;
 
   const activeRun = all ? null :
     (db.query("SELECT id FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
     (db.query("SELECT id FROM runs ORDER BY id DESC LIMIT 1").get() as any);
 
-  const rows = agent
+  const rows = targetAgent
     ? (activeRun
         ? db.query(
             `SELECT * FROM messages WHERE status='pending'
-             AND (to_agent=? OR to_agent='broadcast') AND run_id=? ORDER BY created_at`,
-          ).all(agent, activeRun.id)
+             AND to_agent=? AND run_id=? ORDER BY created_at`,
+          ).all(targetAgent, activeRun.id)
         : db.query(
             `SELECT * FROM messages WHERE status='pending'
-             AND (to_agent=? OR to_agent='broadcast') ORDER BY created_at`,
-          ).all(agent)
+             AND to_agent=? ORDER BY created_at`,
+          ).all(targetAgent)
       ) as any[]
     : (activeRun
         ? db.query(
@@ -260,6 +264,16 @@ export function cmdPending(agent: string | null, all?: boolean) {
     console.log("synapse: no pending messages");
     return;
   }
+
+  if (shouldConsume) {
+    const ids = rows.map((r: any) => r.id);
+    const placeholders = ids.map(() => "?").join(", ");
+    db.run(
+      `UPDATE messages SET status='read', delivered_at=? WHERE id IN (${placeholders}) AND status='pending'`,
+      [nowIso(), ...ids],
+    );
+  }
+
   const agentW = Math.max(
     ...rows.flatMap((r) => [r.from_agent.length, r.to_agent.length]),
   );
@@ -285,11 +299,11 @@ export function cmdPending(agent: string | null, all?: boolean) {
 export function cmdDeliver(id: number) {
   const db = connect();
   const result = db.run(
-    "UPDATE messages SET status='delivered', delivered_at=? WHERE id=? AND status='pending'",
+    "UPDATE messages SET status='read', delivered_at=? WHERE id=? AND status IN ('pending', 'delivered')",
     [nowIso(), id],
   );
-  if (result.changes === 0) fail(`no pending message with id=${id}`);
-  console.log(`synapse: message ${id} marked delivered`);
+  if (result.changes === 0) fail(`no pending or delivered message with id=${id}`);
+  console.log(`synapse: message ${id} marked read`);
 }
 
 // ---------- task.yml / bootstrap ----------

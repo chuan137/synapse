@@ -17,12 +17,12 @@ CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id     INTEGER,                -- references runs.id; NULL for operator messages sent outside a run
   from_agent TEXT NOT NULL,
-  to_agent   TEXT NOT NULL,       -- references agents.window_name, or 'broadcast'
+  to_agent   TEXT NOT NULL,       -- references agents.window_name
   type       TEXT NOT NULL DEFAULT 'INFO',  -- TASK | STATUS | REVIEW | ACK | INFO | QUESTION
   ref_id     INTEGER,             -- id of the message this one replies to/closes
   body       TEXT NOT NULL,
   options    TEXT,                -- JSON array of strings, nullable (used by QUESTION type)
-  status     TEXT NOT NULL DEFAULT 'pending',  -- pending | delivered | read | failed
+  status     TEXT NOT NULL DEFAULT 'pending',  -- pending | read | failed; delivered is legacy
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   delivered_at TEXT,
   retry_count  INTEGER NOT NULL DEFAULT 0,

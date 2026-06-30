@@ -252,6 +252,15 @@ describe("send", () => {
     const msg = db.query("SELECT * FROM messages WHERE type='QUESTION'").get() as any;
     expect(msg.options).toBeNull();
   });
+
+  test("rejects broadcast recipients", () => {
+    const r = run(["send", "broadcast", "INFO", "hi everyone", "--from", "manager"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("broadcast messages are no longer supported");
+    const db = openDb();
+    const count = (db.query("SELECT COUNT(*) AS n FROM messages WHERE to_agent='broadcast'").get() as any).n;
+    expect(count).toBe(0);
+  });
 });
 
 describe("log", () => {
@@ -309,26 +318,47 @@ describe("pending / deliver", () => {
     run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
   });
 
-  test("pending shows the queued message", () => {
+  test("operator pending peek shows the queued message without consuming it", () => {
     const r = run(["pending", "coder-1"]);
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain("do the thing");
+    const msg = openDb().query("SELECT status FROM messages LIMIT 1").get() as any;
+    expect(msg.status).toBe("pending");
   });
 
-  test("deliver marks it delivered and pending no longer lists it", () => {
+  test("agent pending consumes all of that agent's queued messages", () => {
+    run(["send", "coder-1", "INFO", "second thing", "--from", "manager"]);
+    const r = run(["pending", "coder-1"], { SYNAPSE_AGENT: "coder-1" });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("do the thing");
+    expect(r.stdout).toContain("second thing");
+    const rows = openDb().query("SELECT status FROM messages ORDER BY id").all() as any[];
+    expect(rows.map((row) => row.status)).toEqual(["read", "read"]);
+  });
+
+  test("bare pending consumes the caller's own work when SYNAPSE_AGENT is set", () => {
+    const r = run(["pending"], { SYNAPSE_AGENT: "coder-1" });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("do the thing");
+    const msg = openDb().query("SELECT status FROM messages LIMIT 1").get() as any;
+    expect(msg.status).toBe("read");
+  });
+
+  test("deliver marks it read and pending no longer lists it", () => {
     const id = (openDb().query("SELECT id FROM messages LIMIT 1").get() as any).id;
     const r = run(["deliver", String(id)]);
     expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("marked read");
     const after = run(["pending", "coder-1"]);
     expect(after.stdout).toContain("no pending messages");
   });
 
-  test("deliver on an already-delivered id fails instead of double-delivering", () => {
+  test("deliver on an already-read id fails instead of double-reading", () => {
     const id = (openDb().query("SELECT id FROM messages LIMIT 1").get() as any).id;
     run(["deliver", String(id)]);
     const r = run(["deliver", String(id)]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("no pending message");
+    expect(r.stderr).toContain("no pending or delivered message");
   });
 });
 

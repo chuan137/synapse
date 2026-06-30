@@ -162,7 +162,7 @@ const COMMANDS: CommandSpec[] = [
       {
         title: "Arguments",
         lines: [
-          "to    Recipient agent name, operator, or broadcast.",
+          "to    Recipient agent name or operator.",
           "type  Message type: TASK, STATUS, REVIEW, ACK, INFO, or QUESTION.",
           "body  Message body.",
         ],
@@ -237,7 +237,7 @@ const COMMANDS: CommandSpec[] = [
   {
     name: "deliver",
     usage: "synapse deliver <id>",
-    summary: "Mark one pending message delivered.",
+    summary: "Mark one pending or delivered message read.",
     run: (context) => {
       const { positional } = context;
       const [id] = positional;

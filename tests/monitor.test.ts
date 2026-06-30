@@ -171,7 +171,7 @@ describe("monitor: idle detection", () => {
   });
 });
 
-describe("monitor: direct delivery", () => {
+describe("monitor: pull nudges", () => {
   beforeEach(() => {
     run(["init"]);
     run(["register", "manager", "manager", "sess-manager"]);
@@ -179,39 +179,35 @@ describe("monitor: direct delivery", () => {
     run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
   });
 
-  test("delivers the pending message via tmux send-keys once the agent is idle", () => {
+  test("nudges the idle agent to run pending without consuming the message", () => {
     writeTranscript("sess-coder", "end_turn", 5000);
     const r = run(["monitor", "--once", "--session", "team", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
 
     const log = tmuxLogContents();
-    // Body and Enter are sent as two separate send-keys calls (see
-    // tmuxSendKeys) — -l forces literal text so the body can't be
-    // misread as a tmux key name.
-    expect(log).toContain("send-keys -t team:coder-1 -l -- do the thing");
+    expect(log).toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
     expect(log).toContain("send-keys -t team:coder-1 Enter");
 
     const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
-    expect(msg.status).toBe("delivered");
-    expect(msg.delivered_at).toBeTruthy();
+    expect(msg.status).toBe("pending");
   });
 
-  test("a message body that collides with a tmux key name is still sent literally", () => {
-    // Regression test: confirmed against a real tmux pane that send-keys
-    // without -l swallows a body of exactly "Enter" as a keypress instead
-    // of typing it out. beforeEach already queued "do the thing" ahead of
-    // it, so deliver in two ticks (oldest-first, one per tick) and check
-    // the second delivery.
+  test("one agent pending call consumes multiple pending messages", () => {
     run(["send", "coder-1", "INFO", "Enter", "--from", "manager"]);
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
-    const task = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1' AND type='TASK'").get() as any;
-    run(["send", "manager", "STATUS", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
-    run(["monitor", "--once", "--debounce", "100"]);
-    expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- Enter");
+
+    const pull = run(["pending", "coder-1"], { SYNAPSE_AGENT: "coder-1" });
+    expect(pull.stdout).toContain("do the thing");
+    expect(pull.stdout).toContain("Enter");
+
+    const rows = openDb()
+      .query("SELECT status FROM messages WHERE to_agent='coder-1' ORDER BY id")
+      .all() as any[];
+    expect(rows.map((row) => row.status)).toEqual(["read", "read"]);
   });
 
-  test("does not deliver while the agent is still busy", () => {
+  test("does not nudge while the agent is still busy", () => {
     writeTranscript("sess-coder", "tool_use");
     run(["monitor", "--once", "--debounce", "0"]);
 
@@ -220,23 +216,16 @@ describe("monitor: direct delivery", () => {
     expect(msg.status).toBe("pending");
   });
 
-  test("a real TASK -> STATUS round trip needs no manual send-keys", () => {
-    // Mirrors synapse-spec.md Phase 2's acceptance test (two agents, real
-    // round trip), with the tmux/transcript layers faked per this file's
-    // header. The "agent" side of each delivery is simulated by writing the
-    // transcript a real Claude Code session would have produced and, for
-    // the reply, by calling `synapse send` the way the coder's CLAUDE.md
-    // instructs it to.
+  test("a TASK -> STATUS round trip is pull-based at both hops", () => {
     writeTranscript("sess-coder", "end_turn", 5000);
     let r = run(["monitor", "--once", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
-    expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- do the thing");
+    expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
 
+    run(["pending", "coder-1"], { SYNAPSE_AGENT: "coder-1" });
     const task = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
-    expect(task.status).toBe("delivered");
+    expect(task.status).toBe("read");
 
-    // coder-1 picks up the task (tool_use), then finishes (end_turn) and
-    // reports STATUS back to manager — exactly as section 6.3 specifies.
     writeTranscript("sess-coder", "tool_use");
     run(["monitor", "--once", "--debounce", "0"]);
     run(["send", "manager", "STATUS", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
@@ -244,32 +233,33 @@ describe("monitor: direct delivery", () => {
 
     r = run(["monitor", "--once", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
-    expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- done");
+    expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- synapse pending manager");
 
     const status = openDb().query("SELECT * FROM messages WHERE type='STATUS'").get() as any;
-    expect(status.status).toBe("delivered");
+    expect(status.status).toBe("pending");
     expect(status.ref_id).toBe(task.id);
   });
 
-  test("holds new work and reminds coder when a delivered TASK has no STATUS reply", () => {
+  test("holds new work and reminds coder when a read TASK has no STATUS reply", () => {
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
+    run(["pending", "coder-1"], { SYNAPSE_AGENT: "coder-1" });
 
     const task = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1' AND type='TASK'").get() as any;
-    expect(task.status).toBe("delivered");
+    expect(task.status).toBe("read");
 
     run(["send", "coder-1", "TASK", "next thing", "--from", "manager"]);
+    writeFileSync(tmuxLog, "");
     run(["monitor", "--once", "--debounce", "100"]);
 
     const log = tmuxLogContents();
     expect(log).toContain("Harness enforcement: TASK #");
-    expect(log).not.toContain("send-keys -t team:coder-1 -l -- next thing");
+    expect(log).not.toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
 
-    const reminder = openDb()
-      .query("SELECT * FROM messages WHERE from_agent='harness' AND to_agent='coder-1'")
-      .get() as any;
-    expect(reminder.status).toBe("delivered");
-    expect(reminder.ref_id).toBe(task.id);
+    const harnessRows = openDb()
+      .query("SELECT * FROM messages WHERE from_agent='harness'")
+      .all() as any[];
+    expect(harnessRows.length).toBe(0);
 
     const next = openDb()
       .query("SELECT * FROM messages WHERE to_agent='coder-1' AND body='next thing'")
@@ -277,7 +267,21 @@ describe("monitor: direct delivery", () => {
     expect(next.status).toBe("pending");
   });
 
-  test("marks message failed immediately on first tmux failure", () => {
+  test("legacy delivered rows still count for send-back enforcement", () => {
+    const db = new Database(dbFile);
+    db.run("UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE to_agent='coder-1'");
+    db.close();
+
+    run(["send", "coder-1", "TASK", "next thing", "--from", "manager"]);
+    writeTranscript("sess-coder", "end_turn", 5000);
+    run(["monitor", "--once", "--debounce", "100"]);
+
+    const log = tmuxLogContents();
+    expect(log).toContain("Harness enforcement: TASK #");
+    expect(log).not.toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
+  });
+
+  test("leaves message pending when the nudge fails", () => {
     writeFileSync(join(fakeBinDir, "tmux"), `#!/bin/sh\necho "no such window" >&2\nexit 1\n`);
     chmodSync(join(fakeBinDir, "tmux"), 0o755);
 
@@ -288,10 +292,9 @@ describe("monitor: direct delivery", () => {
     expect(r.exitCode).toBe(0);
 
     const msg1 = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
-    expect(msg1.status).toBe("failed");
-    expect(msg1.retry_count).toBe(1);
+    expect(msg1.status).toBe("pending");
+    expect(msg1.retry_count).toBe(0);
 
-    // Restore good tmux; a subsequent monitor pass must NOT re-deliver the failed message.
     writeFileSync(
       join(fakeBinDir, "tmux"),
       `#!/bin/sh\necho "$@" >> "${tmuxLog}"\nexit 0\n`
@@ -300,71 +303,30 @@ describe("monitor: direct delivery", () => {
 
     run(["monitor", "--once", "--debounce", "100"]);
     const after = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
-    expect(after.status).toBe("failed");
-    expect(tmuxLogContents()).toBe("");
+    expect(after.status).toBe("pending");
+    expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
   });
 
-  test("delivers at most one pending message per agent per tick, oldest first", () => {
+  test("one nudge can cover multiple pending messages", () => {
     run(["send", "coder-1", "INFO", "second message", "--from", "manager"]);
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
 
-    const delivered = openDb()
-      .query("SELECT * FROM messages WHERE status='delivered' AND to_agent='coder-1'")
-      .all() as any[];
-    expect(delivered.length).toBe(1);
-    expect(delivered[0].body).toBe("do the thing"); // the older one
+    const log = tmuxLogContents();
+    const nudges = log
+      .split("\n")
+      .filter((line) => line.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(nudges.length).toBe(1);
 
-    const stillPending = openDb()
+    const pending = openDb()
       .query("SELECT * FROM messages WHERE status='pending' AND to_agent='coder-1'")
       .all() as any[];
-    expect(stillPending.length).toBe(1);
-    expect(stillPending[0].body).toBe("second message");
-  });
-});
-
-describe("monitor: broadcast delivery", () => {
-  beforeEach(() => {
-    run(["init"]);
-    run(["register", "manager", "manager", "sess-manager"]);
-    run(["register", "coder-1", "coder", "sess-coder-1"]);
-    run(["register", "coder-2", "coder", "sess-coder-2"]);
-  });
-
-  test("fans out to every other idle agent and marks the single row delivered", () => {
-    run(["send", "broadcast", "INFO", "stand down", "--from", "manager"]);
-    writeTranscript("sess-coder-1", "end_turn", 5000);
-    writeTranscript("sess-coder-2", "end_turn", 5000);
-    writeTranscript("sess-manager", "end_turn", 5000);
-
-    const r = run(["monitor", "--once", "--debounce", "100"]);
-    expect(r.exitCode).toBe(0);
-
-    const log = tmuxLogContents();
-    expect(log).toContain("send-keys -t team:coder-1 -l -- stand down");
-    expect(log).toContain("send-keys -t team:coder-2 -l -- stand down");
-    // sender is excluded from the fan-out
-    expect(log).not.toContain("team:manager");
-
-    const msg = openDb().query("SELECT * FROM messages WHERE to_agent='broadcast'").get() as any;
-    expect(msg.status).toBe("delivered");
-  });
-
-  test("withholds the broadcast entirely if any recipient is still busy", () => {
-    run(["send", "broadcast", "INFO", "stand down", "--from", "manager"]);
-    writeTranscript("sess-coder-1", "end_turn", 5000);
-    writeTranscript("sess-coder-2", "tool_use"); // still busy
-
-    run(["monitor", "--once", "--debounce", "100"]);
-
-    expect(tmuxLogContents()).toBe("");
-    const msg = openDb().query("SELECT * FROM messages WHERE to_agent='broadcast'").get() as any;
-    expect(msg.status).toBe("pending");
+    expect(pending.length).toBe(2);
   });
 });
 
 // --once exercises the snapshot path (deriveIdleStateFromTranscript / evaluateAgentReadiness /
-// broadcastReadyMessages) synchronously and deterministically; these tests instead
+// readiness evaluation) synchronously and deterministically; these tests instead
 // run the real long-lived loop (no --once) as a background process to
 // exercise the fs.watch + debounce-timer + cheap-sweep machinery in
 // runLiveMonitor that --once never touches. Async/real-timer based by
@@ -457,24 +419,17 @@ describe("monitor: live event-driven loop (no --once)", () => {
     expect(tmuxLogContents()).toBe(""); // still busy, nothing delivered yet
 
     writeTranscript("sess-coder", "end_turn", 0);
-    // Wait on the DB row (the canonical fact) rather than the tmux log text:
-    // delivery order is tmux send-keys *then* the status write, so by the
-    // time the row says "delivered" the log is guaranteed to already
-    // contain it — waiting on the log instead left a window, under load,
-    // where it could read as present a hair before the DB write landed.
-    let msg: any;
-    await waitFor(() => {
-      msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
-      return msg?.status === "delivered";
-    });
+    await waitFor(() =>
+      tmuxLogContents().includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"),
+    );
 
-    expect(msg.status).toBe("delivered");
-    expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- do the thing");
+    const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(msg.status).toBe("pending");
     expect(out.text()).toContain("[watch]   coder-1: transcript activity");
   }, 15000);
 
-  test("a message sent while the agent is already idle is still delivered, via the cheap sweep", async () => {
-    // No transcript write happens *after* this — direct delivery here can
+  test("a message sent while the agent is already idle is still nudged, via the cheap sweep", async () => {
+    // No transcript write happens *after* this — a nudge here can
     // only be triggered by the periodic mail sweep re-checking an already-
     // idle agent's mailbox, not by any fs.watch event.
     writeTranscript("sess-coder", "end_turn", 5000);
@@ -488,14 +443,12 @@ describe("monitor: live event-driven loop (no --once)", () => {
     });
 
     run(["send", "coder-1", "TASK", "hello while idle", "--from", "manager"]);
-    let msg: any;
-    await waitFor(() => {
-      msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
-      return msg?.status === "delivered";
-    });
+    await waitFor(() =>
+      tmuxLogContents().includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"),
+    );
 
-    expect(msg.status).toBe("delivered");
-    expect(tmuxLogContents()).toContain("hello while idle");
+    const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(msg.status).toBe("pending");
     expect(out.text()).toContain("[sweep]");
   }, 15000);
 
@@ -609,7 +562,7 @@ describe("monitor: terminal run handling", () => {
     expect(agent.status).not.toBe("stopped");
   });
 
-  test("--once leaves the team alive and still delivers messages once the run is terminal", () => {
+  test("--once leaves the team alive and still nudges messages once the run is terminal", () => {
     const runId = insertRun("completed");
     run(["send", "manager", "INFO", "follow up", "--from", "operator", "--run-id", String(runId)]);
     writeTranscript("sess-manager", "end_turn", 5000);
@@ -617,7 +570,7 @@ describe("monitor: terminal run handling", () => {
     const r = run(["monitor", "--once", "--session", "team", "--run-id", String(runId)]);
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain("monitor remains active until UI ACK");
-    expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- follow up");
+    expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- synapse pending manager");
 
     const db = openDb();
     const manager = db.query("SELECT status FROM agents WHERE window_name='manager'").get() as any;
@@ -625,7 +578,7 @@ describe("monitor: terminal run handling", () => {
     expect(manager.status).not.toBe("stopped");
     expect(coder.status).not.toBe("stopped");
     const msg = db.query("SELECT status FROM messages WHERE body='follow up'").get() as any;
-    expect(msg.status).toBe("delivered");
+    expect(msg.status).toBe("pending");
   });
 
   test("the live loop notices a terminal run and stays alive until signaled", async () => {
