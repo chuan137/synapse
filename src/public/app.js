@@ -124,7 +124,10 @@
       if (reply) {
         const resolvedDiv = document.createElement('div');
         resolvedDiv.className = 'question-resolved';
-        resolvedDiv.textContent = '↩ replied: ' + (reply.body || '');
+        // Don't repeat the reply text here — the reply itself is a real
+        // STATUS message that already renders as its own row further down
+        // the thread. Echoing it here just duplicates it on screen.
+        resolvedDiv.textContent = '✓ answered';
         div.querySelector('.message-body').appendChild(resolvedDiv);
       } else {
         const run = state.runs.find(r => r.id === (msg.run_id || state.selectedRunId));
@@ -217,7 +220,9 @@
       const json = await res.json();
       if (json.ok) {
         card.dataset.resolved = 'true';
-        card.innerHTML = '<div class="question-resolved">↩ replied: ' + esc(replyText) + '</div>';
+        // Text intentionally omitted: the reply itself lands as its own
+        // STATUS row a moment later via the message stream/poll.
+        card.innerHTML = '<div class="question-resolved">✓ answered</div>';
       } else {
         card.querySelectorAll('button').forEach(b => { b.disabled = false; });
         if (input) input.disabled = false;
@@ -245,7 +250,9 @@
       const card = row && row.querySelector('.question-card:not([data-resolved])');
       if (card) {
         card.dataset.resolved = 'true';
-        card.innerHTML = '<div class="question-resolved">↩ replied: ' + esc(msg.body || '') + '</div>';
+        // This STATUS message (msg) renders as its own row right below —
+        // don't echo its body here too.
+        card.innerHTML = '<div class="question-resolved">✓ answered</div>';
       }
     }
   }
