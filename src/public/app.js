@@ -49,7 +49,7 @@
       el.textContent = normalized;
       return el.outerHTML;
     }
-    const html = DOMPurify.sanitize(marked.parse(normalized, { gfm: true, breaks: true }));
+    const html = DOMPurify.sanitize(marked.parse(normalized, { gfm: true, breaks: true, html: false }));
     const el = document.createElement('div');
     el.className = 'message-content';
     el.innerHTML = html;
@@ -288,12 +288,10 @@
       const unread = !isSelected && (state.unreadCounts.get(run.id) || 0);
       const badge = unread ? '<span class="run-unread">' + unread + '</span>' : '';
       const dotState = !isRunning ? 'done' : runHasBusyAgent(run.id) ? 'running' : 'standby';
-      const idleLabel = runIdleLabel(run);
       return '<div class="run-item' + (isSelected ? ' selected' : '') + '" data-run-id="' + run.id + '">' +
         '<span class="run-dot" data-state="' + dotState + '"></span>' +
         '<div class="run-item-info">' +
           '<span class="run-label">run #' + run.id + badge +
-            (idleLabel ? '<span class="run-idle-label run-idle-' + idleLabel.toLowerCase() + '">' + idleLabel + '</span>' : '') +
           '</span>' +
           '<span class="run-session">' + esc(run.session || '') + '</span>' +
           (!isRunning ? '<span class="run-status-badge">[' + esc(run.status) + ']</span>' : '') +
@@ -308,10 +306,7 @@
   function updateThreadHeader(run) {
     const titleEl = $('thread-title');
     if (!titleEl || !run) return;
-    const idleLabel = runIdleLabel(run);
-    const badge = idleLabel
-      ? '<span class="run-status-badge run-status-' + idleLabel.toLowerCase() + '">[' + idleLabel + ']</span>'
-      : '<span class="run-status-badge run-status-' + esc(run.status) + '">[' + esc(run.status) + ']</span>';
+    const badge = '<span class="run-status-badge run-status-' + esc(run.status) + '">[' + esc(run.status) + ']</span>';
     titleEl.innerHTML = '<span>run #' + run.id + ' · ' + esc(run.session) + '</span> ' + badge;
     const goalEl = $('thread-goal');
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
@@ -337,7 +332,7 @@
     finishRunBtn._currentRun = run;
     if (stopRunBtn) {
       stopRunBtn.style.display = canFinish ? '' : 'none';
-      stopRunBtn.disabled = false;
+      stopRunBtn.disabled = canFinish && runHasBusyAgent(run.id);
       stopRunBtn._currentRun = run;
     }
   }
