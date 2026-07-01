@@ -254,6 +254,53 @@ describe("send", () => {
     expect(msg).toBeFalsy();
   });
 
+  test("rejects a long body with an enumerated list crammed onto one line", () => {
+    const r = run([
+      "send", "operator", "STATUS",
+      "完成。src/commands.ts 变更：(1) 新增 import TASK_EXAMPLE_YML from templates；" +
+        "(2) cmdStart 在 configPath 等于默认路径且文件不存在时回退到打包内容，自定义路径不存在时仍明确报错。",
+      "--from", "manager",
+    ]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("(1)");
+    expect(r.stderr).toContain("line breaks");
+    const db = openDb();
+    const msg = db.query("SELECT * FROM messages WHERE type='STATUS'").get() as any;
+    expect(msg).toBeFalsy();
+  });
+
+  test("accepts the same content once split across real newlines", () => {
+    const r = run([
+      "send", "operator", "STATUS",
+      "完成。src/commands.ts 变更：\n" +
+        "(1) 新增 import TASK_EXAMPLE_YML from templates\n" +
+        "(2) cmdStart 在 configPath 等于默认路径且文件不存在时回退到打包内容",
+      "--from", "manager",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const db = openDb();
+    const msg = db.query("SELECT * FROM messages WHERE type='STATUS'").get() as any;
+    expect(msg).toBeTruthy();
+  });
+
+  test("does not flag a short body with only one enumeration marker", () => {
+    const r = run([
+      "send", "operator", "INFO", "Approved (1) go ahead",
+      "--from", "manager",
+    ]);
+    expect(r.exitCode).toBe(0);
+  });
+
+  test("rejects a long body with circled-digit markers crammed onto one line", () => {
+    const r = run([
+      "send", "operator", "STATUS",
+      "完成任务，包含以下改动：①修改了配置文件的默认路径读取逻辑；②新增了单元测试覆盖边界情况；③更新了相关文档说明。",
+      "--from", "manager",
+    ]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("line breaks");
+  });
+
   test("rejects broadcast recipients", () => {
     const r = run(["send", "broadcast", "INFO", "hi everyone", "--from", "manager"]);
     expect(r.exitCode).toBe(1);

@@ -88,4 +88,7 @@ UI renders it (lists, `code`, line breaks). A summary covering several
 files/changes/facts should use a short line per point (`- ` bullets or
 `\n` line breaks between them), e.g. `"Done.\n- src/x.ts: <change>\n- src/y.ts:
 <change>\n- 68 tests pass, build OK"` instead of cramming it all into one
-`(1) ...; (2) ...` sentence. One-line bodies don't need this.
+`(1) ...; (2) ...` sentence. One-line bodies don't need this. This is
+enforced: `synapse send` rejects a long body that has `(1)`/`(2)`/`①②`-style
+markers but no real line breaks, so writing it as one dense sentence just
+means resending it correctly.

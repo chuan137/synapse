@@ -13,6 +13,7 @@ import ROLE_CODER_MD from "../templates/role-coder.md" with { type: "text" };
 import ROLE_REVIEWER_MD from "../templates/role-reviewer.md" with {
   type: "text",
 };
+import TASK_EXAMPLE_YML from "../templates/task.example.yml" with { type: "text" };
 import { connect, dbPath, defaultAgentDir, initDb } from "./db";
 
 const ROLE_TEMPLATES: Record<string, string> = {
@@ -23,6 +24,27 @@ const ROLE_TEMPLATES: Record<string, string> = {
 
 export const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO", "QUESTION"]);
 export const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
+
+// Matches enumeration markers agents tend to use when listing multiple
+// points inline instead of on separate lines: (1) (2), （1）（2） (fullwidth),
+// and circled digits ①②③…
+const ENUM_MARKER_RE = /\(\d{1,2}\)|（\d{1,2}）|[①②③④⑤⑥⑦⑧⑨⑩]/g;
+// Chinese text conveys far more per character than English, so this stays
+// low enough to catch dense CJK paragraphs, not just long English ones.
+const CRAMMED_BODY_MIN_LENGTH = 60;
+const CRAMMED_BODY_MIN_MARKERS = 2;
+
+// Flags a body that reads like an enumerated list squashed into one
+// unbroken line/paragraph — e.g. "...(1) did X；(2) did Y..." — which
+// renders as a hard-to-scan wall of text in S-Deck. Only fires when there's
+// no line break at all; a body that already uses '\n' is left alone even
+// if it happens to contain "(1)" somewhere.
+export function crammedListMarkers(body: string): string[] | null {
+  if (body.includes("\n") || body.length < CRAMMED_BODY_MIN_LENGTH) return null;
+  const markers = body.match(ENUM_MARKER_RE);
+  if (!markers || markers.length < CRAMMED_BODY_MIN_MARKERS) return null;
+  return markers;
+}
 
 export const DEFAULT_TMUX_SESSION = "team";
 export const DEFAULT_TASK_TEMPLATE = "templates/task.example.yml";
@@ -109,6 +131,16 @@ export function cmdSend(
         "generic fallback, so the operator would see no clickable choices at all. " +
         "Pass 2-4 short, specific option labels that reflect this question's real answers " +
         "(not literal 'Yes,No,OK'), plus --title for a short header.",
+    );
+  }
+  const crammedMarkers = crammedListMarkers(body);
+  if (crammedMarkers) {
+    fail(
+      `body looks like an enumerated list squashed into one line (found ${crammedMarkers.join(", ")} ` +
+        "with no line breaks) — this renders as an unreadable wall of text in S-Deck. Put each point " +
+        "on its own line instead, e.g. \"Done.\\n- point one\\n- point two\" rather than " +
+        "\"...(1) point one；(2) point two...\". Pass the body with real newlines (\\n), not literal " +
+        "\"(1)\"/\"(2)\" markers strung together in one sentence.",
     );
   }
   if (to === "broadcast") {
@@ -615,9 +647,17 @@ function launchAgentWindow(
 }
 
 export function cmdStart(configPath: string, flags: Record<string, string>) {
-  if (!existsSync(configPath)) fail(`task config not found: ${configPath}`);
-  const absConfigPath = resolve(configPath);
-  const config = parseTaskYaml(readFileSync(absConfigPath, "utf8"));
+  let taskText: string;
+  if (!existsSync(configPath)) {
+    if (configPath === DEFAULT_TASK_TEMPLATE) {
+      taskText = TASK_EXAMPLE_YML;
+    } else {
+      fail(`task config not found: ${configPath}`);
+    }
+  } else {
+    taskText = readFileSync(resolve(configPath), "utf8");
+  }
+  const config = parseTaskYaml(taskText);
   const goal = flags["goal"] ?? config.goal;
   const noMonitor = flags["no-monitor"] === "true";
 
@@ -654,7 +694,6 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   const agentsDir = join(dataDir, "agents", taskName);
   mkdirSync(taskFolder, { recursive: true });
   mkdirSync(agentsDir, { recursive: true });
-  const taskText = readFileSync(absConfigPath, "utf8");
   writeFileSync(
     join(taskFolder, "task.yml"),
     appendGeneratedTaskFields(taskText, runId, workspaceRelativePath(agentsDir)),
