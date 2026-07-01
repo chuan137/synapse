@@ -84,7 +84,7 @@
     startStatus.style.color = ok ? 'var(--idle)' : 'var(--error)';
   }
 
-  function buildMessageRow(msg) {
+  function buildMessageRow(msg, allMsgs) {
     const isHuman = msg.from_agent === 'operator';
     const direction = isHuman ? 'from-human' : 'from-agent';
     const sender = msg.from_agent;
@@ -110,13 +110,29 @@
         renderMd(msg.body || '') +
       '</div>';
 
-    // Render interactive question card for unread QUESTION messages to operator
-    if (t === 'QUESTION' && msg.to_agent === 'operator' && msg.status !== 'read') {
-      const run = state.runs.find(r => r.id === (msg.run_id || state.selectedRunId));
-      const isActive = !run || run.status === 'running';
-      if (isActive) {
-        const card = buildQuestionCard(msg);
-        div.querySelector('.message-body').appendChild(card);
+    // Render interactive question card for QUESTION messages to operator that
+    // don't already have a reply. We key "answered" off an actual STATUS reply
+    // row (ref_id -> this message, from operator) rather than msg.status: the
+    // status column is a separate agent-inbox pending/delivered/read pipeline
+    // that the operator's web reply never touches, so relying on it left the
+    // card reappearing (unanswered) on every reload even after a real reply
+    // had been persisted.
+    if (t === 'QUESTION' && msg.to_agent === 'operator') {
+      const reply = (allMsgs || []).find(
+        m => m.ref_id === msg.id && m.from_agent === 'operator',
+      );
+      if (reply) {
+        const resolvedDiv = document.createElement('div');
+        resolvedDiv.className = 'question-resolved';
+        resolvedDiv.textContent = '↩ replied: ' + (reply.body || '');
+        div.querySelector('.message-body').appendChild(resolvedDiv);
+      } else {
+        const run = state.runs.find(r => r.id === (msg.run_id || state.selectedRunId));
+        const isActive = !run || run.status === 'running';
+        if (isActive) {
+          const card = buildQuestionCard(msg);
+          div.querySelector('.message-body').appendChild(card);
+        }
       }
     }
 
@@ -219,8 +235,19 @@
     countBadge.textContent = totalMsgs + ' messages';
     const empty = $('empty-msgs');
     if (empty) empty.remove();
-    msgList.appendChild(buildMessageRow(msg));
+    const allMsgs = state.messages.get(msg.run_id) || [msg];
+    msgList.appendChild(buildMessageRow(msg, allMsgs));
     msgList.scrollTop = msgList.scrollHeight;
+    // A freshly arrived reply (STATUS with ref_id) may answer a QUESTION card
+    // already on screen — collapse it in place instead of waiting for reload.
+    if (msg.type === 'STATUS' && msg.from_agent === 'operator' && msg.ref_id) {
+      const row = msgList.querySelector('.message-row[data-msg-id="' + msg.ref_id + '"]');
+      const card = row && row.querySelector('.question-card:not([data-resolved])');
+      if (card) {
+        card.dataset.resolved = 'true';
+        card.innerHTML = '<div class="question-resolved">↩ replied: ' + esc(msg.body || '') + '</div>';
+      }
+    }
   }
 
   function renderMessages(msgs) {
@@ -236,7 +263,7 @@
     for (const msg of msgs) {
       const empty = $('empty-msgs');
       if (empty) empty.remove();
-      msgList.appendChild(buildMessageRow(msg));
+      msgList.appendChild(buildMessageRow(msg, msgs));
       totalMsgs++;
     }
     countBadge.textContent = totalMsgs + ' messages';

@@ -363,6 +363,13 @@ export function startUi(port: number) {
               `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body) VALUES (?, 'operator', ?, ?, ?, ?)`,
               [run?.id ?? null, to, type, ref_id ?? null, msgBody],
             );
+            // Mark the message this is replying to as read so its status
+            // reflects reality (the UI itself no longer relies on this to
+            // decide whether a QUESTION card is answered — it checks for a
+            // matching reply row directly — but keep the column honest).
+            if (ref_id) {
+              db.run(`UPDATE messages SET status='read' WHERE id=? AND status != 'read'`, [ref_id]);
+            }
             return Response.json({
               ok: true,
               id: Number(result.lastInsertRowid),
