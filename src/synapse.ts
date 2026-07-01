@@ -41,7 +41,7 @@ import {
   fail,
 } from "./commands";
 import { cmdMonitor } from "./monitor";
-import { cmdUi } from "./ui";
+import { startUi } from "./ui";
 
 // Injected at compile time via `bun build --define SYNAPSE_VERSION=...`
 // (see Makefile). The identifier doesn't exist when running uncompiled
@@ -50,6 +50,7 @@ import { cmdUi } from "./ui";
 declare const SYNAPSE_VERSION: string | undefined;
 const VERSION: string =
   typeof SYNAPSE_VERSION !== "undefined" ? SYNAPSE_VERSION : "dev";
+const DEFAULT_UI_PORT = 7700;
 
 function parseFlags(args: string[]) {
   const positional: string[] = [];
@@ -331,7 +332,17 @@ const COMMANDS: CommandSpec[] = [
         lines: ["--port N  HTTP port for the web UI."],
       },
     ],
-    run: ({ flags }) => cmdUi(flags),
+    run: ({ flags }) => {
+      const port = flags["port"] !== undefined
+        ? parseInt(flags["port"], 10)
+        : DEFAULT_UI_PORT;
+      if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        console.error("synapse: --port must be an integer from 0 to 65535");
+        process.exit(1);
+      }
+      cmdInit();
+      return startUi(port);
+    },
   },
   {
     name: "done",
