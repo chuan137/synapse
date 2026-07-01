@@ -609,7 +609,7 @@ describe("start: full agent launch against task.yml", () => {
 
     const db = openDb();
     const runRow = db.query("SELECT * FROM runs").get() as any;
-    expect(runRow.session).toBe("run-1");
+    expect(runRow.session).toMatch(/^[a-z0-9]+-[0-9a-f]+-\d+$/);
     expect(runRow.goal).toBe("");
 
     const task = db
@@ -653,14 +653,15 @@ describe("start: full agent launch against task.yml", () => {
     const r = runFromRepoRoot(["start"]);
     expect(r.exitCode).toBe(0);
 
+    const session = (openDb().query("SELECT session FROM runs").get() as any).session;
     const log = tmuxLogContents();
-    expect(log).not.toContain("new-window -t run-1 -n ui");
+    expect(log).not.toContain(`new-window -t ${session} -n ui`);
     expect(log).not.toContain("ui --port");
-    expect(log).toContain("synapse.ts monitor --session run-1 --run-id 1");
+    expect(log).toContain(`synapse.ts monitor --session ${session} --run-id 1`);
     expect(log).toContain("monitor.log");
     expect(log).not.toContain("ui.log");
     expect(r.stdout).not.toContain("UI: http://localhost:");
-    expect(log).not.toContain("sweep-run-1.log");
+    expect(log).not.toContain(`sweep-${session}.log`);
   }, 15000);
 
   test("accepts any task template filename and stores the run copy as task.yml", () => {
@@ -684,7 +685,8 @@ describe("start: full agent launch against task.yml", () => {
 
     const r = run(["start", yaml, "--no-monitor"]);
     expect(r.exitCode).toBe(0);
-    expect(readFileSync(join(dir, "runs", "run-1", "task.yml"), "utf8")).toContain(
+    const session = (openDb().query("SELECT session FROM runs").get() as any).session;
+    expect(readFileSync(join(dir, "runs", session, "task.yml"), "utf8")).toContain(
       "run_id: 1",
     );
   }, 15000);
@@ -728,7 +730,7 @@ describe("start: full agent launch against task.yml", () => {
     const runRow = db.query("SELECT * FROM runs").get() as any;
     expect(runRow.status).toBe("running");
     expect(runRow.goal).toBe("Build feature X");
-    expect(runRow.session).toBe("run-1");
+    expect(runRow.session).toMatch(/^[a-z0-9]+-[0-9a-f]+-\d+$/);
 
     const tmuxSession = runRow.session;
     const log = tmuxLogContents();
