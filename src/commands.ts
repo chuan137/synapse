@@ -103,6 +103,14 @@ export function cmdSend(
   if (!MESSAGE_TYPES.has(type)) {
     fail(`type must be one of ${[...MESSAGE_TYPES].sort()}, got '${type}'`);
   }
+  if (type === "QUESTION" && to === "operator" && (!options || options.length === 0)) {
+    fail(
+      "QUESTION to operator requires --options a,b,c — the S-Deck card has no " +
+        "generic fallback, so the operator would see no clickable choices at all. " +
+        "Pass 2-4 short, specific option labels that reflect this question's real answers " +
+        "(not literal 'Yes,No,OK'), plus --title for a short header.",
+    );
+  }
   if (to === "broadcast") {
     fail("broadcast messages are no longer supported; send to a specific agent");
   }

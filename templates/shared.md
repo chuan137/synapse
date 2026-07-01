@@ -47,11 +47,12 @@ them. Project root is three levels up from cwd (`../../../`).
 - `REVIEW` — request the reviewer to look at something.
 - `ACK` — "got it"; no reply expected.
 - `QUESTION` — a blocking question to operator that requires a reply before work can
-  continue. Only manager → operator. The UI renders an interactive reply card with
-  clickable buttons. Pass `--options a,b,c` to give the operator one-click choices;
-  pass `--title "Short title"` for a header above the body. Always use `--options`
-  when the answer is one of a small known set. Reply arrives as a `STATUS` with
-  ref_id pointing back to the QUESTION.
+  continue. Only manager → operator. `--options a,b,c` is REQUIRED — `synapse send`
+  rejects a QUESTION to operator with no options, there is no generic fallback.
+  Write 2-4 short labels that are the actual real answers to this specific question
+  (never literal "Yes,No,OK" placeholders). Pass `--title "Short title"` for a header
+  above the body. Reply arrives as a `STATUS` with ref_id pointing back to the
+  QUESTION.
 - `INFO` — anything else.
 
 ## ref_id

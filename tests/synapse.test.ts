@@ -242,15 +242,16 @@ describe("send", () => {
     expect(opts).toEqual(["yes", "no", "abort"]);
   });
 
-  test("QUESTION without --options has null options column", () => {
+  test("QUESTION to operator without --options is rejected", () => {
     const r = run([
       "send", "operator", "QUESTION", "Any freeform thoughts?",
       "--from", "manager",
     ]);
-    expect(r.exitCode).toBe(0);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("--options");
     const db = openDb();
     const msg = db.query("SELECT * FROM messages WHERE type='QUESTION'").get() as any;
-    expect(msg.options).toBeNull();
+    expect(msg).toBeFalsy();
   });
 
   test("rejects broadcast recipients", () => {

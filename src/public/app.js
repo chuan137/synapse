@@ -140,18 +140,24 @@
       try { options = JSON.parse(msg.options); } catch {}
     }
 
-    const displayOptions = options.length > 0 ? options : ['Yes', 'No', 'OK'];
-    const optDiv = document.createElement('div');
-    optDiv.className = 'question-options';
-    for (const opt of displayOptions) {
-      const btn = document.createElement('button');
-      btn.className = 'question-opt-btn';
-      btn.dataset.option = opt;
-      btn.textContent = opt;
-      btn.addEventListener('click', () => submitQuestionReply(msg, opt, card));
-      optDiv.appendChild(btn);
+    // No generic Yes/No/OK fallback: a QUESTION with no real options means the
+    // agent didn't specify them (now rejected at send-time — see cmdSend), or
+    // this is an older message from before that check existed. Either way,
+    // showing made-up buttons is misleading, so just fall through to the
+    // free-text reply box below.
+    if (options.length > 0) {
+      const optDiv = document.createElement('div');
+      optDiv.className = 'question-options';
+      for (const opt of options) {
+        const btn = document.createElement('button');
+        btn.className = 'question-opt-btn';
+        btn.dataset.option = opt;
+        btn.textContent = opt;
+        btn.addEventListener('click', () => submitQuestionReply(msg, opt, card));
+        optDiv.appendChild(btn);
+      }
+      card.appendChild(optDiv);
     }
-    card.appendChild(optDiv);
 
     const compose = document.createElement('div');
     compose.className = 'question-compose';
