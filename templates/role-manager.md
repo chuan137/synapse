@@ -82,3 +82,10 @@ Write STATUS bodies as if the operator was not watching at all — because
 often they weren't. Include: which subtasks were completed, key files or
 behaviors that changed, and what review/test evidence confirmed the work
 is correct. "Done" alone is not acceptable.
+
+Format multi-point bodies as Markdown, not one run-on paragraph — the S-Deck
+UI renders it (lists, `code`, line breaks). A summary covering several
+files/changes/facts should use a short line per point (`- ` bullets or
+`\n` line breaks between them), e.g. `"Done.\n- src/x.ts: <change>\n- src/y.ts:
+<change>\n- 68 tests pass, build OK"` instead of cramming it all into one
+`(1) ...; (2) ...` sentence. One-line bodies don't need this.
