@@ -56,6 +56,73 @@
     return el.outerHTML;
   }
 
+  // Highlight patterns in plain text nodes: file paths, --flags, numbers with units.
+  // Skips nodes already inside <code> or <pre> so we don't double-wrap.
+  const HIGHLIGHT_RE = /(`[^`]+`|(?:[\w./-]+\/[\w./-]+(?:\.[\w]+)?)|--[\w-]+(?:=\S+)?|\b\d+(?:\.\d+)?\s*(?:KB|MB|GB|ms|s|px|%)\b)/g;
+
+  const SEMANTIC_OK  = /^(pass(?:ed|es)?|ok|lgtm|fixed|done|success(?:ful)?|approved|merged|clean|green|built|deployed)$/i;
+  const SEMANTIC_ERR = /^(fail(?:ed|s)?|error(?:s)?|broken|blocked|rejected|crash(?:ed)?|abort(?:ed)?|timeout(?:ed)?)$/i;
+
+  function colorStrong(container) {
+    container.querySelectorAll('strong').forEach(el => {
+      const t = el.textContent.trim();
+      if (SEMANTIC_OK.test(t))  { el.classList.add('msg-strong-ok');  return; }
+      if (SEMANTIC_ERR.test(t)) { el.classList.add('msg-strong-err'); return; }
+      el.classList.add('msg-strong-key');
+    });
+  }
+
+  function autoHighlight(container) {
+    colorStrong(container);
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        let p = node.parentElement;
+        while (p && p !== container) {
+          if (p.tagName === 'CODE' || p.tagName === 'PRE' || p.tagName === 'A') return NodeFilter.FILTER_REJECT;
+          p = p.parentElement;
+        }
+        return HIGHLIGHT_RE.test(node.textContent) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    for (const textNode of nodes) {
+      HIGHLIGHT_RE.lastIndex = 0;
+      const text = textNode.textContent;
+      if (!HIGHLIGHT_RE.test(text)) continue;
+      HIGHLIGHT_RE.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0, m;
+      while ((m = HIGHLIGHT_RE.exec(text)) !== null) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        const code = document.createElement('code');
+        code.className = 'msg-inline-code';
+        code.textContent = m[0].replace(/^`|`$/g, '');
+        frag.appendChild(code);
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      textNode.parentNode.replaceChild(frag, textNode);
+    }
+  }
+
+  function renderMdHighlighted(raw) {
+    const normalized = (raw ?? '').replace(/\\n/g, '\n');
+    if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+      const el = document.createElement('div');
+      el.className = 'message-content';
+      el.textContent = normalized;
+      return el;
+    }
+    const html = DOMPurify.sanitize(marked.parse(normalized, { gfm: true, breaks: true, html: false }));
+    const el = document.createElement('div');
+    el.className = 'message-content';
+    el.innerHTML = html;
+    autoHighlight(el);
+    return el;
+  }
+
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -98,6 +165,8 @@
     const div = document.createElement('div');
     div.className = 'message-row ' + direction;
     div.dataset.msgId = msg.id;
+
+    const useHighlight = !isHuman && (t === 'STATUS' || t === 'INFO');
     div.innerHTML =
       '<div class="message-avatar">' + esc(avi) + '</div>' +
       '<div class="message-body">' +
@@ -107,8 +176,11 @@
           '<span class="message-time">' + esc(fmtTime(msg.created_at || '')) + '</span>' +
           '<span class="msg-id-label">#' + msg.id + '</span>' +
         '</div>' +
-        renderMd(msg.body || '') +
+        (useHighlight ? '' : renderMd(msg.body || '')) +
       '</div>';
+    if (useHighlight) {
+      div.querySelector('.message-body').appendChild(renderMdHighlighted(msg.body || ''));
+    }
 
     // Render interactive question card for QUESTION messages to operator that
     // don't already have a reply. We key "answered" off an actual STATUS reply
@@ -350,7 +422,7 @@
     const goalEl = $('thread-goal');
     const sepEl  = $('thread-sep');
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
-    if (sepEl)  sepEl.style.display = run.goal ? '' : 'none';
+    if (sepEl)  sepEl.style.display = run.goal ? 'inline' : 'none';
   }
 
   function updateKillSessionButton(run) {

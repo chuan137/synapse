@@ -468,12 +468,14 @@
   .message-content p { margin: 0 0 4px; }
   .message-content code {
     font-family: inherit;
-    background: var(--bg);
-    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--muted) 15%, transparent);
     border-radius: 3px;
     padding: 1px 4px;
     font-size: 11px;
-    color: var(--accent);
+    color: var(--text);
+  }
+  .message-content code.msg-inline-code {
+    color: var(--text);
   }
   .message-content pre {
     background: var(--bg);
@@ -493,6 +495,9 @@
   .message-content a { color: var(--accent); text-decoration: none; }
   .message-content a:hover { text-decoration: underline; }
   .message-content strong { font-weight: 700; color: var(--text); }
+  .message-content strong.msg-strong-ok  { color: var(--idle); }
+  .message-content strong.msg-strong-err { color: #e05c5c; }
+  .message-content strong.msg-strong-key { color: var(--accent); }
 
   .empty-state {
     color: var(--muted);

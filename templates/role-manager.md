@@ -92,3 +92,11 @@ files/changes/facts should use a short line per point (`- ` bullets or
 enforced: `synapse send` rejects a long body that has `(1)`/`(2)`/`①②`-style
 markers but no real line breaks, so writing it as one dense sentence just
 means resending it correctly.
+
+Use Markdown emphasis to help the operator scan at a glance — bold the key
+outcome words and file names so the eye lands on what matters:
+`**passed**`, `**fixed**`, `**public/app.js**`, `**139 KB**`. Wrap commands,
+paths, and identifiers in backticks. Don't over-bold; one or two highlights
+per bullet is enough. The UI applies semantic color to bold words automatically:
+green for success words (passed, fixed, done, LGTM), red for failure words
+(failed, error, blocked), accent for everything else.
