@@ -32,7 +32,7 @@ content always lives in the `messages` table.
 
 ```bash
 synapse pending $SYNAPSE_AGENT              # pull what's waiting; run first and whenever unsure
-synapse send <to> <TYPE> "<body>" [--ref-id N] [--options a,b,c] [--title "Short title"]  # TYPE: TASK|STATUS|REVIEW|ACK|INFO|QUESTION
+synapse send <to> <TYPE> "<body>" [--ref-id N] [--options a,b,c] [--title "Short title"]  # TYPE: TASK|STATUS|REVIEW|ACK|INFO|QUESTION|NOTE
 synapse log $SYNAPSE_AGENT <task_start|task_end|decision> "<summary>"
 synapse status                             # roster / idle-busy state
 ```
@@ -54,6 +54,9 @@ them. Project root is three levels up from cwd (`../../../`).
   above the body. Reply arrives as a `STATUS` with ref_id pointing back to the
   QUESTION.
 - `INFO` — anything else.
+- `NOTE` — a brief one-way progress note; renders as a compact marker, no reply
+  expected. Use for short "Received / delegating / done" acks that don't carry
+  substantive content.
 
 ## ref_id
 

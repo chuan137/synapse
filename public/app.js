@@ -19,6 +19,7 @@
   const startStatus = $('start-run-status');
 
   let totalMsgs = 0;
+  let activeQuestionMsgId = null; // id of the QUESTION currently shown in compose
 
   const state = {
     runs: [],
@@ -142,9 +143,11 @@
   }
 
   function flash(msg, ok) {
-    feedback.className = ok ? 'ok' : 'err';
-    feedback.textContent = msg;
-    setTimeout(() => { feedback.textContent = ''; feedback.className = ''; }, 3000);
+    const fb = $('send-feedback');
+    if (!fb) return;
+    fb.className = ok ? 'ok' : 'err';
+    fb.textContent = msg;
+    setTimeout(() => { const f = $('send-feedback'); if (f) { f.textContent = ''; f.className = ''; } }, 3000);
   }
 
   function setStartStatus(msg, ok) {
@@ -208,6 +211,10 @@
         const isActive = !run || run.status === 'running';
         if (isActive) {
           const card = buildQuestionCard(msg);
+          // If this question is shown in the compose area, mark it display-only
+          if (activeQuestionMsgId === msg.id) {
+            card.classList.add('question-card-in-compose');
+          }
           div.querySelector('.message-body').appendChild(card);
         }
       }
@@ -275,10 +282,144 @@
     return card;
   }
 
+  function enterQuestionMode(msg) {
+    activeQuestionMsgId = msg.id;
+    // Mark the existing inline thread card as display-only
+    const row = msgList.querySelector('.message-row[data-msg-id="' + msg.id + '"]');
+    if (row) {
+      const inlineCard = row.querySelector('.question-card:not([data-resolved])');
+      if (inlineCard) inlineCard.classList.add('question-card-in-compose');
+    }
+    const compose = $('compose');
+    compose.innerHTML = '';
+    compose.className = 'compose-question-mode';
+
+    const preview = document.createElement('div');
+    preview.className = 'compose-question-preview';
+    if (msg.title) {
+      const t = document.createElement('span');
+      t.className = 'compose-question-title';
+      t.textContent = msg.title;
+      preview.appendChild(t);
+    }
+    const from = document.createElement('span');
+    from.className = 'compose-question-from';
+    from.textContent = 'from ' + (msg.from_agent || '?') + ' · #' + msg.id;
+    preview.appendChild(from);
+    compose.appendChild(preview);
+
+    let options = [];
+    if (msg.options) { try { options = JSON.parse(msg.options); } catch {} }
+    if (options.length > 0) {
+      const optDiv = document.createElement('div');
+      optDiv.className = 'question-options';
+      for (const opt of options) {
+        const btn = document.createElement('button');
+        btn.className = 'question-opt-btn';
+        btn.dataset.option = opt;
+        btn.textContent = opt;
+        btn.addEventListener('click', () => submitQuestionReply(msg, opt, null));
+        optDiv.appendChild(btn);
+      }
+      compose.appendChild(optDiv);
+    }
+
+    const freeRow = document.createElement('div');
+    freeRow.className = 'compose-bottom';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'question-input compose-question-input';
+    input.id = 'compose-question-input';
+    input.placeholder = 'Or type a custom reply…';
+    const replyBtn = document.createElement('button');
+    replyBtn.className = 'question-send-btn';
+    replyBtn.id = 'compose-question-send';
+    replyBtn.textContent = 'Reply';
+    replyBtn.addEventListener('click', () => {
+      const val = input.value.trim();
+      if (val) submitQuestionReply(msg, val, null);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); const val = input.value.trim(); if (val) submitQuestionReply(msg, val, null); }
+    });
+    freeRow.appendChild(input);
+    freeRow.appendChild(replyBtn);
+    const feedbackSpan = document.createElement('span');
+    feedbackSpan.id = 'send-feedback';
+    freeRow.appendChild(feedbackSpan);
+    compose.appendChild(freeRow);
+    input.focus();
+  }
+
+  function exitQuestionMode() {
+    activeQuestionMsgId = null;
+    const compose = $('compose');
+    compose.className = '';
+    compose.innerHTML =
+      '<textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>' +
+      '<div class="compose-bottom">' +
+        '<button id="send-btn">Send</button>' +
+        '<span id="send-feedback"></span>' +
+      '</div>';
+    // Re-wire the restored elements
+    const newInput = $('msg-input');
+    const newSendBtn = $('send-btn');
+    const run = state.runs.find(r => r.id === state.selectedRunId);
+    const isRunning = run && run.status === 'running';
+    newInput.disabled = !isRunning;
+    newSendBtn.disabled = !isRunning;
+    newInput.placeholder = isRunning
+      ? 'Send a task to manager…'
+      : 'Run ' + (run ? run.status : 'ended') + ' — read only';
+    newSendBtn.addEventListener('click', sendMessage);
+    newInput.addEventListener('input', () => { newSendBtn._overrideWarning = false; });
+    newInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
+    });
+  }
+
+  // Find the most recent unresolved QUESTION for operator in the current run.
+  function findPendingQuestion() {
+    const runId = state.selectedRunId;
+    if (runId === null) return null;
+    const run = state.runs.find(r => r.id === runId);
+    // If run not yet loaded in state.runs, assume active (operator-thread fires before runs-list)
+    if (run && run.status !== 'running') return null;
+    const msgs = state.messages.get(runId) || [];
+    // most recent first
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.type !== 'QUESTION' || m.to_agent !== 'operator') continue;
+      const answered = msgs.some(r => r.ref_id === m.id && r.from_agent === 'operator');
+      if (!answered) return m;
+    }
+    return null;
+  }
+
+  function syncComposeMode() {
+    const pending = findPendingQuestion();
+    if (pending) {
+      if (activeQuestionMsgId !== pending.id) enterQuestionMode(pending);
+    } else {
+      if (activeQuestionMsgId !== null) exitQuestionMode();
+    }
+  }
+
   async function submitQuestionReply(msg, replyText, card) {
-    card.querySelectorAll('button').forEach(b => { b.disabled = true; });
-    const input = card.querySelector('.question-input');
-    if (input) input.disabled = true;
+    // Disable UI in compose-question mode
+    const composeEl = $('compose');
+    const inComposeMode = composeEl && composeEl.classList.contains('compose-question-mode');
+    if (inComposeMode) {
+      composeEl.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      const ci = $('compose-question-input');
+      if (ci) ci.disabled = true;
+    }
+    // Also disable inline card if provided
+    if (card) {
+      card.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      const input = card.querySelector('.question-input');
+      if (input) input.disabled = true;
+    }
     try {
       const res = await fetch('/send', {
         method: 'POST',
@@ -293,18 +434,45 @@
       });
       const json = await res.json();
       if (json.ok) {
-        card.dataset.resolved = 'true';
-        // Text intentionally omitted: the reply itself lands as its own
-        // STATUS row a moment later via the message stream/poll.
-        card.innerHTML = '<div class="question-resolved">✓ answered</div>';
+        // Restore compose to normal
+        exitQuestionMode();
+        // Update the inline thread card to resolved state
+        const row = msgList.querySelector('.message-row[data-msg-id="' + msg.id + '"]');
+        if (row) {
+          const inlineCard = row.querySelector('.question-card:not([data-resolved])');
+          if (inlineCard) {
+            inlineCard.dataset.resolved = 'true';
+            inlineCard.innerHTML = '<div class="question-resolved">✓ answered</div>';
+          }
+        }
+        if (card && card !== null) {
+          card.dataset.resolved = 'true';
+          card.innerHTML = '<div class="question-resolved">✓ answered</div>';
+        }
       } else {
-        card.querySelectorAll('button').forEach(b => { b.disabled = false; });
-        if (input) input.disabled = false;
+        if (inComposeMode) {
+          composeEl.querySelectorAll('button').forEach(b => { b.disabled = false; });
+          const ci = $('compose-question-input');
+          if (ci) ci.disabled = false;
+        }
+        if (card) {
+          card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+          const input = card.querySelector('.question-input');
+          if (input) input.disabled = false;
+        }
         flash((json.error || 'reply failed'), false);
       }
     } catch (err) {
-      card.querySelectorAll('button').forEach(b => { b.disabled = false; });
-      if (input) input.disabled = false;
+      if (inComposeMode) {
+        composeEl.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        const ci = $('compose-question-input');
+        if (ci) ci.disabled = false;
+      }
+      if (card) {
+        card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        const input = card.querySelector('.question-input');
+        if (input) input.disabled = false;
+      }
       flash(String(err), false);
     }
   }
@@ -325,10 +493,16 @@
   }
 
   function appendMessage(msg) {
-    totalMsgs++;
-    countBadge.textContent = totalMsgs + ' messages';
     const empty = $('empty-msgs');
     if (empty) empty.remove();
+    if (msg.type === 'NOTE') {
+      msgList.appendChild(buildActivityMarker(msg));
+      msgList.scrollTop = msgList.scrollHeight;
+      syncComposeMode();
+      return;
+    }
+    totalMsgs++;
+    countBadge.textContent = totalMsgs + ' messages';
     const allMsgs = state.messages.get(msg.run_id) || [msg];
     msgList.appendChild(buildMessageRow(msg, allMsgs));
     msgList.scrollTop = msgList.scrollHeight;
@@ -344,6 +518,7 @@
         card.innerHTML = '<div class="question-resolved">✓ answered</div>';
       }
     }
+    syncComposeMode();
   }
 
   function renderThread() {
@@ -372,20 +547,20 @@
       const empty = $('empty-msgs');
       if (empty) empty.remove();
       if (item._kind === 'msg') {
-        msgList.appendChild(buildMessageRow(item.data, msgs));
-        totalMsgs++;
+        if (item.data.type === 'NOTE') {
+          msgList.appendChild(buildActivityMarker(item.data));
+        } else {
+          msgList.appendChild(buildMessageRow(item.data, msgs));
+          totalMsgs++;
+        }
       } else {
         const a = item.data;
-        if (a.source === 'message') {
-          msgList.appendChild(buildMessageRow(a, msgs));
-          totalMsgs++;
-        } else {
-          msgList.appendChild(buildActivityMarker(a));
-        }
+        msgList.appendChild(buildActivityMarker(a));
       }
     }
     countBadge.textContent = totalMsgs + ' messages';
     msgList.scrollTop = msgList.scrollHeight;
+    syncComposeMode();
   }
 
   function renderAgentsStrip(agents) {
@@ -524,11 +699,16 @@
     }
 
     const isRunning = run && run.status === 'running';
-    msgInput.disabled = !isRunning;
-    sendBtn.disabled = !isRunning;
-    msgInput.placeholder = isRunning
-      ? 'Send a task to manager…'
-      : 'Run ' + (run ? run.status : 'ended') + ' — read only';
+    // Use live lookups since compose DOM may be rebuilt by question mode
+    const mi = $('msg-input');
+    const sb = $('send-btn');
+    if (mi) {
+      mi.disabled = !isRunning;
+      mi.placeholder = isRunning
+        ? 'Send a task to manager…'
+        : 'Run ' + (run ? run.status : 'ended') + ' — read only';
+    }
+    if (sb) sb.disabled = !isRunning;
   }
 
   function handleRunsList(payload) {
@@ -545,6 +725,9 @@
         updateThreadHeader(run);
         updateKillSessionButton(run);
       }
+      // Runs list arrived after operator-thread — re-sync compose mode now that
+      // we know the run's status.
+      syncComposeMode();
     }
   }
 
@@ -651,20 +834,22 @@
   connectSSE();
 
   async function sendMessage() {
-    const body = msgInput.value.trim();
+    const mi = $('msg-input');
+    const sb = $('send-btn');
+    const body = mi ? mi.value.trim() : '';
     if (!body) { flash('body required', false); return; }
     if (!state.selectedRunId) { flash('no run selected', false); return; }
     const hasNewlines = body.includes('\n');
     const tooLong = body.length > 500;
-    if ((hasNewlines || tooLong) && !sendBtn._overrideWarning) {
+    if ((hasNewlines || tooLong) && !sb._overrideWarning) {
       const reason = hasNewlines && tooLong ? 'multiline and >500 chars'
         : hasNewlines ? 'multiline' : '>500 chars';
       flash('Warning: message is ' + reason + ' — paste into a file and send a pointer instead. Click Send again to override.', false);
-      sendBtn._overrideWarning = true;
+      sb._overrideWarning = true;
       return;
     }
-    sendBtn._overrideWarning = false;
-    sendBtn.disabled = true;
+    if (sb) sb._overrideWarning = false;
+    if (sb) sb.disabled = true;
     try {
       const res = await fetch('/send', {
         method: 'POST',
@@ -677,10 +862,10 @@
         }),
       });
       const json = await res.json();
-      if (json.ok) { msgInput.value = ''; flash('sent #' + json.id, true); }
+      if (json.ok) { if (mi) mi.value = ''; flash('sent #' + json.id, true); }
       else flash(json.error || 'error', false);
     } catch (err) { flash(String(err), false); }
-    finally { sendBtn.disabled = false; }
+    finally { const s = $('send-btn'); if (s) s.disabled = false; }
   }
 
   async function killSession() {

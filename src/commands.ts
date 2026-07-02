@@ -22,7 +22,7 @@ const ROLE_TEMPLATES: Record<string, string> = {
   reviewer: ROLE_REVIEWER_MD,
 };
 
-export const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO", "QUESTION"]);
+export const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO", "QUESTION", "NOTE"]);
 export const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
 
 // Matches enumeration markers agents tend to use when listing multiple
