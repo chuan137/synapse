@@ -356,11 +356,11 @@
     const compose = $('compose');
     compose.className = '';
     compose.innerHTML =
-      '<textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>' +
-      '<div class="compose-bottom">' +
-        '<button id="send-btn">Send</button>' +
-        '<span id="send-feedback"></span>' +
-      '</div>';
+      '<div class="compose-input-wrap">' +
+        '<textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>' +
+        '<button id="send-btn" title="Send (⌘↵)">↑</button>' +
+      '</div>' +
+      '<span id="send-feedback"></span>';
     // Re-wire the restored elements
     const newInput = $('msg-input');
     const newSendBtn = $('send-btn');
@@ -862,7 +862,7 @@
         }),
       });
       const json = await res.json();
-      if (json.ok) { if (mi) mi.value = ''; flash('sent #' + json.id, true); }
+      if (json.ok) { if (mi) mi.value = ''; }
       else flash(json.error || 'error', false);
     } catch (err) { flash(String(err), false); }
     finally { const s = $('send-btn'); if (s) s.disabled = false; }
