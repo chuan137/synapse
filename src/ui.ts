@@ -1,7 +1,7 @@
 import { readFileSync, watch } from "fs";
-import bundledHtml from "./public/index.html" with { type: "text" };
-import bundledCss from "./public/styles.css" with { type: "text" };
-import bundledJs from "./public/app.js" with { type: "text" };
+import bundledHtml from "../public/index.html" with { type: "text" };
+import bundledCss from "../public/styles.css" with { type: "text" };
+import bundledJs from "../public/app.js" with { type: "text" };
 import { dirname, resolve } from "path";
 import {
   cmdDone,
@@ -48,11 +48,12 @@ type PublicAsset = "index.html" | "styles.css" | "app.js";
 function resolvePublicAssetPath(file: PublicAsset): string {
   const base = dirname(import.meta.filename);
   if (base.startsWith("/$bunfs")) {
-    // compiled binary: process.execPath is the real binary path
-    // binary lives at <project>/bin/synapse; dev assets are at <project>/src/public/*
-    return resolve(dirname(process.execPath), "../src/public", file);
+    // compiled binary: binary lives at <project>/bin/synapse; assets at <project>/public/*
+    return resolve(dirname(process.execPath), "../public", file);
   }
-  return resolve(base, "public", file);
+  // bun build script (base == bin/) or bun run source (base == src/) —
+  // public/ is one level up from either
+  return resolve(base, "../public", file);
 }
 
 const PUBLIC_ASSETS: Record<PublicAsset, { path: string; bundled: string; contentType: string }> = {
@@ -88,8 +89,8 @@ function synapseCommand(): string[] {
   return [process.execPath];
 }
 
-export function startUi(port: number) {
-  const dev = !!process.env.SYNAPSE_DEV;
+export function startUi(port: number, dev = false) {
+  dev = dev || !!process.env.SYNAPSE_DEV;
   const db = connect();
 
   const lastMessageId = new Map<number, number>(); // runId -> last seen msg id

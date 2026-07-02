@@ -346,10 +346,11 @@
   function updateThreadHeader(run) {
     const titleEl = $('thread-title');
     if (!titleEl || !run) return;
-    const badge = '<span class="run-status-badge run-status-' + esc(run.status) + '">[' + esc(run.status) + ']</span>';
-    titleEl.innerHTML = '<span>run #' + run.id + ' · ' + esc(run.session) + '</span> ' + badge;
+    titleEl.innerHTML = '<span>run #' + run.id + ' · ' + esc(run.session) + '</span> ';
     const goalEl = $('thread-goal');
+    const sepEl  = $('thread-sep');
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
+    if (sepEl)  sepEl.style.display = run.goal ? '' : 'none';
   }
 
   function updateKillSessionButton(run) {

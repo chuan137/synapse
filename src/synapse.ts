@@ -324,12 +324,15 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "ui",
-    usage: "synapse ui [--port N]",
+    usage: "synapse ui [--port N] [--dev]",
     summary: "Start the operator web UI.",
     help: [
       {
         title: "Options",
-        lines: ["--port N  HTTP port for the web UI."],
+        lines: [
+          "--port N  HTTP port for the web UI.",
+          "--dev     Serve UI assets from disk on every request (live reload).",
+        ],
       },
     ],
     run: ({ flags }) => {
@@ -340,8 +343,9 @@ const COMMANDS: CommandSpec[] = [
         console.error("synapse: --port must be an integer from 0 to 65535");
         process.exit(1);
       }
+      const dev = "dev" in flags;
       cmdInit();
-      return startUi(port);
+      return startUi(port, dev);
     },
   },
   {

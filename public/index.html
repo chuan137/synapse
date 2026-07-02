@@ -33,8 +33,9 @@
   <div id="messages-panel">
     <div id="thread-header">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div>
+        <div style="display:flex;align-items:baseline;gap:8px;min-width:0">
           <div id="thread-title">Thread</div>
+          <span id="thread-sep" class="thread-sep">·</span>
           <div id="thread-goal" class="thread-goal"></div>
         </div>
         <button id="stop-run-btn" style="display:none" title="Stop this run and kill tmux session">Stop Run</button>
