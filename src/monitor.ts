@@ -311,7 +311,7 @@ function sendBackReminderBody(agentName: string, msg: any): string {
   ].join(" ");
 }
 
-function enforceSendBackBeforeMoreWork(
+function nudgeForMissingStatusBeforeMoreWork(
   db: Database,
   tmuxSession: string,
   agent: any,
@@ -347,7 +347,11 @@ function nudgeForPendingWork(
        ORDER BY created_at LIMIT 1`,
     )
     .get(windowName, runId) as any;
-  if (row) nudgeAgent(tmuxSession, windowName, `synapse pending ${windowName}`, log);
+  if (row) {
+    nudgeAgent(tmuxSession, windowName, `synapse pending ${windowName}`, log);
+    return true;
+  }
+  return false;
 }
 
 function hasPendingDirectMessageForWindow(
@@ -528,7 +532,7 @@ function pollOnce(
       tmuxSession,
     );
     if (result?.status === "idle") {
-      if (enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agent.run_id, log)) {
+      if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, log)) {
         nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, log);
       }
     }
@@ -630,7 +634,7 @@ function runLiveMonitor(
     if (agentState?.status === "idle") {
       if (
         agent &&
-        enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agentRunId, eventLog)
+        nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agentRunId, eventLog)
       ) {
         nudgeForPendingWork(db, tmuxSession, windowName, agentRunId, eventLog);
       }
@@ -768,11 +772,12 @@ function runLiveMonitor(
       sweepLog(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
-      // Mail can arrive without transcript activity.
+      let nudged = false;
+      // Nudge agent when mail arrives while it's in idle. 
       const agentState = refreshAgentStateByWindow(agent.window_name, sweepLog);
       if (agentState?.status === "idle") {
-        if (enforceSendBackBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
-          nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
+        if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
+          nudged = nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
         }
       }
       // Poll until the transcript appears to start watching
@@ -784,7 +789,8 @@ function runLiveMonitor(
         }
       }
       // Recheck for real mtime changes fs.watch may have missed.
-      pool.emitOnTranscriptChange(agent.window_name);
+      // Skip if we already nudged this agent directly above to avoid double-nudge.
+      if (!nudged) pool.emitOnTranscriptChange(agent.window_name);
     }
     if (runId !== undefined) markOperatorMessagesDelivered(db, runId, sweepLog);
   };
