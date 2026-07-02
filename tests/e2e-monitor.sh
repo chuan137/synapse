@@ -100,7 +100,7 @@ section4() {
 
 section5() {
   echo "[5] debounce guard - end_turn within window, no delivery"
-  run send coder-1 INFO "another message" --from manager > /dev/null
+  run send coder-1 PROGRESS "another message" --from manager > /dev/null
   write_transcript sess-coder end_turn 0
   rm -f "$TMUX_LOG"
   run monitor --once --debounce 60000
@@ -110,23 +110,23 @@ section5() {
 }
 
 section6() {
-  echo "[6] Full TASK -> STATUS round trip"
+  echo "[6] Full TASK -> REPLY round trip"
   local task_id; task_id=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE type='TASK' LIMIT 1")
-  run send manager STATUS "feature X done" --from coder-1 --ref-id "$task_id" > /dev/null
+  run send manager REPLY "feature X done" --from coder-1 --ref-id "$task_id" > /dev/null
   write_transcript sess-manager end_turn 5
   rm -f "$TMUX_LOG"
   # coder-1 must be idle to not block; backdate its transcript too
   write_transcript sess-coder end_turn 5
   run monitor --once --debounce 100
-  assert "STATUS nudged to manager" "$(cat "$TMUX_LOG")" "send-keys -t team:manager -l -- synapse pending manager"
-  local ref_id; ref_id=$(sqlite3 "$SYNAPSE_DB" "SELECT ref_id FROM messages WHERE type='STATUS'")
-  assert "STATUS ref_id = TASK id"    "$ref_id" "$task_id"
+  assert "REPLY nudged to manager" "$(cat "$TMUX_LOG")" "send-keys -t team:manager -l -- synapse pending manager"
+  local ref_id; ref_id=$(sqlite3 "$SYNAPSE_DB" "SELECT ref_id FROM messages WHERE type='REPLY'")
+  assert "REPLY ref_id = TASK id"    "$ref_id" "$task_id"
 }
 
 section7() {
   echo "[7] tmux failure leaves message pending for retry"
   fake_tmux_fail
-  run send coder-1 INFO "test failure" --from manager > /dev/null
+  run send coder-1 PROGRESS "test failure" --from manager > /dev/null
   write_transcript sess-coder end_turn 5
   run monitor --once --debounce 100
   local st; st=$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM messages WHERE body='test failure'")

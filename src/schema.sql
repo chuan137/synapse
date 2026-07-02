@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS messages (
   run_id     INTEGER,                -- references runs.id; NULL for operator messages sent outside a run
   from_agent TEXT NOT NULL,
   to_agent   TEXT NOT NULL,       -- references agents.window_name
-  type       TEXT NOT NULL DEFAULT 'INFO',  -- TASK | STATUS | REVIEW | ACK | INFO | QUESTION | NOTE
+  type       TEXT NOT NULL DEFAULT 'REPLY',  -- TASK | QUESTION | PROGRESS | REPLY
   ref_id     INTEGER,             -- id of the message this one replies to/closes
   body       TEXT NOT NULL,
   title      TEXT,                -- optional short title for QUESTION cards

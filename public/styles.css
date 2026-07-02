@@ -441,11 +441,10 @@
     border-radius: 3px;
     text-transform: uppercase;
   }
-  .msg-type-STATUS { background: color-mix(in srgb, var(--idle) 18%, transparent); color: var(--idle); }
-  .msg-type-TASK   { background: color-mix(in srgb, var(--working) 18%, transparent); color: var(--working); }
-  .msg-type-REVIEW { background: color-mix(in srgb, var(--working) 18%, transparent); color: var(--working); }
-  .msg-type-ACK, .msg-type-INFO, .msg-type-NOTE { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+  .msg-type-TASK     { background: color-mix(in srgb, var(--working) 18%, transparent); color: var(--working); }
   .msg-type-QUESTION { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .msg-type-PROGRESS { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+  .msg-type-REPLY    { background: color-mix(in srgb, var(--idle) 18%, transparent); color: var(--idle); }
   .activity-marker {
     display: flex;
     align-items: baseline;
@@ -455,13 +454,8 @@
     color: var(--muted);
     border-left: 2px solid transparent;
   }
-  .activity-marker.activity-decision {
-    border-left-color: var(--accent);
-    color: var(--fg, var(--text));
-  }
-  .activity-marker.activity-task_start { border-left-color: var(--working); }
-  .activity-marker.activity-task_end   { border-left-color: var(--idle); }
-  .activity-marker.activity-NOTE       { border-left-color: var(--border); }
+  .activity-marker.activity-TASK     { border-left-color: var(--working); }
+  .activity-marker.activity-PROGRESS { border-left-color: var(--border); }
   .activity-icon { font-size: 0.7rem; flex-shrink: 0; }
   .activity-time { margin-left: auto; font-size: 0.7rem; color: var(--muted); }
   .question-card { margin-top: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; }

@@ -193,7 +193,7 @@ describe("monitor: pull nudges", () => {
   });
 
   test("one agent pending call consumes multiple pending messages", () => {
-    run(["send", "coder-1", "INFO", "Enter", "--from", "manager"]);
+    run(["send", "coder-1", "PROGRESS", "Enter", "--from", "manager"]);
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
 
@@ -216,7 +216,7 @@ describe("monitor: pull nudges", () => {
     expect(msg.status).toBe("pending");
   });
 
-  test("a TASK -> STATUS round trip is pull-based at both hops", () => {
+  test("a TASK -> REPLY round trip is pull-based at both hops", () => {
     writeTranscript("sess-coder", "end_turn", 5000);
     let r = run(["monitor", "--once", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
@@ -228,19 +228,19 @@ describe("monitor: pull nudges", () => {
 
     writeTranscript("sess-coder", "tool_use");
     run(["monitor", "--once", "--debounce", "0"]);
-    run(["send", "manager", "STATUS", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
+    run(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
     writeTranscript("sess-manager", "end_turn", 5000);
 
     r = run(["monitor", "--once", "--debounce", "100"]);
     expect(r.exitCode).toBe(0);
     expect(tmuxLogContents()).toContain("send-keys -t team:manager -l -- synapse pending manager");
 
-    const status = openDb().query("SELECT * FROM messages WHERE type='STATUS'").get() as any;
+    const status = openDb().query("SELECT * FROM messages WHERE type='REPLY'").get() as any;
     expect(status.status).toBe("pending");
     expect(status.ref_id).toBe(task.id);
   });
 
-  test("holds new work and reminds coder when a read TASK has no STATUS reply", () => {
+  test("holds new work and reminds coder when a read TASK has no REPLY", () => {
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
     run(["pending", "coder-1"], { SYNAPSE_AGENT: "coder-1" });
@@ -308,7 +308,7 @@ describe("monitor: pull nudges", () => {
   });
 
   test("one nudge can cover multiple pending messages", () => {
-    run(["send", "coder-1", "INFO", "second message", "--from", "manager"]);
+    run(["send", "coder-1", "PROGRESS", "second message", "--from", "manager"]);
     writeTranscript("sess-coder", "end_turn", 5000);
     run(["monitor", "--once", "--debounce", "100"]);
 
@@ -564,7 +564,7 @@ describe("monitor: terminal run handling", () => {
 
   test("--once leaves the team alive and still nudges messages once the run is terminal", () => {
     const runId = insertRun("completed");
-    run(["send", "manager", "INFO", "follow up", "--from", "operator", "--run-id", String(runId)]);
+    run(["send", "manager", "REPLY", "follow up", "--from", "operator", "--run-id", String(runId)]);
     writeTranscript("sess-manager", "end_turn", 5000);
 
     const r = run(["monitor", "--once", "--session", "team", "--run-id", String(runId)]);

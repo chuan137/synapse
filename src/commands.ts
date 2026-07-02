@@ -22,7 +22,7 @@ const ROLE_TEMPLATES: Record<string, string> = {
   reviewer: ROLE_REVIEWER_MD,
 };
 
-export const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO", "QUESTION", "NOTE"]);
+export const MESSAGE_TYPES = new Set(["TASK", "QUESTION", "PROGRESS", "REPLY"]);
 
 // Matches enumeration markers agents tend to use when listing multiple
 // points inline instead of on separate lines: (1) (2), （1）（2） (fullwidth),
@@ -68,13 +68,11 @@ export const c = {
 
 export function colorType(t: string): string {
   const color =
-    t === "TASK"
-      ? c.blue
-      : t === "REVIEW"
-        ? c.yellow
-        : t === "STATUS"
-          ? c.green
-          : c.cyan;
+    t === "TASK"     ? c.blue   :
+    t === "QUESTION" ? c.yellow :
+    t === "PROGRESS" ? c.dim    :
+    t === "REPLY"    ? c.green  :
+    c.cyan;
   return `${color}${t}${c.reset}`;
 }
 
@@ -204,7 +202,7 @@ export function cmdStatus() {
     console.log("");
   }
 
-  const headers = ["WINDOW", "ROLE", "STATUS", "LAST_SEEN", "PENDING"];
+  const headers = ["WINDOW", "ROLE", "STATE", "LAST_SEEN", "PENDING"];
   const rows = agents.map((a) => {
     const pending = activeRun
       ? (pendingStmt.get(a.window_name, activeRun.id) as any).n
@@ -235,7 +233,7 @@ export function cmdRuns() {
     console.log("synapse: no runs recorded");
     return;
   }
-  const headers = ["ID", "SESSION", "STATUS", "STARTED", "ENDED", "GOAL"];
+  const headers = ["ID", "SESSION", "STATE", "STARTED", "ENDED", "GOAL"];
   const rows = runs.map((r) => [
     String(r.id),
     r.session,
@@ -792,7 +790,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 
 // The hub agent's signal that the root task has reached a terminal outcome
 // (bootstrap-spec.md #8/#13). Writes the run's terminal state and sends the
-// final STATUS back to operator. The monitor stays alive after terminal state
+// final REPLY back to operator. The monitor stays alive after terminal state
 // and keeps dispatching operator follow-ups until the tmux session is killed.
 export function cmdDone(
   status: string,
@@ -823,7 +821,7 @@ export function cmdDone(
   }
 
   // Default ref_id to the root TASK addressed to this agent, if not given —
-  // that's the message this STATUS is closing out.
+  // that's the message this REPLY is closing out.
   let refId = refIdFlag;
   if (refId === null) {
     const root = runId !== null
@@ -840,9 +838,9 @@ export function cmdDone(
     refId = root?.id ?? null;
   }
 
-  cmdSend("operator", "STATUS", summary, agent, refId, runId);
+  cmdSend("operator", "REPLY", summary, agent, refId, runId);
   console.log(
-    `synapse: done — run ${runId ?? "?"} marked '${dbStatus}', final STATUS sent to operator`,
+    `synapse: done — run ${runId ?? "?"} marked '${dbStatus}', final REPLY sent to operator`,
   );
 }
 

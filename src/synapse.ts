@@ -162,7 +162,7 @@ const COMMANDS: CommandSpec[] = [
         title: "Arguments",
         lines: [
           "to    Recipient agent name or operator.",
-          "type  Message type: TASK, STATUS, REVIEW, ACK, INFO, QUESTION, or NOTE.",
+          "type  Message type: TASK, QUESTION, PROGRESS, or REPLY.",
           "body  Message body (omit when --body-file is used).",
         ],
       },

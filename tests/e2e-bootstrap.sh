@@ -183,7 +183,7 @@ section5() {
 
   # 5c: stopped agent ignored by monitor
   write_transcript sess-coder2 end_turn 5
-  run send coder-2 INFO "message to stopped agent" --from manager > /dev/null
+  run send coder-2 PROGRESS "message to stopped agent" --from manager > /dev/null
   rm -f "$TMUX_LOG"
   run monitor --once --debounce 100 > /dev/null
   local msg_status; msg_status=$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM messages WHERE to_agent='coder-2' AND body='message to stopped agent'")
@@ -192,7 +192,7 @@ section5() {
 }
 
 section6() {
-  echo "[6] Full TASK→STATUS→REVIEW→STATUS ref_id chain"
+  echo "[6] Full TASK→REPLY→TASK(review)→REPLY ref_id chain"
   rm -f "$SYNAPSE_DB"
   run init > /dev/null
   run register operator  operator  ""            > /dev/null
@@ -206,18 +206,18 @@ section6() {
   run send coder-1  TASK   "Implement X"           --from manager  --ref-id "$ROOT_ID" > /dev/null
   SUB_ID=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE to_agent='coder-1' LIMIT 1")
 
-  run send reviewer REVIEW "Please review PR #42"  --from coder-1  --ref-id "$SUB_ID"  > /dev/null
-  REV_ID=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE type='REVIEW' LIMIT 1")
+  run send reviewer TASK   "Please review PR #42"  --from coder-1  --ref-id "$SUB_ID"  > /dev/null
+  REV_ID=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE type='TASK' AND to_agent='reviewer' LIMIT 1")
 
-  run send coder-1  STATUS "LGTM"                  --from reviewer --ref-id "$REV_ID"  > /dev/null
-  run send manager  STATUS "Feature X done"         --from coder-1  --ref-id "$SUB_ID"  > /dev/null
+  run send coder-1  REPLY "LGTM"                  --from reviewer --ref-id "$REV_ID"  > /dev/null
+  run send manager  REPLY "Feature X done"         --from coder-1  --ref-id "$SUB_ID"  > /dev/null
 
   local rows; rows=$(sqlite3 "$SYNAPSE_DB" "SELECT id||'|'||from_agent||'|'||to_agent||'|'||type||'|'||coalesce(ref_id,'NULL') FROM messages ORDER BY id")
   assert "msg1 operator->manager TASK no ref"   "$rows" "1|operator|manager|TASK|NULL"
   assert "msg2 manager->coder-1 TASK ref=1"     "$rows" "2|manager|coder-1|TASK|1"
-  assert "msg3 coder-1->reviewer REVIEW ref=2"  "$rows" "3|coder-1|reviewer|REVIEW|2"
-  assert "msg4 reviewer->coder-1 STATUS ref=3"  "$rows" "4|reviewer|coder-1|STATUS|3"
-  assert "msg5 coder-1->manager STATUS ref=2"   "$rows" "5|coder-1|manager|STATUS|2"
+  assert "msg3 coder-1->reviewer TASK ref=2"    "$rows" "3|coder-1|reviewer|TASK|2"
+  assert "msg4 reviewer->coder-1 REPLY ref=3"   "$rows" "4|reviewer|coder-1|REPLY|3"
+  assert "msg5 coder-1->manager REPLY ref=2"    "$rows" "5|coder-1|manager|REPLY|2"
 
   # 6b: deliver via monitor
   write_transcript sess-manager  end_turn 5

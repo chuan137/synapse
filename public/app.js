@@ -170,7 +170,7 @@
     div.className = 'message-row ' + direction;
     div.dataset.msgId = msg.id;
 
-    const useHighlight = (t === 'STATUS' || t === 'INFO') ||
+    const useHighlight = t === 'REPLY' ||
                          (!isHuman && t === 'TASK');
     div.innerHTML =
       '<div class="message-avatar">' + esc(avi) + '</div>' +
@@ -426,7 +426,7 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           to: msg.from_agent,
-          type: 'STATUS',
+          type: 'REPLY',
           body: replyText,
           run_id: msg.run_id || state.selectedRunId,
           ref_id: msg.id,
@@ -478,7 +478,7 @@
   }
 
   function buildActivityMarker(item) {
-    const icons = { task_start: '▶', task_end: '✓', decision: '◆' };
+    const icons = { TASK: '↳', PROGRESS: '•' };
     const icon = icons[item.type] || '•';
     const div = document.createElement('div');
     div.className = 'activity-marker activity-' + item.type;
@@ -495,7 +495,7 @@
   function appendMessage(msg) {
     const empty = $('empty-msgs');
     if (empty) empty.remove();
-    if (msg.type === 'NOTE') {
+    if (msg.type === 'PROGRESS') {
       msgList.appendChild(buildActivityMarker(msg));
       msgList.scrollTop = msgList.scrollHeight;
       syncComposeMode();
@@ -506,9 +506,9 @@
     const allMsgs = state.messages.get(msg.run_id) || [msg];
     msgList.appendChild(buildMessageRow(msg, allMsgs));
     msgList.scrollTop = msgList.scrollHeight;
-    // A freshly arrived reply (STATUS with ref_id) may answer a QUESTION card
+    // A freshly arrived reply (REPLY with ref_id) may answer a QUESTION card
     // already on screen — collapse it in place instead of waiting for reload.
-    if (msg.type === 'STATUS' && msg.from_agent === 'operator' && msg.ref_id) {
+    if (msg.type === 'REPLY' && msg.from_agent === 'operator' && msg.ref_id) {
       const row = msgList.querySelector('.message-row[data-msg-id="' + msg.ref_id + '"]');
       const card = row && row.querySelector('.question-card:not([data-resolved])');
       if (card) {
@@ -547,7 +547,7 @@
       const empty = $('empty-msgs');
       if (empty) empty.remove();
       if (item._kind === 'msg') {
-        if (item.data.type === 'NOTE') {
+        if (item.data.type === 'PROGRESS') {
           msgList.appendChild(buildActivityMarker(item.data));
         } else {
           msgList.appendChild(buildMessageRow(item.data, msgs));
