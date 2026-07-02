@@ -94,6 +94,8 @@ export function startUi(port: number, dev = false) {
   const db = connect();
 
   const lastMessageId = new Map<number, number>(); // runId -> last seen msg id
+  const lastManagerEventId = new Map<number, number>(); // runId -> last seen events.id for manager
+  const lastManagerMsgId = new Map<number, number>(); // runId -> last seen messages.id for manager→coder TASKs
 
   // SSE client registry
   const clients = new Set<ReadableStreamDefaultController>();
@@ -169,10 +171,27 @@ export function startUi(port: number, dev = false) {
       .reverse();
   }
 
+  function managerActivityForRun(runId: number | null): any[] {
+    if (!runId) return [];
+    return db.query(
+      `SELECT 'event' AS source, e.id AS id, e.type AS type, e.summary AS body, e.created_at
+       FROM events e
+       WHERE e.agent = 'manager' AND e.run_id = ?
+       UNION ALL
+       SELECT 'message' AS source, m.id, m.type, m.body, m.created_at
+       FROM messages m
+       WHERE m.from_agent = 'manager'
+         AND m.to_agent != 'operator'
+         AND m.run_id = ?
+       ORDER BY created_at`,
+    ).all(runId, runId) as any[];
+  }
+
   function pushOperatorThread(ctrl: ReadableStreamDefaultController) {
     const run = activeRun();
     const messages = operatorThreadMessages(run);
-    const chunk = `event: operator-thread\ndata: ${JSON.stringify({ run, messages })}\n\n`;
+    const managerActivity = managerActivityForRun(run?.id ?? null);
+    const chunk = `event: operator-thread\ndata: ${JSON.stringify({ run, messages, managerActivity })}\n\n`;
     ctrl.enqueue(chunk);
   }
 
@@ -209,6 +228,40 @@ export function startUi(port: number, dev = false) {
         for (const msg of newMessages) {
           pushToAll("message-stream", msg);
         }
+      }
+
+      // Poll for new manager activity — separate cursors per table to avoid
+      // cross-table id confusion (events and messages have independent sequences)
+      const lastEvtId = lastManagerEventId.get(run.id) ?? 0;
+      const newEvents = db.query(
+        `SELECT 'event' AS source, e.id AS id, e.type AS type, e.summary AS body, e.created_at
+         FROM events e
+         WHERE e.agent = 'manager' AND e.run_id = ? AND e.id > ?
+         ORDER BY e.created_at`,
+      ).all(run.id, lastEvtId) as any[];
+      if (newEvents.length > 0) {
+        lastManagerEventId.set(run.id, (newEvents[newEvents.length - 1] as any).id);
+      }
+
+      const lastDelegateId = lastManagerMsgId.get(run.id) ?? 0;
+      const newDelegations = db.query(
+        `SELECT 'message' AS source, m.id AS id, m.type AS type, m.body, m.created_at
+         FROM messages m
+         WHERE m.from_agent = 'manager'
+           AND m.to_agent != 'operator'
+           AND m.run_id = ?
+           AND m.id > ?
+         ORDER BY m.created_at`,
+      ).all(run.id, lastDelegateId) as any[];
+      if (newDelegations.length > 0) {
+        lastManagerMsgId.set(run.id, (newDelegations[newDelegations.length - 1] as any).id);
+      }
+
+      const newActivity = [...newEvents, ...newDelegations].sort(
+        (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0),
+      );
+      if (newActivity.length > 0) {
+        pushToAll("manager-activity-stream", { run_id: run.id, items: newActivity });
       }
     }
 
@@ -315,7 +368,8 @@ export function startUi(port: number, dev = false) {
            WHERE (from_agent='operator' OR to_agent='operator') AND run_id=?
            ORDER BY id`,
         ).all(runId);
-        return Response.json({ run, messages });
+        const managerActivity = managerActivityForRun(runId);
+        return Response.json({ run, messages, managerActivity });
       }
 
       if (url.pathname === "/send" && req.method === "POST") {

@@ -182,9 +182,10 @@ export function cmdLog(agent: string, type: string, summary: string) {
     );
   }
   const db = connect();
+  const runId = process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null;
   const result = db.run(
-    "INSERT INTO events (agent, type, summary) VALUES (?, ?, ?)",
-    [agent, type, summary],
+    "INSERT INTO events (agent, type, summary, run_id) VALUES (?, ?, ?, ?)",
+    [agent, type, summary, runId],
   );
   console.log(
     `synapse: event ${result.lastInsertRowid} logged (${agent}, ${type})`,

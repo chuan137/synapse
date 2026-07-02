@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS events (
   agent      TEXT NOT NULL,
   type       TEXT NOT NULL,   -- task_start | task_end | decision
   summary    TEXT NOT NULL,
+  run_id     INTEGER,         -- references runs.id; NULL for events logged outside a run
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -55,4 +56,5 @@ CREATE INDEX IF NOT EXISTS idx_messages_run ON messages(run_id);
 CREATE INDEX IF NOT EXISTS idx_messages_to_status ON messages(to_agent, status);
 CREATE INDEX IF NOT EXISTS idx_messages_ref ON messages(ref_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent);
+CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);

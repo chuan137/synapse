@@ -90,7 +90,7 @@ interface CommandSpec {
   usage: string;
   summary: string;
   help?: HelpSection[];
-  run: (context: CommandContext) => void;
+  run: (context: CommandContext) => void | Promise<void>;
 }
 
 function requireArgs(context: CommandContext, ok: boolean): void {
@@ -157,7 +157,7 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "send",
-    usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...] [--title \"Short title\"]",
+    usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...] [--title \"Short title\"] [--body-file PATH]",
     summary: "Queue a message for an agent.",
     help: [
       {
@@ -165,7 +165,7 @@ const COMMANDS: CommandSpec[] = [
         lines: [
           "to    Recipient agent name or operator.",
           "type  Message type: TASK, STATUS, REVIEW, ACK, INFO, or QUESTION.",
-          "body  Message body.",
+          "body  Message body (omit when --body-file is used).",
         ],
       },
       {
@@ -176,12 +176,23 @@ const COMMANDS: CommandSpec[] = [
           "--run-id N            Store the message on a specific run.",
           "--options a,b,c       Choice labels for QUESTION messages.",
           "--title TEXT          Short title shown above the body in QUESTION cards.",
+          "--body-file PATH      Read body from file (use - for stdin). Avoids shell interpolation of backticks.",
         ],
       },
     ],
-    run: (context) => {
+    run: async (context) => {
       const { positional, flags } = context;
-      const [to, type, body] = positional;
+      const [to, type, rawBody] = positional;
+      let body: string;
+      if (flags["body-file"]) {
+        const src = flags["body-file"];
+        body = src === "-"
+          ? await Bun.stdin.text()
+          : await Bun.file(src).text();
+        body = body.trimEnd();
+      } else {
+        body = rawBody;
+      }
       requireArgs(context, !!to && !!type && !!body);
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
@@ -419,7 +430,7 @@ DB location: $SYNAPSE_DB, else ./.synapse/synapse.db
 Transcript root: $CLAUDE_PROJECTS_DIR, else ~/.claude/projects`);
 }
 
-function main() {
+async function main() {
   const [commandName, ...rest] = process.argv.slice(2);
   if (commandName === undefined) {
     printHelp();
@@ -437,7 +448,7 @@ function main() {
     return;
   }
 
-  command.run({ positional, flags, command });
+  await command.run({ positional, flags, command });
 }
 
 main();

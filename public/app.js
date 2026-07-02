@@ -27,6 +27,7 @@
     messages: new Map(),
     seenMsgIds: new Set(),
     unreadCounts: new Map(), // runId -> count of unseen messages
+    managerActivity: new Map(), // runId -> sorted array of activity items
   };
   let _selectToken = 0; // race guard for selectRun fetches
 
@@ -166,7 +167,8 @@
     div.className = 'message-row ' + direction;
     div.dataset.msgId = msg.id;
 
-    const useHighlight = !isHuman && (t === 'STATUS' || t === 'INFO');
+    const useHighlight = (t === 'STATUS' || t === 'INFO') ||
+                         (!isHuman && t === 'TASK');
     div.innerHTML =
       '<div class="message-avatar">' + esc(avi) + '</div>' +
       '<div class="message-body">' +
@@ -307,6 +309,21 @@
     }
   }
 
+  function buildActivityMarker(item) {
+    const icons = { task_start: '▶', task_end: '✓', decision: '◆' };
+    const icon = icons[item.type] || '•';
+    const div = document.createElement('div');
+    div.className = 'activity-marker activity-' + item.type;
+    const bodyEl = renderMdHighlighted(item.body);
+    div.innerHTML =
+      '<span class="activity-icon">' + esc(icon) + '</span>' +
+      '<span class="activity-time">' + esc(fmtTime(item.created_at)) + '</span>';
+    const iconSpan = div.querySelector('.activity-icon');
+    const timeSpan = div.querySelector('.activity-time');
+    div.insertBefore(bodyEl, timeSpan);
+    return div;
+  }
+
   function appendMessage(msg) {
     totalMsgs++;
     countBadge.textContent = totalMsgs + ' messages';
@@ -329,21 +346,43 @@
     }
   }
 
-  function renderMessages(msgs) {
+  function renderThread() {
+    const runId = state.selectedRunId;
+    const msgs = (runId !== null ? state.messages.get(runId) : null) || [];
+    const activity = (runId !== null ? state.managerActivity.get(runId) : null) || [];
+    renderMessages(msgs, activity);
+  }
+
+  function renderMessages(msgs, activity) {
     msgList.innerHTML = '';
     totalMsgs = 0;
-    if (!msgs.length) {
+    const combined = [];
+    for (const m of msgs) combined.push({ _kind: 'msg', _ts: m.created_at, data: m });
+    for (const a of (activity || [])) combined.push({ _kind: 'activity', _ts: a.created_at, data: a });
+    combined.sort((a, b) => (a._ts < b._ts ? -1 : a._ts > b._ts ? 1 : 0));
+
+    if (!combined.length) {
       const d = document.createElement('div');
       d.className = 'empty-state'; d.id = 'empty-msgs'; d.textContent = 'No messages yet.';
       msgList.appendChild(d);
       countBadge.textContent = '';
       return;
     }
-    for (const msg of msgs) {
+    for (const item of combined) {
       const empty = $('empty-msgs');
       if (empty) empty.remove();
-      msgList.appendChild(buildMessageRow(msg, msgs));
-      totalMsgs++;
+      if (item._kind === 'msg') {
+        msgList.appendChild(buildMessageRow(item.data, msgs));
+        totalMsgs++;
+      } else {
+        const a = item.data;
+        if (a.source === 'message') {
+          msgList.appendChild(buildMessageRow(a, msgs));
+          totalMsgs++;
+        } else {
+          msgList.appendChild(buildActivityMarker(a));
+        }
+      }
     }
     countBadge.textContent = totalMsgs + ' messages';
     msgList.scrollTop = msgList.scrollHeight;
@@ -463,7 +502,7 @@
 
     const cached = state.messages.get(runId);
     if (cached) {
-      renderMessages(cached);
+      renderThread();
     } else {
       msgList.innerHTML = '<div class="empty-state">Loading…</div>';
       const token = ++_selectToken;
@@ -475,7 +514,8 @@
           const msgs = data.messages;
           state.messages.set(runId, msgs);
           msgs.forEach(m => state.seenMsgIds.add(m.id));
-          renderMessages(msgs);
+          state.managerActivity.set(runId, data.managerActivity || []);
+          renderThread();
         }
       } catch {
         if (token === _selectToken)
@@ -544,21 +584,32 @@
         const payload = JSON.parse(e.data);
         const messages = Array.isArray(payload) ? payload : (payload.messages || []);
         const run = Array.isArray(payload) ? null : (payload.run || null);
+        const managerActivity = Array.isArray(payload) ? [] : (payload.managerActivity || []);
         if (run) {
-          // Cache messages for this run
+          // Cache messages and activity for this run
           state.messages.set(run.id, messages);
           messages.forEach(m => state.seenMsgIds.add(m.id));
+          state.managerActivity.set(run.id, managerActivity);
           // Auto-select if nothing selected yet
           if (state.selectedRunId === null) {
             selectRun(run.id, run);
           } else if (run.id === state.selectedRunId) {
-            renderMessages(messages);
+            renderThread();
             updateThreadHeader(run);
             updateKillSessionButton(run);
           }
         } else {
-          renderMessages(messages);
+          renderMessages(messages, []);
         }
+      } catch {}
+    });
+
+    es.addEventListener('manager-activity-stream', e => {
+      try {
+        const { run_id, items } = JSON.parse(e.data);
+        const existing = state.managerActivity.get(run_id) || [];
+        state.managerActivity.set(run_id, [...existing, ...items]);
+        if (run_id === state.selectedRunId) renderThread();
       } catch {}
     });
 

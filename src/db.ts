@@ -12,7 +12,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v7 added session_killed_at to runs so UI teardown state survives refresh/SSE updates.
 // v8 renamed an intermediate session-completion column to session_killed_at.
 // v9 added title column to messages (optional short title for QUESTION cards).
-export const SCHEMA_VERSION = 9;
+// v10 added run_id column to events for manager activity visibility in S-Deck.
+export const SCHEMA_VERSION = 10;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -130,6 +131,16 @@ export function initDb() {
       db.close();
       currentVersion = 9;
       console.log(`synapse: migrated ${path} from schema v8 to v9`);
+    }
+    if (hasTables && currentVersion === 9) {
+      // Migrate v9 → v10: add run_id to events for manager activity visibility.
+      const db = connect(true);
+      db.exec(`ALTER TABLE events ADD COLUMN run_id INTEGER;`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);`);
+      db.exec(`PRAGMA user_version=10;`);
+      db.close();
+      currentVersion = 10;
+      console.log(`synapse: migrated ${path} from schema v9 to v10`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that
