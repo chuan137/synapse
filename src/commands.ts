@@ -280,8 +280,12 @@ export function cmdPending(agent: string | null, all?: boolean) {
   const shouldConsume = !!targetAgent && envAgent === targetAgent;
 
   const activeRun = all ? null :
-    (db.query("SELECT id FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
-    (db.query("SELECT id FROM runs ORDER BY id DESC LIMIT 1").get() as any);
+    (() => {
+      const envRunId = process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null;
+      if (envRunId) return db.query("SELECT id FROM runs WHERE id=?").get(envRunId) as any;
+      return (db.query("SELECT id FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
+             (db.query("SELECT id FROM runs ORDER BY id DESC LIMIT 1").get() as any);
+    })();
 
   const rows = targetAgent
     ? (activeRun
