@@ -94,7 +94,6 @@ export function startUi(port: number, dev = false) {
   const db = connect();
 
   const lastMessageId = new Map<number, number>(); // runId -> last seen msg id
-  const lastManagerEventId = new Map<number, number>(); // runId -> last seen events.id for manager
   const lastManagerMsgId = new Map<number, number>(); // runId -> last seen messages.id for manager→coder TASKs
 
   // SSE client registry
@@ -174,17 +173,13 @@ export function startUi(port: number, dev = false) {
   function managerActivityForRun(runId: number | null): any[] {
     if (!runId) return [];
     return db.query(
-      `SELECT 'event' AS source, e.id AS id, e.type AS type, e.summary AS body, e.created_at
-       FROM events e
-       WHERE e.agent = 'manager' AND e.run_id = ?
-       UNION ALL
-       SELECT 'message' AS source, m.id, m.type, m.body, m.created_at
+      `SELECT 'message' AS source, m.id, m.type, m.body, m.created_at
        FROM messages m
        WHERE m.from_agent = 'manager'
          AND m.to_agent != 'operator'
          AND m.run_id = ?
        ORDER BY created_at`,
-    ).all(runId, runId) as any[];
+    ).all(runId) as any[];
   }
 
   function pushOperatorThread(ctrl: ReadableStreamDefaultController) {
@@ -230,19 +225,6 @@ export function startUi(port: number, dev = false) {
         }
       }
 
-      // Poll for new manager activity — separate cursors per table to avoid
-      // cross-table id confusion (events and messages have independent sequences)
-      const lastEvtId = lastManagerEventId.get(run.id) ?? 0;
-      const newEvents = db.query(
-        `SELECT 'event' AS source, e.id AS id, e.type AS type, e.summary AS body, e.created_at
-         FROM events e
-         WHERE e.agent = 'manager' AND e.run_id = ? AND e.id > ?
-         ORDER BY e.created_at`,
-      ).all(run.id, lastEvtId) as any[];
-      if (newEvents.length > 0) {
-        lastManagerEventId.set(run.id, (newEvents[newEvents.length - 1] as any).id);
-      }
-
       const lastDelegateId = lastManagerMsgId.get(run.id) ?? 0;
       const newDelegations = db.query(
         `SELECT 'message' AS source, m.id AS id, m.type AS type, m.body, m.created_at
@@ -257,11 +239,8 @@ export function startUi(port: number, dev = false) {
         lastManagerMsgId.set(run.id, (newDelegations[newDelegations.length - 1] as any).id);
       }
 
-      const newActivity = [...newEvents, ...newDelegations].sort(
-        (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0),
-      );
-      if (newActivity.length > 0) {
-        pushToAll("manager-activity-stream", { run_id: run.id, items: newActivity });
+      if (newDelegations.length > 0) {
+        pushToAll("manager-activity-stream", { run_id: run.id, items: newDelegations });
       }
     }
 

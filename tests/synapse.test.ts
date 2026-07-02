@@ -311,31 +311,6 @@ describe("send", () => {
   });
 });
 
-describe("log", () => {
-  beforeEach(() => run(["init"]));
-
-  // Regression test: EVENT_TYPES had the same undefined-name bug as
-  // MESSAGE_TYPES above.
-  test("records an event for each vocab type without crashing", () => {
-    for (const type of ["task_start", "task_end", "decision"]) {
-      const r = run(["log", "coder-1", type, `${type} happened`]);
-      expect(r.exitCode).toBe(0);
-    }
-    const db = openDb();
-    const count = (db.query("SELECT COUNT(*) AS n FROM events").get() as any).n;
-    expect(count).toBe(3);
-  });
-
-  test("logs an out-of-vocab type with a warning, doesn't fail", () => {
-    const r = run(["log", "coder-1", "weird_type", "something"]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stderr).toContain("outside the suggested vocab");
-    const db = openDb();
-    const row = db.query("SELECT * FROM events WHERE type='weird_type'").get();
-    expect(row).toBeTruthy();
-  });
-});
-
 describe("status", () => {
   test("reports no agents on an empty DB", () => {
     run(["init"]);

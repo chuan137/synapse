@@ -12,7 +12,7 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v7 added session_killed_at to runs so UI teardown state survives refresh/SSE updates.
 // v8 renamed an intermediate session-completion column to session_killed_at.
 // v9 added title column to messages (optional short title for QUESTION cards).
-// v10 added run_id column to events for manager activity visibility in S-Deck.
+// v10 added run_id column to events for the (now-removed) log-command activity ribbon.
 export const SCHEMA_VERSION = 10;
 
 export function dbPath(): string {

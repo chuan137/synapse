@@ -23,7 +23,6 @@ const ROLE_TEMPLATES: Record<string, string> = {
 };
 
 export const MESSAGE_TYPES = new Set(["TASK", "STATUS", "REVIEW", "ACK", "INFO", "QUESTION", "NOTE"]);
-export const EVENT_TYPES = new Set(["task_start", "task_end", "decision"]);
 
 // Matches enumeration markers agents tend to use when listing multiple
 // points inline instead of on separate lines: (1) (2), （1）（2） (fullwidth),
@@ -170,25 +169,6 @@ export function cmdSend(
     `synapse: message ${result.lastInsertRowid} queued (${frm} -> ${to}, ${type}${
       refId ? ", ref=" + refId : ""
     }${resolvedRunId ? ", run=" + resolvedRunId : ""})`,
-  );
-}
-
-export function cmdLog(agent: string, type: string, summary: string) {
-  if (!EVENT_TYPES.has(type)) {
-    console.error(
-      `synapse: warning — '${type}' is outside the suggested vocab ${[
-        ...EVENT_TYPES,
-      ].sort()} (logging anyway)`,
-    );
-  }
-  const db = connect();
-  const runId = process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null;
-  const result = db.run(
-    "INSERT INTO events (agent, type, summary, run_id) VALUES (?, ?, ?, ?)",
-    [agent, type, summary, runId],
-  );
-  console.log(
-    `synapse: event ${result.lastInsertRowid} logged (${agent}, ${type})`,
   );
 }
 

@@ -32,7 +32,6 @@ content always lives in the `messages` table.
 ```bash
 synapse pending $SYNAPSE_AGENT              # pull what's waiting; run first and whenever unsure
 synapse send <to> <TYPE> "<body>" [--ref-id N] [--options a,b,c] [--title "Short title"]  # TYPE: TASK|QUESTION|PROGRESS|REPLY
-synapse log $SYNAPSE_AGENT <task_start|task_end|decision> "<summary>"
 synapse status                             # roster / idle-busy state
 ```
 

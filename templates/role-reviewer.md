@@ -33,9 +33,6 @@ synapse send manager PROGRESS "Review LGTM for <task summary>" --ref-id <task_ms
 # Issues found
 synapse send <coder> REPLY "Issues: 1) ... 2) ..." --ref-id <review_task_msg_id>
 synapse send manager PROGRESS "Review issues for <task summary>: 1) ... 2) ..." --ref-id <task_msg_id>
-
-synapse log $SYNAPSE_AGENT task_start "reviewing <what>"
-synapse log $SYNAPSE_AGENT task_end "review complete: <LGTM|issues found>"
 ```
 
 ### What to check, generally

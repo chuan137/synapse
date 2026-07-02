@@ -30,11 +30,6 @@ synapse send manager REPLY "<what you did>" --ref-id <task_msg_id>
 
 # Ask for review — a review request is a TASK to the reviewer
 synapse send reviewer TASK "<what to look at>" --ref-id <task_msg_id>
-
-# Log key decisions (anywhere you chose between two reasonable approaches)
-synapse log $SYNAPSE_AGENT decision "chose X over Y because Z"
-synapse log $SYNAPSE_AGENT task_start "<task>"
-synapse log $SYNAPSE_AGENT task_end "<outcome>"
 ```
 
 ### Before reporting done

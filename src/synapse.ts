@@ -7,7 +7,6 @@
  *   synapse init
  *   synapse register <name> <role> [session_id]
  *   synapse send <to> <type> <body> [--from NAME] [--ref-id N]
- *   synapse log <agent> <type> <summary>
  *   synapse status
  *   synapse pending [agent]
  *   synapse deliver <id>
@@ -28,7 +27,6 @@ import {
   cmdDeliver,
   cmdDone,
   cmdInit,
-  cmdLog,
   cmdPending,
   cmdRegister,
   cmdRuns,
@@ -201,27 +199,6 @@ const COMMANDS: CommandSpec[] = [
         : null;
       const title = flags["title"] ?? null;
       return cmdSend(to, type, body, flags["from"] ?? null, refId, runId, options, title);
-    },
-  },
-  {
-    name: "log",
-    usage: "synapse log <agent> <type> <summary>",
-    summary: "Record an event in the run log.",
-    help: [
-      {
-        title: "Arguments",
-        lines: [
-          "agent    Agent name.",
-          "type     Suggested event type: task_start, task_end, or decision.",
-          "summary  Event summary.",
-        ],
-      },
-    ],
-    run: (context) => {
-      const { positional } = context;
-      const [agent, type, summary] = positional;
-      requireArgs(context, !!agent && !!type && !!summary);
-      return cmdLog(agent, type, summary);
     },
   },
   {
