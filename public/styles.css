@@ -459,6 +459,7 @@
   .activity-icon { font-size: 0.7rem; flex-shrink: 0; }
   .activity-time { margin-left: auto; font-size: 0.7rem; color: var(--muted); }
   .question-card { margin-top: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; }
+  .question-card[data-resolved] { background: transparent; border-color: transparent; padding: 0; margin-top: 4px; }
   .question-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text); }
   .question-options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .question-opt-btn { padding: 4px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; font-family: inherit; font-size: 12px; }

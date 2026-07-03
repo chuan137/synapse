@@ -441,6 +441,7 @@
         if (row) {
           const inlineCard = row.querySelector('.question-card:not([data-resolved])');
           if (inlineCard) {
+            inlineCard.classList.remove('question-card-in-compose');
             inlineCard.dataset.resolved = 'true';
             inlineCard.innerHTML = '<div class="question-resolved">✓ answered</div>';
           }
@@ -512,6 +513,7 @@
       const row = msgList.querySelector('.message-row[data-msg-id="' + msg.ref_id + '"]');
       const card = row && row.querySelector('.question-card:not([data-resolved])');
       if (card) {
+        card.classList.remove('question-card-in-compose');
         card.dataset.resolved = 'true';
         // This STATUS message (msg) renders as its own row right below —
         // don't echo its body here too.
@@ -817,6 +819,7 @@
             const card = row.querySelector('.question-card:not([data-resolved])');
             if (card) {
               card.dataset.resolved = 'true';
+              card.classList.remove('question-card-in-compose');
               card.innerHTML = '<div class="question-resolved">↩ resolved</div>';
             }
           }
