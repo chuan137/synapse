@@ -452,10 +452,7 @@
     padding: 0.2rem 0.75rem 0.2rem 3rem;
     font-size: 0.8rem;
     color: var(--muted);
-    border-left: 2px solid transparent;
   }
-  .activity-marker.activity-TASK     { border-left-color: var(--working); }
-  .activity-marker.activity-PROGRESS { border-left-color: var(--border); }
   .activity-icon { font-size: 0.7rem; flex-shrink: 0; }
   .activity-time { margin-left: auto; font-size: 0.7rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
   .activity-marker.activity-collapsed .message-content { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
@@ -628,3 +625,65 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(128,120,112,0.25); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(128,120,112,0.45); }
+
+  code.msg-file-link {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+  code.msg-file-link:hover {
+    color: var(--accent);
+  }
+
+  #file-viewer-panel {
+    display: none;
+    position: fixed;
+    top: 0; right: 0;
+    width: 42vw; min-width: 320px; max-width: 680px;
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    flex-direction: column;
+    z-index: 200;
+    box-shadow: -4px 0 16px rgba(0,0,0,.3);
+  }
+  #file-viewer-panel.open { display: flex; }
+
+  #file-viewer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  #file-viewer-title {
+    font-family: monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #file-viewer-close {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 13px; padding: 0 2px;
+    flex-shrink: 0;
+  }
+  #file-viewer-close:hover { color: var(--text); }
+  #file-viewer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  #file-viewer-body pre {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+  }

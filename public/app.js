@@ -17,6 +17,10 @@
   const startSubmit = $('start-run-submit');
   const startCancel = $('start-run-cancel');
   const startStatus = $('start-run-status');
+  const fileViewerPanel = $('file-viewer-panel');
+  const fileViewerTitle = $('file-viewer-title');
+  const fileViewerBody  = $('file-viewer-body');
+  const fileViewerClose = $('file-viewer-close');
 
   let totalMsgs = 0;
   let activeQuestionMsgId = null; // id of the QUESTION currently shown in compose
@@ -74,6 +78,8 @@
     });
   }
 
+  const FILE_EXTS = /\.(md|ts|tsx|js|jsx|json|yml|yaml|sql|sh|css|html|toml|env|txt)$/i;
+
   function autoHighlight(container) {
     colorStrong(container);
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
@@ -101,12 +107,24 @@
         const code = document.createElement('code');
         code.className = 'msg-inline-code';
         code.textContent = m[0].replace(/^`|`$/g, '');
+        const token = code.textContent;
+        if (!token.includes(' ') && ((/\//.test(token) && /\.\w+$/.test(token)) || FILE_EXTS.test(token))) {
+          code.classList.add('msg-file-link');
+          code.dataset.path = token;
+        }
         frag.appendChild(code);
         last = m.index + m[0].length;
       }
       if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
       textNode.parentNode.replaceChild(frag, textNode);
     }
+    container.querySelectorAll('code:not(.msg-inline-code)').forEach(code => {
+      const token = code.textContent.trim();
+      if (!token.includes(' ') && ((/\//.test(token) && /\.\w+$/.test(token)) || FILE_EXTS.test(token))) {
+        code.classList.add('msg-file-link');
+        code.dataset.path = token;
+      }
+    });
   }
 
   function renderMdHighlighted(raw) {
@@ -496,7 +514,8 @@
     if ((item.body || '').length > 80) {
       div.classList.add('activity-collapsed');
       div.style.cursor = 'pointer';
-      div.addEventListener('click', () => {
+      div.addEventListener('click', (e) => {
+        if (e.target.closest('code.msg-file-link')) return;
         div.classList.toggle('activity-collapsed');
       });
     }
@@ -1002,11 +1021,51 @@
     startPanel.classList.toggle('open');
     if (startPanel.classList.contains('open')) startGoal.focus();
   });
-  startSubmit.addEventListener('click', startRun);
+
+  async function openFileViewer(path) {
+    fileViewerTitle.textContent = path;
+    fileViewerBody.textContent = 'Loading…';
+    fileViewerPanel.classList.add('open');
+    const res = await fetch('/file?path=' + encodeURIComponent(path));
+    if (!res.ok) {
+      fileViewerBody.textContent = res.status === 403 ? 'Access denied.' : 'File not found.';
+      return;
+    }
+    const { content } = await res.json();
+    fileViewerBody.innerHTML = '';
+    if (path.endsWith('.md') || path.endsWith('.txt')) {
+      fileViewerBody.appendChild(renderMdHighlighted(content));
+    } else {
+      const pre = document.createElement('pre');
+      pre.textContent = content;
+      fileViewerBody.appendChild(pre);
+    }
+  }
+
+  document.addEventListener('click', async (e) => {
+    const link = e.target.closest('code.msg-file-link');
+    if (!link) return;
+    e.stopPropagation();
+    openFileViewer(link.dataset.path).catch(() => {
+      fileViewerBody.textContent = 'Error loading file.';
+    });
+  });
+
+  fileViewerClose.addEventListener('click', () => {
+    fileViewerPanel.classList.remove('open');
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fileViewerPanel.classList.contains('open')) {
+      fileViewerPanel.classList.remove('open');
+    }
+  });
+
   startCancel.addEventListener('click', () => {
     startPanel.classList.remove('open');
     setStartStatus('', true);
   });
+  startSubmit.addEventListener('click', startRun);
   sendBtn.addEventListener('click', sendMessage);
   killSessionBtn.addEventListener('click', killSession);
   finishRunBtn.addEventListener('click', finishRun);

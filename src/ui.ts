@@ -2,7 +2,7 @@ import { readFileSync, watch } from "fs";
 import bundledHtml from "../public/index.html" with { type: "text" };
 import bundledCss from "../public/styles.css" with { type: "text" };
 import bundledJs from "../public/app.js" with { type: "text" };
-import { dirname, resolve } from "path";
+import { dirname, join, resolve } from "path";
 import {
   cmdDone,
   DEFAULT_TASK_TEMPLATE,
@@ -349,6 +349,21 @@ export function startUi(port: number, dev = false) {
         ).all(runId);
         const managerActivity = managerActivityForRun(runId);
         return Response.json({ run, messages, managerActivity });
+      }
+
+      if (url.pathname === "/file" && req.method === "GET") {
+        const filePath = url.searchParams.get("path") ?? "";
+        const projectRoot = resolve(dirname(dbPath()), "..");
+        const abs = resolve(filePath.startsWith("/") ? filePath : join(projectRoot, filePath));
+        if (!abs.startsWith(projectRoot + "/") && abs !== projectRoot) {
+          return new Response("Forbidden", { status: 403 });
+        }
+        try {
+          const content = readFileSync(abs, "utf8");
+          return Response.json({ path: filePath, content });
+        } catch {
+          return new Response("Not found", { status: 404 });
+        }
       }
 
       if (url.pathname === "/send" && req.method === "POST") {
