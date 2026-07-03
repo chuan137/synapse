@@ -447,7 +447,7 @@
   .msg-type-REPLY    { background: color-mix(in srgb, var(--idle) 18%, transparent); color: var(--idle); }
   .activity-marker {
     display: flex;
-    align-items: baseline;
+    align-items: flex-start;
     gap: 0.5rem;
     padding: 0.2rem 0.75rem 0.2rem 3rem;
     font-size: 0.8rem;
@@ -457,7 +457,9 @@
   .activity-marker.activity-TASK     { border-left-color: var(--working); }
   .activity-marker.activity-PROGRESS { border-left-color: var(--border); }
   .activity-icon { font-size: 0.7rem; flex-shrink: 0; }
-  .activity-time { margin-left: auto; font-size: 0.7rem; color: var(--muted); }
+  .activity-time { margin-left: auto; font-size: 0.7rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
+  .activity-marker.activity-collapsed .message-content { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .activity-marker:not(.activity-collapsed) .message-content { display: block; overflow: visible; }
   .question-card { margin-top: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; }
   .question-card[data-resolved] { background: transparent; border-color: transparent; padding: 0; margin-top: 4px; }
   .question-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text); }

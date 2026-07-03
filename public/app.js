@@ -483,13 +483,19 @@
     const icon = icons[item.type] || '•';
     const div = document.createElement('div');
     div.className = 'activity-marker activity-' + item.type;
-    const bodyEl = renderMdHighlighted(item.body);
     div.innerHTML =
       '<span class="activity-icon">' + esc(icon) + '</span>' +
       '<span class="activity-time">' + esc(fmtTime(item.created_at)) + '</span>';
-    const iconSpan = div.querySelector('.activity-icon');
     const timeSpan = div.querySelector('.activity-time');
+    const bodyEl = renderMdHighlighted(item.body);
     div.insertBefore(bodyEl, timeSpan);
+    if ((item.body || '').length > 80) {
+      div.classList.add('activity-collapsed');
+      div.style.cursor = 'pointer';
+      div.addEventListener('click', () => {
+        div.classList.toggle('activity-collapsed');
+      });
+    }
     return div;
   }
 
