@@ -457,10 +457,10 @@
   .activity-time { margin-left: auto; font-size: 0.7rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
   .activity-marker.activity-collapsed .message-content { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
   .activity-marker:not(.activity-collapsed) .message-content { display: block; overflow: visible; }
-  .question-card { margin-top: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; }
-  .question-card[data-resolved] { background: transparent; border-color: transparent; padding: 0; margin-top: 4px; }
+  .question-card { margin-top: 6px; }
+  .question-title { display: none; }
   .question-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text); }
-  .question-options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .question-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
   .question-opt-btn { padding: 4px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; font-family: inherit; font-size: 12px; }
   .question-opt-btn:hover { border-color: var(--accent); color: var(--accent); }
   .question-compose { display: flex; gap: 6px; }
@@ -468,7 +468,12 @@
   .question-input:focus { border-color: var(--accent); outline: none; }
   .question-send-btn { padding: 4px 12px; background: var(--accent); border: none; border-radius: 4px; color: #fff; cursor: pointer; font-family: inherit; font-size: 12px; }
   .question-send-btn:hover { opacity: 0.85; }
-  .question-resolved { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .question-resolved {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--accent);
+  }
   .message-content {
     font-size: 12px;
     color: var(--text);
@@ -608,18 +613,7 @@
   .compose-question-from {
     color: var(--muted);
   }
-  /* In-thread card for the question that's handled in compose: hide its options/compose UI */
-  .question-card.question-card-in-compose .question-options,
-  .question-card.question-card-in-compose .question-compose {
-    display: none;
-  }
-  .question-card.question-card-in-compose::after {
-    content: '↓ reply in compose area below';
-    display: block;
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 4px;
-  }
+
 
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }

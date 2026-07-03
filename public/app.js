@@ -23,8 +23,6 @@
   const fileViewerClose = $('file-viewer-close');
 
   let totalMsgs = 0;
-  let activeQuestionMsgId = null; // id of the QUESTION currently shown in compose
-
   const state = {
     runs: [],
     selectedRunId: null,
@@ -205,6 +203,14 @@
       div.querySelector('.message-body').appendChild(renderMdHighlighted(msg.body || ''));
     }
 
+    // Suppress operator REPLY rows that answer a QUESTION — answer is shown on the card.
+    if (t === 'REPLY' && msg.from_agent === 'operator' && msg.ref_id) {
+      const isQuestionAnswer = (allMsgs || []).some(
+        m => m.id === msg.ref_id && m.type === 'QUESTION'
+      );
+      if (isQuestionAnswer) return null;
+    }
+
     // Render interactive question card for QUESTION messages to operator that
     // don't already have a reply. We key "answered" off an actual STATUS reply
     // row (ref_id -> this message, from operator) rather than msg.status: the
@@ -219,20 +225,13 @@
       if (reply) {
         const resolvedDiv = document.createElement('div');
         resolvedDiv.className = 'question-resolved';
-        // Don't repeat the reply text here — the reply itself is a real
-        // STATUS message that already renders as its own row further down
-        // the thread. Echoing it here just duplicates it on screen.
-        resolvedDiv.textContent = '✓ answered';
+        resolvedDiv.textContent = '✓ ' + (reply.body ? reply.body.trim() : 'answered');
         div.querySelector('.message-body').appendChild(resolvedDiv);
       } else {
         const run = state.runs.find(r => r.id === (msg.run_id || state.selectedRunId));
         const isActive = !run || run.status === 'running';
         if (isActive) {
           const card = buildQuestionCard(msg);
-          // If this question is shown in the compose area, mark it display-only
-          if (activeQuestionMsgId === msg.id) {
-            card.classList.add('question-card-in-compose');
-          }
           div.querySelector('.message-body').appendChild(card);
         }
       }
@@ -245,13 +244,6 @@
     const card = document.createElement('div');
     card.className = 'question-card';
     card.dataset.msgId = msg.id;
-
-    if (msg.title) {
-      const titleEl = document.createElement('div');
-      titleEl.className = 'question-title';
-      titleEl.textContent = msg.title;
-      card.appendChild(titleEl);
-    }
 
     let options = [];
     if (msg.options) {
@@ -274,11 +266,22 @@
         btn.addEventListener('click', () => submitQuestionReply(msg, opt, card));
         optDiv.appendChild(btn);
       }
+      const otherBtn = document.createElement('button');
+      otherBtn.className = 'question-opt-btn question-opt-other';
+      otherBtn.textContent = 'Other…';
+      otherBtn.addEventListener('click', () => {
+        const inp = card.querySelector('.question-input');
+        const cmp = card.querySelector('.question-compose');
+        if (cmp) cmp.style.display = '';
+        if (inp) { inp.focus(); inp.select(); }
+      });
+      optDiv.appendChild(otherBtn);
       card.appendChild(optDiv);
     }
 
     const compose = document.createElement('div');
     compose.className = 'question-compose';
+    if (options.length > 0) compose.style.display = 'none';
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'question-input';
@@ -300,107 +303,7 @@
     return card;
   }
 
-  function enterQuestionMode(msg) {
-    activeQuestionMsgId = msg.id;
-    // Mark the existing inline thread card as display-only
-    const row = msgList.querySelector('.message-row[data-msg-id="' + msg.id + '"]');
-    if (row) {
-      const inlineCard = row.querySelector('.question-card:not([data-resolved])');
-      if (inlineCard) inlineCard.classList.add('question-card-in-compose');
-    }
-    const compose = $('compose');
-    compose.innerHTML = '';
-    compose.className = 'compose-question-mode';
-
-    const preview = document.createElement('div');
-    preview.className = 'compose-question-preview';
-    if (msg.title) {
-      const t = document.createElement('span');
-      t.className = 'compose-question-title';
-      t.textContent = msg.title;
-      preview.appendChild(t);
-    }
-    const from = document.createElement('span');
-    from.className = 'compose-question-from';
-    from.textContent = 'from ' + (msg.from_agent || '?') + ' · #' + msg.id;
-    preview.appendChild(from);
-    compose.appendChild(preview);
-
-    let options = [];
-    if (msg.options) { try { options = JSON.parse(msg.options); } catch {} }
-    if (options.length > 0) {
-      const optDiv = document.createElement('div');
-      optDiv.className = 'question-options';
-      for (const opt of options) {
-        const btn = document.createElement('button');
-        btn.className = 'question-opt-btn';
-        btn.dataset.option = opt;
-        btn.textContent = opt;
-        btn.addEventListener('click', () => submitQuestionReply(msg, opt, null));
-        optDiv.appendChild(btn);
-      }
-      compose.appendChild(optDiv);
-    }
-
-    const freeRow = document.createElement('div');
-    freeRow.className = 'compose-bottom';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'question-input compose-question-input';
-    input.id = 'compose-question-input';
-    input.placeholder = 'Or type a custom reply…';
-    const replyBtn = document.createElement('button');
-    replyBtn.className = 'question-send-btn';
-    replyBtn.id = 'compose-question-send';
-    replyBtn.textContent = 'Reply';
-    replyBtn.addEventListener('click', () => {
-      const val = input.value.trim();
-      if (val) submitQuestionReply(msg, val, null);
-    });
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); const val = input.value.trim(); if (val) submitQuestionReply(msg, val, null); }
-    });
-    freeRow.appendChild(input);
-    freeRow.appendChild(replyBtn);
-    const feedbackSpan = document.createElement('span');
-    feedbackSpan.id = 'send-feedback';
-    freeRow.appendChild(feedbackSpan);
-    compose.appendChild(freeRow);
-    input.focus();
-  }
-
-  function exitQuestionMode() {
-    activeQuestionMsgId = null;
-    const compose = $('compose');
-    compose.className = '';
-    compose.innerHTML =
-      '<div class="compose-input-wrap">' +
-        '<textarea id="msg-input" placeholder="Message… (⌘↵ to send · ⇧⌘↵ for discussion)"></textarea>' +
-        '<button id="send-btn" title="Send (⌘↵)">↑</button>' +
-      '</div>' +
-      '<span id="send-feedback"></span>';
-    // Re-wire the restored elements
-    const newInput = $('msg-input');
-    const newSendBtn = $('send-btn');
-    const run = state.runs.find(r => r.id === state.selectedRunId);
-    const isRunning = run && run.status === 'running';
-    newInput.disabled = !isRunning;
-    newSendBtn.disabled = !isRunning;
-    newInput.placeholder = isRunning
-      ? 'Message… (⌘↵ to send · ⇧⌘↵ for discussion)'
-      : 'Run ' + (run ? run.status : 'ended') + ' — read only';
-    newSendBtn.addEventListener('click', sendMessage);
-    newInput.addEventListener('input', () => { newSendBtn._overrideWarning = false; });
-    newInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
-        e.preventDefault(); sendDiscussion();
-      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault(); sendMessage();
-      }
-    });
-  }
-
-  // Find the most recent unresolved QUESTION for operator in the current run.
+  // Find the oldest unresolved QUESTION for operator in the current run (FIFO).
   function findPendingQuestion() {
     const runId = state.selectedRunId;
     if (runId === null) return null;
@@ -408,8 +311,8 @@
     // If run not yet loaded in state.runs, assume active (operator-thread fires before runs-list)
     if (run && run.status !== 'running') return null;
     const msgs = state.messages.get(runId) || [];
-    // most recent first
-    for (let i = msgs.length - 1; i >= 0; i--) {
+    // oldest first — if multiple QUESTIONs stack up, answer them in arrival order
+    for (let i = 0; i < msgs.length; i++) {
       const m = msgs[i];
       if (m.type !== 'QUESTION' || m.to_agent !== 'operator') continue;
       const answered = msgs.some(r => r.ref_id === m.id && r.from_agent === 'operator');
@@ -421,22 +324,17 @@
   function syncComposeMode() {
     const pending = findPendingQuestion();
     if (pending) {
-      if (activeQuestionMsgId !== pending.id) enterQuestionMode(pending);
-    } else {
-      if (activeQuestionMsgId !== null) exitQuestionMode();
+      const row = msgList.querySelector('.message-row[data-msg-id="' + pending.id + '"]');
+      if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }
 
   async function submitQuestionReply(msg, replyText, card) {
-    // Disable UI in compose-question mode
-    const composeEl = $('compose');
-    const inComposeMode = composeEl && composeEl.classList.contains('compose-question-mode');
-    if (inComposeMode) {
-      composeEl.querySelectorAll('button').forEach(b => { b.disabled = true; });
-      const ci = $('compose-question-input');
-      if (ci) ci.disabled = true;
-    }
-    // Also disable inline card if provided
+    if (!replyText || !replyText.trim()) return;
+    const runId = msg.run_id || state.selectedRunId;
+    const msgs = state.messages.get(runId) || [];
+    if (msgs.some(m => m.ref_id === msg.id && m.from_agent === 'operator')) return;
+    // Disable inline card while submitting
     if (card) {
       card.querySelectorAll('button').forEach(b => { b.disabled = true; });
       const input = card.querySelector('.question-input');
@@ -456,28 +354,19 @@
       });
       const json = await res.json();
       if (json.ok) {
-        // Restore compose to normal
-        exitQuestionMode();
-        // Update the inline thread card to resolved state
+        // Replace the question card with a compact resolved indicator
+        const resolvedDiv = document.createElement('div');
+        resolvedDiv.className = 'question-resolved';
+        resolvedDiv.textContent = '✓ ' + replyText.trim();
         const row = msgList.querySelector('.message-row[data-msg-id="' + msg.id + '"]');
         if (row) {
           const inlineCard = row.querySelector('.question-card:not([data-resolved])');
-          if (inlineCard) {
-            inlineCard.classList.remove('question-card-in-compose');
-            inlineCard.dataset.resolved = 'true';
-            inlineCard.innerHTML = '<div class="question-resolved">✓ answered</div>';
-          }
+          if (inlineCard) inlineCard.replaceWith(resolvedDiv);
         }
         if (card && card !== null) {
-          card.dataset.resolved = 'true';
-          card.innerHTML = '<div class="question-resolved">✓ answered</div>';
+          card.replaceWith(resolvedDiv.cloneNode(true));
         }
       } else {
-        if (inComposeMode) {
-          composeEl.querySelectorAll('button').forEach(b => { b.disabled = false; });
-          const ci = $('compose-question-input');
-          if (ci) ci.disabled = false;
-        }
         if (card) {
           card.querySelectorAll('button').forEach(b => { b.disabled = false; });
           const input = card.querySelector('.question-input');
@@ -486,11 +375,6 @@
         flash((json.error || 'reply failed'), false);
       }
     } catch (err) {
-      if (inComposeMode) {
-        composeEl.querySelectorAll('button').forEach(b => { b.disabled = false; });
-        const ci = $('compose-question-input');
-        if (ci) ci.disabled = false;
-      }
       if (card) {
         card.querySelectorAll('button').forEach(b => { b.disabled = false; });
         const input = card.querySelector('.question-input');
@@ -531,24 +415,27 @@
       syncComposeMode();
       return;
     }
+    // If this is an operator REPLY answering a QUESTION, fold into the card.
+    if (msg.type === 'REPLY' && msg.from_agent === 'operator' && msg.ref_id) {
+      const refRow = msgList.querySelector('.message-row[data-msg-id="' + msg.ref_id + '"]');
+      const card = refRow && refRow.querySelector('.question-card:not([data-resolved])');
+      if (card) {
+        const resolvedDiv = document.createElement('div');
+        resolvedDiv.className = 'question-resolved';
+        resolvedDiv.textContent = '✓ ' + (msg.body ? msg.body.trim() : 'answered');
+        card.replaceWith(resolvedDiv);
+        msgList.scrollTop = msgList.scrollHeight;
+        syncComposeMode();
+        return;
+      }
+    }
+    // Default: append as a normal message row.
     totalMsgs++;
     countBadge.textContent = totalMsgs + ' messages';
     const allMsgs = state.messages.get(msg.run_id) || [msg];
-    msgList.appendChild(buildMessageRow(msg, allMsgs));
+    const row = buildMessageRow(msg, allMsgs);
+    if (row) msgList.appendChild(row);
     msgList.scrollTop = msgList.scrollHeight;
-    // A freshly arrived reply (REPLY with ref_id) may answer a QUESTION card
-    // already on screen — collapse it in place instead of waiting for reload.
-    if (msg.type === 'REPLY' && msg.from_agent === 'operator' && msg.ref_id) {
-      const row = msgList.querySelector('.message-row[data-msg-id="' + msg.ref_id + '"]');
-      const card = row && row.querySelector('.question-card:not([data-resolved])');
-      if (card) {
-        card.classList.remove('question-card-in-compose');
-        card.dataset.resolved = 'true';
-        // This STATUS message (msg) renders as its own row right below —
-        // don't echo its body here too.
-        card.innerHTML = '<div class="question-resolved">✓ answered</div>';
-      }
-    }
     syncComposeMode();
   }
 
@@ -581,8 +468,19 @@
         if (item.data.type === 'PROGRESS') {
           msgList.appendChild(buildActivityMarker(item.data));
         } else {
-          msgList.appendChild(buildMessageRow(item.data, msgs));
-          totalMsgs++;
+          // Suppress operator REPLY rows that are answers to QUESTION messages —
+          // the answer is folded into the QUESTION card instead.
+          const isQuestionAnswer = item.data.type === 'REPLY' &&
+            item.data.from_agent === 'operator' &&
+            item.data.ref_id &&
+            msgs.some(m => m.id === item.data.ref_id && m.type === 'QUESTION');
+          if (!isQuestionAnswer) {
+            const row = buildMessageRow(item.data, msgs);
+            if (row) {
+              msgList.appendChild(row);
+              totalMsgs++;
+            }
+          }
         }
       } else {
         const a = item.data;
@@ -847,9 +745,10 @@
           if (row) {
             const card = row.querySelector('.question-card:not([data-resolved])');
             if (card) {
-              card.dataset.resolved = 'true';
-              card.classList.remove('question-card-in-compose');
-              card.innerHTML = '<div class="question-resolved">↩ resolved</div>';
+              const resolvedDiv = document.createElement('div');
+              resolvedDiv.className = 'question-resolved';
+              resolvedDiv.textContent = '✓ answered';
+              card.replaceWith(resolvedDiv);
             }
           }
           // Update cached message status

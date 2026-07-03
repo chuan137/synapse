@@ -40,29 +40,21 @@ them. Project root is three levels up from cwd (`../../../`).
 
 ## Message types
 
-Four types, drawn along two axes: **who reads it** (recipient acts on it vs.
-UI only) and **needs a reply** (yes vs. no).
+- **`TASK`** — work assignment; sender expects a `REPLY` when done.
+- **`QUESTION`** — blocking question from `manager` to `operator`; halts sender until answered. Always include `--title`.
+- **`PROGRESS`** — one-way UI signal; no reply expected. Short markers only ("started", "delegating").
+- **`REPLY`** — everything else: done reports, answers, verdicts. Set `--ref-id` to close a TASK or QUESTION.
 
-- **`TASK`** — work assignment. Sender expects a `REPLY` when the work is
-  done. Currently: `operator → manager` (root task) and `manager → coder`
-  (subtask). A review request is also a `TASK` — `coder → reviewer`.
-- **`QUESTION`** — a blocking question that halts the sender until answered.
-  Only `manager → operator`. `--options a,b,c` (2–4 real answers, not
-  "Yes,No,OK" placeholders) and `--title "..."` are required — the S-Deck
-  card has no generic fallback. The operator's answer arrives as a `REPLY`
-  with `ref_id` pointing back to the QUESTION.
-- **`PROGRESS`** — a one-way progress signal for the UI live indicator. No
-  reply expected. Use for short "started", "delegating to coder-1",
-  "reviewing" markers. Do not put substantive content here — nobody replies
-  to a PROGRESS, and the UI may show only the latest one.
-- **`REPLY`** — everything else: the substantive answer to a `TASK` or
-  `QUESTION`, a done report, a review verdict, or a general message. Set
-  `--ref-id` when closing a specific TASK/QUESTION; omit it for unsolicited
-  notes. Write the full result — this is what a human or another agent will
-  read to know the outcome.
+> **`REPLY` vs `PROGRESS`:** if the recipient needs to read it to act, it is a `REPLY`. If it only signals activity, it is `PROGRESS`.
 
-Boundary rule: if it needs to be **read** to act on, it is a `REPLY`. If it
-is only there to show "something is happening", it is a `PROGRESS`.
+### QUESTION options
+
+Use `--options` to present 2–4 real, distinct choices. Rules:
+
+- Options must be real answers, not placeholders ("Yes", "OK") or deferrals ("describe in reply").
+- If the question has multiple independent sub-questions, split into multiple QUESTIONs rather than cramming them into one.
+- If no real multiple-choice answers exist, omit `--options` entirely — the operator will use the free-text field.
+- The UI always appends an **"Other…"** button when options are shown. When the operator selects it, the free-text field is revealed for them to type. The agent will receive the typed value (not the button label) as the REPLY body — treat it as a free-text answer, not a signal to ask again.
 
 ## ref_id
 
@@ -106,6 +98,10 @@ If you need an answer before you can correctly proceed, send exactly one
 `QUESTION` to `operator` and end your turn — start and delegate nothing.
 Do not guess and proceed. You will be re-woken via `synapse pending` when the
 reply arrives. Waiting on a real decision is correct, not stalled.
+
+After sending a `QUESTION`, send **nothing else** (no `TASK`, `PROGRESS`, or
+further `QUESTION`) until the operator's `REPLY` arrives. Only one `QUESTION`
+may be in flight at a time.
 
 ## Language
 

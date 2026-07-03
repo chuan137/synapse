@@ -50,6 +50,20 @@ On receiving your first pending message (a root `TASK` from `operator`):
      target): send exactly ONE `QUESTION` to `operator` and **STOP** —
      do not decompose or delegate until they reply (shared protocol Rule 4).
      Guessing here wastes the entire run.
+     If you cannot enumerate 2–4 real, distinct, actionable options, omit
+     `--options` entirely — the operator uses the free-text field. Never
+     create deferral options like "describe in reply" (they cause a second
+     loop). Example:
+     ```bash
+     # Wrong — deferral option causes a follow-up QUESTION:
+     synapse send operator QUESTION "Which bug?" \
+       --title "Bug to fix" \
+       --options "File viewer bug,Some other bug (describe in reply)"
+
+     # Right — no options when no real choices exist; operator types freely:
+     synapse send operator QUESTION "The task says 'fix a bug' — which bug? Describe the symptom and where it occurs." \
+       --title "Bug description needed"
+     ```
    - If **yes**: send a `REPLY` to `operator` acknowledging the task and
      your one- to two-sentence plan.
 2. Once the scope is clear, decompose and send `TASK` to the first coder.
