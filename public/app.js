@@ -357,7 +357,7 @@
     compose.className = '';
     compose.innerHTML =
       '<div class="compose-input-wrap">' +
-        '<textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>' +
+        '<textarea id="msg-input" placeholder="Message… (⌘↵ to send · ⇧⌘↵ for discussion)"></textarea>' +
         '<button id="send-btn" title="Send (⌘↵)">↑</button>' +
       '</div>' +
       '<span id="send-feedback"></span>';
@@ -369,12 +369,16 @@
     newInput.disabled = !isRunning;
     newSendBtn.disabled = !isRunning;
     newInput.placeholder = isRunning
-      ? 'Send a task to manager…'
+      ? 'Message… (⌘↵ to send · ⇧⌘↵ for discussion)'
       : 'Run ' + (run ? run.status : 'ended') + ' — read only';
     newSendBtn.addEventListener('click', sendMessage);
     newInput.addEventListener('input', () => { newSendBtn._overrideWarning = false; });
     newInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+        e.preventDefault(); sendDiscussion();
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); sendMessage();
+      }
     });
   }
 
@@ -877,6 +881,32 @@
     finally { const s = $('send-btn'); if (s) s.disabled = false; }
   }
 
+  async function sendDiscussion() {
+    const mi = $('msg-input');
+    const sb = $('send-btn');
+    const rawBody = mi ? mi.value.trim() : '';
+    if (!rawBody) { flash('body required', false); return; }
+    if (!state.selectedRunId) { flash('no run selected', false); return; }
+    const body = '[Discussion — 请表达真实想法，不要立即执行]\n\n' + rawBody;
+    if (sb) sb.disabled = true;
+    try {
+      const res = await fetch('/send', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          to: 'manager',
+          type: 'QUESTION',
+          body,
+          run_id: state.selectedRunId,
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) { if (mi) mi.value = ''; }
+      else flash(json.error || 'error', false);
+    } catch (err) { flash(String(err), false); }
+    finally { const s = $('send-btn'); if (s) s.disabled = false; }
+  }
+
   async function killSession() {
     if (!killSessionBtn || !sessionActions) return;
     const run = killSessionBtn._currentRun;
@@ -983,7 +1013,11 @@
   if (stopRunBtn) stopRunBtn.addEventListener('click', finishRun);
   msgInput.addEventListener('input', () => { sendBtn._overrideWarning = false; });
   msgInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+      e.preventDefault(); sendDiscussion();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault(); sendMessage();
+    }
   });
   startGoal.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startRun(); }
