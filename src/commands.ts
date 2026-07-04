@@ -574,6 +574,7 @@ function launchAgentWindow(
   const initialPrompt = `synapse pending ${agent.name}`;
   const shellCmd = `
     cd '${absCwd}' || exit 1
+    unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
     SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' script -q /dev/null '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions '${initialPrompt}'
   `;
 
