@@ -567,15 +567,20 @@ function launchAgentWindow(
   claudePath: string,
   sessionId: string,
   runId: number,
+  projectRoot: string,
 ): void {
   const absCwd = resolve(defaultAgentDir(taskName, agent.name));
   presetClaudeTrust(absCwd);
 
+  // Use direnv exec to load the project root's .envrc (if any), giving each
+  // agent the env that matches the project directory rather than inheriting
+  // whatever the launching shell had (e.g. a ~/ccloud direnv that sets
+  // ANTHROPIC_BASE_URL to an enterprise proxy).
+  const direnvPath = Bun.spawnSync(["which", "direnv"]).stdout.toString().trim() || "direnv";
   const initialPrompt = `synapse pending ${agent.name}`;
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' script -q /dev/null '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions '${initialPrompt}'
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' script -q /dev/null '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions '${initialPrompt}'
   `;
 
   if (process.env.SYNAPSE_DEBUG) {
@@ -714,7 +719,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     console.log(
       `synapse: launching window '${agent.name}' (${agent.role}) in ${absCwd}`,
     );
-    launchAgentWindow(tmuxSession, taskName, agent, dbFile, claudePath, sessionId, runId);
+    launchAgentWindow(tmuxSession, taskName, agent, dbFile, claudePath, sessionId, runId, projectRoot);
     cmdRegister(agent.name, agent.role, sessionId, runId);
   }
 
