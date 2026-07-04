@@ -547,8 +547,8 @@ function presetClaudeTrust(absCwd: string): void {
 
 // Launches one agent window in the tmux session.
 //
-// claude requires a real TTY, so script(1) provides the pty. We pass
-// --session-id explicitly so we know the session ID before launch — no need
+// tmux windows are real TTYs; claude runs directly without any pty wrapper.
+// We pass --session-id explicitly so we know the session ID before launch — no need
 // to poll ~/.claude/projects/ for a new transcript file (that approach, plus
 // the "hi" nudge to coax a first jsonl write, has been removed: it was the
 // fragile timing hack bootstrap-spec.md problem 2 set out to replace).
@@ -580,7 +580,7 @@ function launchAgentWindow(
   const initialPrompt = `synapse pending ${agent.name}`;
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' script -q /dev/null '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions '${initialPrompt}'
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions '${initialPrompt}'
   `;
 
   if (process.env.SYNAPSE_DEBUG) {
