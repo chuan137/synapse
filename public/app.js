@@ -21,6 +21,8 @@
   const fileViewerTitle = $('file-viewer-title');
   const fileViewerBody  = $('file-viewer-body');
   const fileViewerClose = $('file-viewer-close');
+  const fileViewerOpenExt = $('file-viewer-open-ext');
+  const projectNameEl = $('project-name');
 
   let totalMsgs = 0;
   const state = {
@@ -45,6 +47,28 @@
     themeBtn.textContent = isLight ? '☽' : '☀︎';
   });
 
+  fetch('/info')
+    .then(r => r.json())
+    .then(info => {
+      if (info.projectName) {
+        projectNameEl.textContent = info.projectName;
+        projectNameEl.dataset.uiSession = info.uiSession ?? '';
+        projectNameEl.dataset.uiWindow  = info.uiWindow  ?? '';
+      }
+    })
+    .catch(() => {});
+
+  projectNameEl.addEventListener('click', () => {
+    const session = projectNameEl.dataset.uiSession;
+    const win     = projectNameEl.dataset.uiWindow;
+    if (!session || !win) return;
+    fetch('/focus-agent', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ session, window: win }),
+    }).catch(() => {});
+  });
+
   function renderMd(raw) {
     const normalized = (raw ?? '').replace(/\\n/g, '\n');
     if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
@@ -62,7 +86,7 @@
 
   // Highlight patterns in plain text nodes: file paths, --flags, numbers with units.
   // Skips nodes already inside <code> or <pre> so we don't double-wrap.
-  const HIGHLIGHT_RE = /(`[^`]+`|(?:[\w./-]+\/[\w./-]+(?:\.[\w]+)?)|--[\w-]+(?:=\S+)?|\b\d+(?:\.\d+)?\s*(?:KB|MB|GB|ms|s|px|%)\b)/g;
+  const HIGHLIGHT_RE = /(`[^`]+`|(?:[\w./-]+\/[\w./-]+(?:\.[\w]+)?|[\w.-]+\.(?:md|ts|tsx|js|jsx|json|yml|yaml|sql|sh|css|html|toml|env|txt))|--[\w-]+(?:=\S+)?|\b\d+(?:\.\d+)?\s*(?:KB|MB|GB|ms|s|px|%)\b)/g;
 
   const SEMANTIC_OK  = /^(pass(?:ed|es)?|ok|lgtm|fixed|done|success(?:ful)?|approved|merged|clean|green|built|deployed)$/i;
   const SEMANTIC_ERR = /^(fail(?:ed|s)?|error(?:s)?|broken|blocked|rejected|crash(?:ed)?|abort(?:ed)?|timeout(?:ed)?)$/i;
@@ -172,6 +196,7 @@
   }
 
   function buildMessageRow(msg, allMsgs) {
+    console.log('[buildMessageRow] id=' + msg.id + ' type=' + JSON.stringify(msg.type) + ' from=' + msg.from_agent + ' to=' + msg.to_agent);
     const isHuman = msg.from_agent === 'operator';
     const direction = isHuman ? 'from-human' : 'from-agent';
     const sender = msg.from_agent;
@@ -201,6 +226,8 @@
       '</div>';
     if (useHighlight) {
       div.querySelector('.message-body').appendChild(renderMdHighlighted(msg.body || ''));
+    } else {
+      autoHighlight(div.querySelector('.message-body'));
     }
 
     // Suppress operator REPLY rows that answer a QUESTION — answer is shown on the card.
@@ -268,7 +295,7 @@
       }
       const otherBtn = document.createElement('button');
       otherBtn.className = 'question-opt-btn question-opt-other';
-      otherBtn.textContent = 'Other…';
+      otherBtn.textContent = 'Chat about this';
       otherBtn.addEventListener('click', () => {
         const inp = card.querySelector('.question-input');
         const cmp = card.querySelector('.question-compose');
@@ -395,7 +422,7 @@
     const timeSpan = div.querySelector('.activity-time');
     const bodyEl = renderMdHighlighted(item.body);
     div.insertBefore(bodyEl, timeSpan);
-    if ((item.body || '').length > 80) {
+    if ((item.body || '').length > 80 && !div.querySelector('code.msg-file-link')) {
       div.classList.add('activity-collapsed');
       div.style.cursor = 'pointer';
       div.addEventListener('click', (e) => {
@@ -407,9 +434,11 @@
   }
 
   function appendMessage(msg) {
+    console.log('[appendMessage] id=' + msg.id + ' type=' + JSON.stringify(msg.type) + ' to=' + msg.to_agent);
     const empty = $('empty-msgs');
     if (empty) empty.remove();
     if (msg.type === 'PROGRESS') {
+      console.log('[appendMessage] PROGRESS branch taken for id=' + msg.id);
       msgList.appendChild(buildActivityMarker(msg));
       msgList.scrollTop = msgList.scrollHeight;
       syncComposeMode();
@@ -447,6 +476,7 @@
   }
 
   function renderMessages(msgs, activity) {
+    console.log('[renderMessages] msgs=' + msgs.length + ' activity=' + (activity||[]).length);
     msgList.innerHTML = '';
     totalMsgs = 0;
     const combined = [];
@@ -466,6 +496,7 @@
       if (empty) empty.remove();
       if (item._kind === 'msg') {
         if (item.data.type === 'PROGRESS') {
+          console.log('[renderMessages] PROGRESS branch taken for id=' + item.data.id);
           msgList.appendChild(buildActivityMarker(item.data));
         } else {
           // Suppress operator REPLY rows that are answers to QUESTION messages —
@@ -952,6 +983,14 @@
 
   fileViewerClose.addEventListener('click', () => {
     fileViewerPanel.classList.remove('open');
+  });
+
+  fileViewerOpenExt.addEventListener('click', () => {
+    fetch('/open-file', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ path: fileViewerTitle.textContent })
+    });
   });
 
   document.addEventListener('keydown', (e) => {

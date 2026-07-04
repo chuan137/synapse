@@ -2,7 +2,7 @@ import { readFileSync, watch } from "fs";
 import bundledHtml from "../public/index.html" with { type: "text" };
 import bundledCss from "../public/styles.css" with { type: "text" };
 import bundledJs from "../public/app.js" with { type: "text" };
-import { dirname, join, resolve } from "path";
+import { basename, dirname, join, resolve } from "path";
 import {
   cmdDone,
   DEFAULT_TASK_TEMPLATE,
@@ -326,6 +326,21 @@ export function startUi(port: number, dev = false) {
         });
       }
 
+      if (url.pathname === "/info" && req.method === "GET") {
+        const projectRoot = resolve(dirname(dbPath()), "..");
+        const projectName = basename(projectRoot);
+        const tmuxPane = process.env.TMUX_PANE ?? null;
+        let uiSession: string | null = null;
+        let uiWindow: string | null = null;
+        if (tmuxPane) {
+          const s = Bun.spawnSync(["tmux", "display-message", "-p", "-t", tmuxPane, "#S"]);
+          const w = Bun.spawnSync(["tmux", "display-message", "-p", "-t", tmuxPane, "#W"]);
+          if (s.exitCode === 0) uiSession = new TextDecoder().decode(s.stdout).trim();
+          if (w.exitCode === 0) uiWindow  = new TextDecoder().decode(w.stdout).trim();
+        }
+        return Response.json({ projectName, uiSession, uiWindow });
+      }
+
       if (url.pathname === "/runs" && req.method === "GET") {
         const runs = db.query(
           `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
@@ -349,6 +364,27 @@ export function startUi(port: number, dev = false) {
         ).all(runId);
         const managerActivity = managerActivityForRun(runId);
         return Response.json({ run, messages, managerActivity });
+      }
+
+      if (url.pathname === "/open-file" && req.method === "POST") {
+        return req.json().then(async (body: any) => {
+          const filePath = body?.path ?? "";
+          const projectRoot = resolve(dirname(dbPath()), "..");
+          const abs = resolve(filePath.startsWith("/") ? filePath : join(projectRoot, filePath));
+          if (!abs.startsWith(projectRoot + "/") && abs !== projectRoot) {
+            return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
+          }
+          try {
+            Bun.spawn(["open", "-a", "Cursor", abs]);
+          } catch {
+            try {
+              Bun.spawn(["open", abs]);
+            } catch (err: any) {
+              return Response.json({ ok: false, error: String(err) });
+            }
+          }
+          return Response.json({ ok: true });
+        });
       }
 
       if (url.pathname === "/file" && req.method === "GET") {
