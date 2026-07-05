@@ -545,6 +545,16 @@ function presetClaudeTrust(absCwd: string): void {
   }
 }
 
+// Spawn tmux without the TMUX env var so nested invocations (e.g. from a UI
+// server running inside a tmux pane) don't confuse tmux into targeting the
+// current session instead of the named destination session.
+function spawnTmux(args: string[]): ReturnType<typeof Bun.spawnSync> {
+  const env = { ...process.env };
+  delete env.TMUX;
+  delete env.TMUX_PANE;
+  return Bun.spawnSync({ cmd: ["tmux", ...args], env });
+}
+
 // Launches one agent window in the tmux session.
 //
 // tmux windows are real TTYs; claude runs directly without any pty wrapper.
@@ -586,9 +596,9 @@ function launchAgentWindow(
   if (process.env.SYNAPSE_DEBUG) {
     console.error(`[debug] window '${agent.name}' shellCmd:\n${shellCmd}`);
   }
-  const result = Bun.spawnSync([
-    "tmux",
+  const result = spawnTmux([
     "new-window",
+    "-a",
     "-t",
     tmuxSession,
     "-n",
@@ -640,6 +650,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   const runId = Number(runResult.lastInsertRowid);
   const pathHash = Bun.hash(projectRoot).toString(16).slice(0, 4);
   const taskName = `${projectSlug}-${pathHash}-${runId}`;
+  const runFolderName = `run-${runId}`;
 
   const abort = (msg: string): never => {
     db.run(`DELETE FROM runs WHERE id=?`, [runId]);
@@ -648,8 +659,8 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 
   // Create the durable run folder and copy task.yml into it with generated
   // links back to this run's scratch tree.
-  const taskFolder = join(dataDir, "runs", taskName);
-  const agentsDir = join(dataDir, "agents", taskName);
+  const taskFolder = join(dataDir, "runs", runFolderName);
+  const agentsDir = join(dataDir, "agents", runFolderName);
   mkdirSync(taskFolder, { recursive: true });
   mkdirSync(agentsDir, { recursive: true });
   writeFileSync(
@@ -666,9 +677,9 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     [nowIso()],
   );
 
-  const tmuxSession = taskName;
+  const tmuxSession = `-${taskName}`;
 
-  const sessionExists = Bun.spawnSync(["tmux", "has-session", "-t", tmuxSession]);
+  const sessionExists = spawnTmux(["has-session", "-t", `=${tmuxSession}`]);
   if (sessionExists.exitCode === 0) {
     abort(
       `tmux session '${tmuxSession}' already exists — check for a stuck session (tmux kill-session -t ${tmuxSession}) and retry`,
@@ -680,8 +691,8 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   const termCols = colsResult.exitCode === 0 ? colsResult.stdout.toString().trim() : "220";
   const termLines = linesResult.exitCode === 0 ? linesResult.stdout.toString().trim() : "50";
 
-  const newSession = Bun.spawnSync([
-    "tmux", "new-session", "-d", "-s", tmuxSession,
+  const newSession = spawnTmux([
+    "new-session", "-d", "-s", tmuxSession,
     "-x", termCols,
     "-y", termLines,
   ]);
@@ -691,9 +702,9 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     );
   }
   // Rename the default window created with the session (base-index agnostic)
-  Bun.spawnSync(["tmux", "rename-window", "-t", tmuxSession, "monitor"]);
+  spawnTmux(["rename-window", "-t", `=${tmuxSession}`, "monitor"]);
   // Use largest-client sizing so attaching a wide terminal fills the windows
-  Bun.spawnSync(["tmux", "set-option", "-t", tmuxSession, "window-size", "largest"]);
+  spawnTmux(["set-option", "-t", `=${tmuxSession}`, "window-size", "largest"]);
 
   const synapseCliPath = resolve(
     process.execPath === process.argv[0]
@@ -712,22 +723,21 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   for (const agent of config.agents) {
     // Generate a UUID to pass as --session-id so we know it before launch.
     const sessionId = crypto.randomUUID();
-    const absCwd = resolve(defaultAgentDir(taskName, agent.name));
+    const absCwd = resolve(defaultAgentDir(runFolderName, agent.name));
     // Three-segment CLAUDE.md: generated in synapse-managed scratch from
     // templates plus this agent's task.yml `focus`.
     writeAgentClaudeMd(absCwd, agent);
     console.log(
       `synapse: launching window '${agent.name}' (${agent.role}) in ${absCwd}`,
     );
-    launchAgentWindow(tmuxSession, taskName, agent, dbFile, claudePath, sessionId, runId, projectRoot);
+    launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, runId, projectRoot);
     cmdRegister(agent.name, agent.role, sessionId, runId);
   }
 
   // Start monitor in the 'monitor' tmux window
   if (!noMonitor) {
     const monitorCmd = `SYNAPSE_DB='${dbFile}' ${synapseCliPath} monitor --session ${tmuxSession} --run-id ${runId} 2>&1 | tee '${dbFile.replace(/synapse\.db$/, "monitor.log")}'`;
-    const r = Bun.spawnSync([
-      "tmux",
+    const r = spawnTmux([
       "send-keys",
       "-t",
       `${tmuxSession}:monitor`,
@@ -836,7 +846,7 @@ export function cmdStop(name: string, tmuxSession: string, runId?: number) {
     "tmux",
     "kill-window",
     "-t",
-    `${tmuxSession}:${name}`,
+    `=${tmuxSession}:${name}`,
   ]);
   if (killResult.exitCode !== 0) {
     const stderr = killResult.stderr.toString().trim();
@@ -847,7 +857,7 @@ export function cmdStop(name: string, tmuxSession: string, runId?: number) {
 
 export function cmdAttach(name: string, tmuxSession: string) {
   const result = Bun.spawnSync(
-    ["tmux", "attach-session", "-t", `${tmuxSession}:${name}`],
+    ["tmux", "attach-session", "-t", `=${tmuxSession}:${name}`],
     { stdio: ["inherit", "inherit", "inherit"] },
   );
   if (result.exitCode !== 0) {

@@ -334,7 +334,7 @@ export function startUi(port: number, dev = false) {
         let uiWindow: string | null = null;
         if (tmuxPane) {
           const s = Bun.spawnSync(["tmux", "display-message", "-p", "-t", tmuxPane, "#S"]);
-          const w = Bun.spawnSync(["tmux", "display-message", "-p", "-t", tmuxPane, "#W"]);
+          const w = Bun.spawnSync(["tmux", "display-message", "-p", "-t", tmuxPane, "#I"]);
           if (s.exitCode === 0) uiSession = new TextDecoder().decode(s.stdout).trim();
           if (w.exitCode === 0) uiWindow  = new TextDecoder().decode(w.stdout).trim();
         }
@@ -506,13 +506,8 @@ export function startUi(port: number, dev = false) {
           .then((body: any) => {
             const goal = String(body?.goal ?? "").trim();
             const configPath = String(body?.config_path ?? DEFAULT_TASK_TEMPLATE).trim();
-            if (!goal) {
-              return Response.json(
-                { ok: false, error: "missing goal" },
-                { status: 400 },
-              );
-            }
-            const args = [...synapseCommand(), "start", configPath, "--goal", goal];
+            const args = [...synapseCommand(), "start", configPath];
+            if (goal) args.push("--goal", goal);
             if (body?.no_monitor) args.push("--no-monitor");
             const result = Bun.spawnSync({
               cmd: args,

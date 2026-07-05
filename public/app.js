@@ -11,18 +11,25 @@
   const killSessionBtn = $('kill-session-btn');
   const finishRunBtn   = $('finish-run-btn');
   const stopRunBtn     = $('stop-run-btn');
-  const newRunBtn   = $('new-run-btn');
   const startPanel  = $('start-run-panel');
   const startGoal   = $('start-goal-input');
   const startSubmit = $('start-run-submit');
   const startCancel = $('start-run-cancel');
   const startStatus = $('start-run-status');
   const fileViewerPanel = $('file-viewer-panel');
-  const fileViewerTitle = $('file-viewer-title');
   const fileViewerBody  = $('file-viewer-body');
   const fileViewerClose = $('file-viewer-close');
   const fileViewerOpenExt = $('file-viewer-open-ext');
+  const fileViewerBreadcrumb = $('file-viewer-breadcrumb');
+  const fileViewerLineCount = $('file-viewer-linecount');
+  const fileViewerCopy = $('file-viewer-copy');
+  const fileViewerWrapToggle = $('file-viewer-wrap-toggle');
+  const fileViewerMaximize = $('file-viewer-maximize');
+  const fileViewerSearch = $('file-viewer-search');
+  const fileViewerSearchCount = $('file-viewer-search-count');
+  const fileViewerResize = $('file-viewer-resize');
   const projectNameEl = $('project-name');
+  const historyPanel = $('history-panel');
 
   let totalMsgs = 0;
   const state = {
@@ -31,10 +38,10 @@
     agents: new Map(),
     messages: new Map(),
     seenMsgIds: new Set(),
-    unreadCounts: new Map(), // runId -> count of unseen messages
-    managerActivity: new Map(), // runId -> sorted array of activity items
+    unreadCounts: new Map(),
+    managerActivity: new Map(),
   };
-  let _selectToken = 0; // race guard for selectRun fetches
+  let _selectToken = 0;
 
   // Theme toggle
   const themeBtn = $('theme-btn');
@@ -84,8 +91,6 @@
     return el.outerHTML;
   }
 
-  // Highlight patterns in plain text nodes: file paths, --flags, numbers with units.
-  // Skips nodes already inside <code> or <pre> so we don't double-wrap.
   const HIGHLIGHT_RE = /(`[^`]+`|(?:[\w./-]+\/[\w./-]+(?:\.[\w]+)?|[\w.-]+\.(?:md|ts|tsx|js|jsx|json|yml|yaml|sql|sh|css|html|toml|env|txt))|--[\w-]+(?:=\S+)?|\b\d+(?:\.\d+)?\s*(?:KB|MB|GB|ms|s|px|%)\b)/g;
 
   const SEMANTIC_OK  = /^(pass(?:ed|es)?|ok|lgtm|fixed|done|success(?:ful)?|approved|merged|clean|green|built|deployed)$/i;
@@ -195,6 +200,62 @@
     startStatus.style.color = ok ? 'var(--idle)' : 'var(--error)';
   }
 
+  // Area 6: extract file links into a chip row when there are 3+ distinct paths
+  function maybeExtractFilesRow(msgBodyEl, contentEl) {
+    const links = Array.from(contentEl.querySelectorAll('code.msg-file-link'));
+    const seen = new Set();
+    const unique = links.filter(c => {
+      if (seen.has(c.dataset.path)) return false;
+      seen.add(c.dataset.path);
+      return true;
+    });
+    if (unique.length < 3) return;
+    // Replace inline links with plain code
+    links.forEach(c => {
+      const plain = document.createElement('code');
+      plain.className = c.className.replace('msg-file-link', '').trim();
+      plain.textContent = c.textContent;
+      c.replaceWith(plain);
+    });
+    // Build chip row
+    const row = document.createElement('div');
+    row.className = 'files-touched';
+    const lbl = document.createElement('span');
+    lbl.className = 'files-touched-label';
+    lbl.textContent = 'Files:';
+    row.appendChild(lbl);
+    for (const link of unique) {
+      const chip = document.createElement('code');
+      chip.className = 'msg-file-link files-touched-chip';
+      chip.dataset.path = link.dataset.path;
+      chip.textContent = link.dataset.path;
+      row.appendChild(chip);
+    }
+    msgBodyEl.appendChild(row);
+  }
+
+  // Area 5: attach show-more toggle to tall message rows
+  function maybeAddExpandToggle(div, contentEl) {
+    // Use rAF so the element is in the DOM and has layout
+    requestAnimationFrame(() => {
+      if (contentEl.scrollHeight > 200) {
+        div.classList.add('msg-collapsed');
+        const btn = document.createElement('button');
+        btn.className = 'msg-expand-btn';
+        btn.textContent = 'show more';
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const collapsed = div.classList.toggle('msg-collapsed');
+          btn.textContent = collapsed ? 'show more' : 'show less';
+        });
+        div.querySelector('.message-body').appendChild(btn);
+      }
+    });
+  }
+
+  // Type icons for area 4
+  const TYPE_ICONS = { TASK: '↳', QUESTION: '?', REPLY: '✓' };
+
   function buildMessageRow(msg, allMsgs) {
     console.log('[buildMessageRow] id=' + msg.id + ' type=' + JSON.stringify(msg.type) + ' from=' + msg.from_agent + ' to=' + msg.to_agent);
     const isHuman = msg.from_agent === 'operator';
@@ -203,6 +264,8 @@
     const avi = initials(sender);
     const t = (msg.type || '').toUpperCase();
     const typeBadge = t ? '<span class="msg-type-badge msg-type-' + esc(t) + '">' + esc(t) + '</span>' : '';
+    const typeIcon = (!isHuman && TYPE_ICONS[t])
+      ? '<span class="msg-type-icon">' + esc(TYPE_ICONS[t]) + '</span>' : '';
     const route = isHuman
       ? esc(msg.to_agent)
       : esc(msg.from_agent) + ' <span style="color:var(--muted)">→</span> ' + esc(msg.to_agent);
@@ -210,13 +273,14 @@
     const div = document.createElement('div');
     div.className = 'message-row ' + direction;
     div.dataset.msgId = msg.id;
+    div.dataset.msgType = t;  // Area 4: for CSS left-accent
 
-    const useHighlight = t === 'REPLY' ||
-                         (!isHuman && t === 'TASK');
+    const useHighlight = t === 'REPLY' || (!isHuman && t === 'TASK');
     div.innerHTML =
       '<div class="message-avatar">' + esc(avi) + '</div>' +
       '<div class="message-body">' +
         '<div class="message-header">' +
+          typeIcon +
           '<span class="message-sender">' + route + '</span>' +
           typeBadge +
           '<span class="message-time">' + esc(fmtTime(msg.created_at || '')) + '</span>' +
@@ -224,9 +288,13 @@
         '</div>' +
         (useHighlight ? '' : renderMd(msg.body || '')) +
       '</div>';
+
+    let contentEl;
     if (useHighlight) {
-      div.querySelector('.message-body').appendChild(renderMdHighlighted(msg.body || ''));
+      contentEl = renderMdHighlighted(msg.body || '');
+      div.querySelector('.message-body').appendChild(contentEl);
     } else {
+      contentEl = div.querySelector('.message-content');
       autoHighlight(div.querySelector('.message-body'));
     }
 
@@ -238,13 +306,7 @@
       if (isQuestionAnswer) return null;
     }
 
-    // Render interactive question card for QUESTION messages to operator that
-    // don't already have a reply. We key "answered" off an actual STATUS reply
-    // row (ref_id -> this message, from operator) rather than msg.status: the
-    // status column is a separate agent-inbox pending/delivered/read pipeline
-    // that the operator's web reply never touches, so relying on it left the
-    // card reappearing (unanswered) on every reload even after a real reply
-    // had been persisted.
+    // Render interactive question card for QUESTION messages to operator
     if (t === 'QUESTION' && msg.to_agent === 'operator') {
       const reply = (allMsgs || []).find(
         m => m.ref_id === msg.id && m.from_agent === 'operator',
@@ -264,6 +326,16 @@
       }
     }
 
+    // Area 6: files chip row (not for QUESTION — those need inline interactivity)
+    if (contentEl && t !== 'QUESTION') {
+      maybeExtractFilesRow(div.querySelector('.message-body'), contentEl);
+    }
+
+    // Area 5: collapse long non-QUESTION messages
+    if (contentEl && t !== 'QUESTION') {
+      maybeAddExpandToggle(div, contentEl);
+    }
+
     return div;
   }
 
@@ -277,11 +349,6 @@
       try { options = JSON.parse(msg.options); } catch {}
     }
 
-    // No generic Yes/No/OK fallback: a QUESTION with no real options means the
-    // agent didn't specify them (now rejected at send-time — see cmdSend), or
-    // this is an older message from before that check existed. Either way,
-    // showing made-up buttons is misleading, so just fall through to the
-    // free-text reply box below.
     if (options.length > 0) {
       const optDiv = document.createElement('div');
       optDiv.className = 'question-options';
@@ -330,15 +397,12 @@
     return card;
   }
 
-  // Find the oldest unresolved QUESTION for operator in the current run (FIFO).
   function findPendingQuestion() {
     const runId = state.selectedRunId;
     if (runId === null) return null;
     const run = state.runs.find(r => r.id === runId);
-    // If run not yet loaded in state.runs, assume active (operator-thread fires before runs-list)
     if (run && run.status !== 'running') return null;
     const msgs = state.messages.get(runId) || [];
-    // oldest first — if multiple QUESTIONs stack up, answer them in arrival order
     for (let i = 0; i < msgs.length; i++) {
       const m = msgs[i];
       if (m.type !== 'QUESTION' || m.to_agent !== 'operator') continue;
@@ -361,7 +425,6 @@
     const runId = msg.run_id || state.selectedRunId;
     const msgs = state.messages.get(runId) || [];
     if (msgs.some(m => m.ref_id === msg.id && m.from_agent === 'operator')) return;
-    // Disable inline card while submitting
     if (card) {
       card.querySelectorAll('button').forEach(b => { b.disabled = true; });
       const input = card.querySelector('.question-input');
@@ -381,7 +444,6 @@
       });
       const json = await res.json();
       if (json.ok) {
-        // Replace the question card with a compact resolved indicator
         const resolvedDiv = document.createElement('div');
         resolvedDiv.className = 'question-resolved';
         resolvedDiv.textContent = '✓ ' + replyText.trim();
@@ -444,7 +506,6 @@
       syncComposeMode();
       return;
     }
-    // If this is an operator REPLY answering a QUESTION, fold into the card.
     if (msg.type === 'REPLY' && msg.from_agent === 'operator' && msg.ref_id) {
       const refRow = msgList.querySelector('.message-row[data-msg-id="' + msg.ref_id + '"]');
       const card = refRow && refRow.querySelector('.question-card:not([data-resolved])');
@@ -458,7 +519,6 @@
         return;
       }
     }
-    // Default: append as a normal message row.
     totalMsgs++;
     countBadge.textContent = totalMsgs + ' messages';
     const allMsgs = state.messages.get(msg.run_id) || [msg];
@@ -499,8 +559,6 @@
           console.log('[renderMessages] PROGRESS branch taken for id=' + item.data.id);
           msgList.appendChild(buildActivityMarker(item.data));
         } else {
-          // Suppress operator REPLY rows that are answers to QUESTION messages —
-          // the answer is folded into the QUESTION card instead.
           const isQuestionAnswer = item.data.type === 'REPLY' &&
             item.data.from_agent === 'operator' &&
             item.data.ref_id &&
@@ -514,8 +572,7 @@
           }
         }
       } else {
-        const a = item.data;
-        msgList.appendChild(buildActivityMarker(a));
+        msgList.appendChild(buildActivityMarker(item.data));
       }
     }
     countBadge.textContent = totalMsgs + ' messages';
@@ -523,27 +580,45 @@
     syncComposeMode();
   }
 
+  // Area 3: agent strip with avatar rings
   function renderAgentsStrip(agents) {
     const strip = $('agents-strip');
     if (!strip) return;
+    // Keep the label, clear the rest
+    const label = strip.querySelector('.agents-strip-label');
+    strip.innerHTML = '';
+    if (label) strip.appendChild(label);
+
     if (!agents || !agents.length) {
-      strip.innerHTML = '<span class="agents-empty">no agents</span>';
+      const empty = document.createElement('span');
+      empty.className = 'agents-empty';
+      empty.textContent = 'no agents';
+      strip.appendChild(empty);
       return;
     }
-    strip.innerHTML = agents.map(a => {
+    const run = state.runs.find(r => r.id === state.selectedRunId);
+    for (const a of agents) {
       const st = (a.status || 'unknown').toLowerCase();
       const dotState = ['idle','busy','stopped'].includes(st) ? st : 'unknown';
-      const badge = a.pending_count > 0
-        ? '<span class="agent-pending">' + a.pending_count + '</span>' : '';
-      return '<span class="agent-chip" data-window="' + esc(a.window_name) + '">' +
-        '<span class="agent-state-dot" data-state="' + esc(dotState) + '"></span>' +
-        '<span class="agent-name">' + esc(a.window_name) + '</span>' +
-        badge +
-        '</span>';
-    }).join('');
-    const run = state.runs.find(r => r.id === state.selectedRunId);
-    if (run) {
-      strip.querySelectorAll('.agent-chip[data-window]').forEach(chip => {
+      const chip = document.createElement('span');
+      chip.className = 'agent-chip';
+      chip.dataset.window = a.window_name;
+      chip.title = a.window_name + ' · ' + st;
+
+      const avatar = document.createElement('span');
+      avatar.className = 'agent-avatar';
+      avatar.dataset.state = dotState;
+      avatar.textContent = initials(a.window_name);
+      chip.appendChild(avatar);
+
+      if (a.pending_count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'agent-pending';
+        badge.textContent = a.pending_count;
+        chip.appendChild(badge);
+      }
+
+      if (run) {
         chip.addEventListener('click', () => {
           fetch('/focus-agent', {
             method: 'POST',
@@ -551,7 +626,8 @@
             body: JSON.stringify({ session: run.session, window: chip.dataset.window }),
           });
         });
-      });
+      }
+      strip.appendChild(chip);
     }
   }
 
@@ -565,34 +641,149 @@
     return runHasBusyAgent(run.id) ? 'Busy' : 'Idle';
   }
 
-  function renderRunsSidebar() {
-    const sidebar = $('runs-sidebar-list');
-    if (!sidebar) return;
-    sidebar.innerHTML = state.runs.map(run => {
-      const isRunning = run.status === 'running';
-      const isSelected = run.id === state.selectedRunId;
-      const unread = !isSelected && (state.unreadCounts.get(run.id) || 0);
-      const badge = unread ? '<span class="run-unread">' + unread + '</span>' : '';
-      const dotState = !isRunning ? 'done' : runHasBusyAgent(run.id) ? 'running' : 'standby';
-      return '<div class="run-item' + (isSelected ? ' selected' : '') + '" data-run-id="' + run.id + '">' +
-        '<span class="run-dot" data-state="' + dotState + '"></span>' +
-        '<div class="run-item-info">' +
-          '<span class="run-label">run #' + run.id + badge +
-          '</span>' +
-          '<span class="run-session">' + esc(run.session || '') + '</span>' +
-          (!isRunning ? '<span class="run-status-badge">[' + esc(run.status) + ']</span>' : '') +
-        '</div>' +
-      '</div>';
-    }).join('');
-    sidebar.querySelectorAll('.run-item').forEach(el => {
-      el.addEventListener('click', () => selectRun(Number(el.dataset.runId)));
+  // Area 1: history panel toggle
+  function closeHistoryPanel() {
+    if (historyPanel) historyPanel.classList.remove('open');
+  }
+
+  function renderHistoryPanel() {
+    if (!historyPanel) return;
+    const historical = state.runs.filter(r => r.status !== 'running');
+    if (!historical.length) { historyPanel.innerHTML = ''; return; }
+
+    const groups = {};
+    for (const run of historical) {
+      const s = run.status || 'unknown';
+      if (!groups[s]) groups[s] = [];
+      groups[s].push(run);
+    }
+    historyPanel.innerHTML = '';
+    for (const [status, runs] of Object.entries(groups)) {
+      const lbl = document.createElement('div');
+      lbl.className = 'history-group-label';
+      lbl.textContent = status;
+      historyPanel.appendChild(lbl);
+      for (const run of runs) {
+        const item = document.createElement('div');
+        item.className = 'history-run-item' + (run.id === state.selectedRunId ? ' selected' : '');
+        item.dataset.runId = run.id;
+        const dot = document.createElement('span');
+        dot.className = 'run-dot';
+        dot.dataset.state = 'done';
+        item.appendChild(dot);
+        const name = document.createElement('span');
+        name.textContent = 'run-' + run.id;
+        item.appendChild(name);
+        item.addEventListener('click', () => {
+          closeHistoryPanel();
+          selectRun(run.id);
+        });
+        historyPanel.appendChild(item);
+      }
+    }
+  }
+
+  // Area 1 + 2: render tabs (running only) + history toggle + status labels
+  function renderRunsTabs() {
+    const tabsEl = $('runs-tabs');
+    if (!tabsEl) return;
+    tabsEl.innerHTML = '';
+
+    const runningRuns = state.runs.filter(r => r.status === 'running');
+    const historicalRuns = state.runs.filter(r => r.status !== 'running');
+    // If selected run is historical, show it as a ghost tab
+    const selectedRun = state.runs.find(r => r.id === state.selectedRunId);
+    const showGhost = selectedRun && selectedRun.status !== 'running';
+
+    for (const run of runningRuns) {
+      tabsEl.appendChild(buildRunTab(run, false));
+    }
+    if (showGhost) {
+      tabsEl.appendChild(buildRunTab(selectedRun, true));
+    }
+
+    // Spacer pushes history + new-run to the right
+    const spacer = document.createElement('span');
+    spacer.className = 'tabs-spacer';
+    tabsEl.appendChild(spacer);
+
+    // History toggle
+    if (historicalRuns.length > 0) {
+      const histBtn = document.createElement('button');
+      histBtn.id = 'history-toggle-btn';
+      histBtn.textContent = 'History ▾';
+      histBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        renderHistoryPanel();
+        historyPanel.classList.toggle('open');
+      });
+      tabsEl.appendChild(histBtn);
+    }
+
+    // New run button
+    const newBtn = document.createElement('button');
+    newBtn.id = 'new-run-btn';
+    newBtn.className = 'new-run-btn';
+    newBtn.title = 'Start a new run';
+    newBtn.textContent = '+';
+    newBtn.addEventListener('click', () => {
+      startPanel.classList.toggle('open');
+      if (startPanel.classList.contains('open')) startGoal.focus();
     });
+    tabsEl.appendChild(newBtn);
+  }
+
+  function buildRunTab(run, isGhost) {
+    const isSelected = run.id === state.selectedRunId;
+    const isRunning = run.status === 'running';
+    const unread = !isSelected && (state.unreadCounts.get(run.id) || 0);
+
+    // Area 2: status label
+    let statusLabel;
+    if (isRunning) {
+      statusLabel = runHasBusyAgent(run.id) ? 'Busy' : 'Idle';
+    } else {
+      statusLabel = run.status;
+    }
+
+    // Area 2: tooltip
+    const agentCount = (state.agents.get(run.id) || []).length;
+    const tooltipText = 'run-' + run.id + ' · ' + (run.session || '') + ' · ' + (run.status || '') + ' · ' + agentCount + ' agents';
+
+    const tab = document.createElement('button');
+    tab.className = 'run-tab' + (isSelected ? ' selected' : '');
+    tab.dataset.runId = run.id;
+    tab.title = tooltipText;
+    if (isGhost) tab.dataset.history = 'true';
+
+    const dotState = !isRunning ? 'done' : runHasBusyAgent(run.id) ? 'running' : 'standby';
+    const dot = document.createElement('span');
+    dot.className = 'run-dot';
+    dot.dataset.state = dotState;
+    tab.appendChild(dot);
+
+    const label = document.createElement('span');
+    label.textContent = 'run-' + run.id;
+    tab.appendChild(label);
+
+    if (unread) {
+      const badge = document.createElement('span');
+      badge.className = 'run-unread';
+      badge.textContent = unread;
+      tab.appendChild(badge);
+    }
+
+    tab.addEventListener('click', () => {
+      closeHistoryPanel();
+      selectRun(run.id);
+    });
+    return tab;
   }
 
   function updateThreadHeader(run) {
     const titleEl = $('thread-title');
     if (!titleEl || !run) return;
-    titleEl.innerHTML = '<span>run #' + run.id + ' · ' + esc(run.session) + '</span> ';
+    titleEl.innerHTML = '<span>run-' + run.id + '</span> ';
     const goalEl = $('thread-goal');
     const sepEl  = $('thread-sep');
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
@@ -627,7 +818,7 @@
   async function selectRun(runId, knownRun) {
     state.selectedRunId = runId;
     state.unreadCounts.delete(runId);
-    renderRunsSidebar();
+    renderRunsTabs();
 
     const run = state.runs.find(r => r.id === runId) || knownRun;
     updateThreadHeader(run);
@@ -644,7 +835,7 @@
       try {
         const res = await fetch('/thread?run_id=' + runId);
         const data = await res.json();
-        if (token !== _selectToken) return; // stale fetch, another run was selected
+        if (token !== _selectToken) return;
         if (data.messages) {
           const msgs = data.messages;
           state.messages.set(runId, msgs);
@@ -659,7 +850,6 @@
     }
 
     const isRunning = run && run.status === 'running';
-    // Use live lookups since compose DOM may be rebuilt by question mode
     const mi = $('msg-input');
     const sb = $('send-btn');
     if (mi) {
@@ -673,7 +863,7 @@
 
   function handleRunsList(payload) {
     state.runs = payload.runs || [];
-    renderRunsSidebar();
+    renderRunsTabs();
     if (state.selectedRunId === null && state.runs.length > 0) {
       const firstRunning = state.runs.find(r => r.status === 'running');
       selectRun((firstRunning || state.runs[0]).id);
@@ -685,8 +875,6 @@
         updateThreadHeader(run);
         updateKillSessionButton(run);
       }
-      // Runs list arrived after operator-thread — re-sync compose mode now that
-      // we know the run's status.
       syncComposeMode();
     }
   }
@@ -696,6 +884,15 @@
     connStatus.textContent = ok ? '● live' : '● reconnecting';
     header.classList.toggle('disconnected', !ok);
   }
+
+  // Close history panel on outside click
+  document.addEventListener('click', (e) => {
+    if (historyPanel && historyPanel.classList.contains('open')) {
+      if (!historyPanel.contains(e.target) && !e.target.closest('#history-toggle-btn')) {
+        closeHistoryPanel();
+      }
+    }
+  });
 
   function connectSSE() {
     const es = new EventSource('/events');
@@ -714,9 +911,8 @@
             const run = state.runs.find(r => r.id === payload.run_id);
             if (run) updateThreadHeader(run);
           }
-          renderRunsSidebar();
+          renderRunsTabs();
         } else {
-          // legacy fallback
           renderAgentsStrip(payload);
         }
       } catch {}
@@ -729,11 +925,9 @@
         const run = Array.isArray(payload) ? null : (payload.run || null);
         const managerActivity = Array.isArray(payload) ? [] : (payload.managerActivity || []);
         if (run) {
-          // Cache messages and activity for this run
           state.messages.set(run.id, messages);
           messages.forEach(m => state.seenMsgIds.add(m.id));
           state.managerActivity.set(run.id, managerActivity);
-          // Auto-select if nothing selected yet
           if (state.selectedRunId === null) {
             selectRun(run.id, run);
           } else if (run.id === state.selectedRunId) {
@@ -768,10 +962,9 @@
             appendMessage(msg);
           } else {
             state.unreadCounts.set(msg.run_id, (state.unreadCounts.get(msg.run_id) || 0) + 1);
-            renderRunsSidebar();
+            renderRunsTabs();
           }
         } else if (msg.status === 'read' && msg.type === 'QUESTION' && msg.to_agent === 'operator') {
-          // Collapse any unresolved question card for this message
           const row = msgList.querySelector('.message-row[data-msg-id="' + msg.id + '"]');
           if (row) {
             const card = row.querySelector('.question-card:not([data-resolved])');
@@ -782,7 +975,6 @@
               card.replaceWith(resolvedDiv);
             }
           }
-          // Update cached message status
           const cached = runMsgs.find(m => m.id === msg.id);
           if (cached) cached.status = 'read';
         }
@@ -873,8 +1065,7 @@
         run.session_killed_at = json.session_killed_at || new Date().toISOString();
         sessionActions.classList.remove('visible');
         flash('killed session ' + json.session, true);
-      }
-      else {
+      } else {
         killSessionBtn.disabled = false;
         killSessionBtn.textContent = 'Kill tmux session';
         flash(json.error || 'error', false);
@@ -901,6 +1092,7 @@
       });
       const json = await res.json();
       if (json.ok) {
+        if (stopRunBtn) { stopRunBtn.textContent = 'Stop Run'; }
         run.status = 'completed';
         run.session_killed_at = json.session_killed_at || new Date().toISOString();
         updateKillSessionButton(run);
@@ -921,7 +1113,7 @@
 
   async function startRun() {
     const goal = startGoal.value.trim();
-    if (!goal) { setStartStatus('goal required', false); return; }
+    if (!goal) { setStartStatus('goal required', false); startSubmit.disabled = false; return; }
     startSubmit.disabled = true;
     setStartStatus('starting...', true);
     try {
@@ -947,30 +1139,269 @@
     }
   }
 
-  newRunBtn.addEventListener('click', () => {
-    startPanel.classList.toggle('open');
-    if (startPanel.classList.contains('open')) startGoal.focus();
-  });
+  // --- File Viewer ---
 
-  async function openFileViewer(path) {
-    fileViewerTitle.textContent = path;
+  let fvRawContent = '';
+  let fvCurrentPath = '';
+  let fvSearchMatches = [];
+  let fvSearchIndex = 0;
+
+  function fvBreadcrumb(path) {
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length <= 3) return path;
+    return '…/' + parts.slice(-3).join('/');
+  }
+
+  function fvDetectLang(path) {
+    const ext = path.split('.').pop().toLowerCase();
+    const map = {
+      js: 'javascript', ts: 'typescript', tsx: 'typescript', jsx: 'javascript',
+      py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java',
+      cs: 'csharp', cpp: 'cpp', c: 'c', h: 'c', sh: 'bash', bash: 'bash',
+      zsh: 'bash', fish: 'bash', json: 'json', yaml: 'yaml', yml: 'yaml',
+      toml: 'ini', html: 'html', css: 'css', scss: 'scss', sql: 'sql',
+      xml: 'xml', md: 'markdown', swift: 'swift', kt: 'kotlin',
+    };
+    return map[ext] || 'plaintext';
+  }
+
+  function fvBuildCodeTable(lines, highlightedHtml) {
+    const table = document.createElement('div');
+    table.className = 'fv-code-table';
+    // Split highlighted html by newlines
+    const hlLines = highlightedHtml.split('\n');
+    // Remove trailing empty line that hljs sometimes adds
+    if (hlLines.length > lines.length && hlLines[hlLines.length - 1] === '') hlLines.pop();
+    lines.forEach((_, i) => {
+      const row = document.createElement('div');
+      row.className = 'fv-line';
+      row.dataset.line = i + 1;
+      const ln = document.createElement('span');
+      ln.className = 'fv-ln';
+      ln.textContent = i + 1;
+      const code = document.createElement('span');
+      code.className = 'fv-code';
+      code.innerHTML = hlLines[i] !== undefined ? hlLines[i] : '';
+      row.appendChild(ln);
+      row.appendChild(code);
+      table.appendChild(row);
+    });
+    return table;
+  }
+
+  async function openFileViewer(pathWithLine) {
+    const colonLine = pathWithLine.match(/:(\d+)$/);
+    const filePath  = colonLine ? pathWithLine.slice(0, -colonLine[0].length) : pathWithLine;
+    const targetLine = colonLine ? parseInt(colonLine[1], 10) : null;
+
+    fvCurrentPath = filePath;
+    fileViewerBreadcrumb.textContent = fvBreadcrumb(filePath);
+    fileViewerBreadcrumb.title = filePath;
     fileViewerBody.textContent = 'Loading…';
     fileViewerPanel.classList.add('open');
-    const res = await fetch('/file?path=' + encodeURIComponent(path));
+
+    const res = await fetch('/file?path=' + encodeURIComponent(filePath));
     if (!res.ok) {
       fileViewerBody.textContent = res.status === 403 ? 'Access denied.' : 'File not found.';
       return;
     }
     const { content } = await res.json();
+    fvRawContent = content;
+    fvSearchMatches = [];
+    fvSearchIndex = 0;
+    fileViewerSearch.value = '';
+    fileViewerSearchCount.textContent = '';
+
     fileViewerBody.innerHTML = '';
-    if (path.endsWith('.md') || path.endsWith('.txt')) {
-      fileViewerBody.appendChild(renderMdHighlighted(content));
+
+    const isMd = filePath.endsWith('.md') || filePath.endsWith('.txt');
+    if (isMd) {
+      const div = document.createElement('div');
+      div.className = 'md-rendered';
+      div.appendChild(renderMdHighlighted(content));
+      fileViewerBody.appendChild(div);
+      fileViewerLineCount.textContent = '';
     } else {
-      const pre = document.createElement('pre');
-      pre.textContent = content;
-      fileViewerBody.appendChild(pre);
+      const lines = content.split('\n');
+      // Remove trailing empty line from file end
+      if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+      fileViewerLineCount.textContent = lines.length + ' lines';
+
+      let hlHtml;
+      try {
+        const lang = fvDetectLang(filePath);
+        if (window.hljs) {
+          const result = hljs.highlight(content, { language: lang, ignoreIllegals: true });
+          hlHtml = result.value;
+        } else {
+          hlHtml = content.split('\n').map(l => escHtml(l)).join('\n');
+        }
+      } catch (e) {
+        hlHtml = content.split('\n').map(l => escHtml(l)).join('\n');
+      }
+
+      const table = fvBuildCodeTable(lines, hlHtml);
+      fileViewerBody.appendChild(table);
+
+      if (targetLine) {
+        const row = table.querySelector(`[data-line="${targetLine}"]`);
+        if (row) {
+          row.scrollIntoView({ block: 'center' });
+          row.classList.add('line-highlight');
+          row.addEventListener('animationend', () => row.classList.remove('line-highlight'), { once: true });
+        }
+      }
     }
   }
+
+  function escHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Wrap toggle
+  let fvWrapped = false;
+  fileViewerWrapToggle.addEventListener('click', () => {
+    fvWrapped = !fvWrapped;
+    fileViewerBody.classList.toggle('wrap-mode', fvWrapped);
+    fileViewerWrapToggle.textContent = fvWrapped ? 'Wrap' : 'No wrap';
+  });
+
+  // Copy button
+  fileViewerCopy.addEventListener('click', () => {
+    navigator.clipboard.writeText(fvRawContent).then(() => {
+      const orig = fileViewerCopy.textContent;
+      fileViewerCopy.textContent = 'Copied!';
+      setTimeout(() => { fileViewerCopy.textContent = orig; }, 1500);
+    });
+  });
+
+  // Maximize toggle
+  fileViewerMaximize.addEventListener('click', () => {
+    fileViewerPanel.classList.toggle('maximized');
+  });
+
+  // In-file search
+  function fvClearSearch() {
+    fileViewerBody.querySelectorAll('.search-match').forEach(el => {
+      el.replaceWith(document.createTextNode(el.textContent));
+    });
+    fileViewerBody.normalize();
+    fvSearchMatches = [];
+    fvSearchIndex = 0;
+    fileViewerSearchCount.textContent = '';
+  }
+
+  function fvRunSearch(query) {
+    fvClearSearch();
+    if (!query) return;
+
+    const walker = document.createTreeWalker(fileViewerBody, NodeFilter.SHOW_TEXT);
+    const ranges = [];
+    let node;
+    const ql = query.toLowerCase();
+    while ((node = walker.nextNode())) {
+      const text = node.textContent;
+      const tl = text.toLowerCase();
+      let idx = 0;
+      while ((idx = tl.indexOf(ql, idx)) !== -1) {
+        ranges.push({ node, start: idx, end: idx + query.length });
+        idx += query.length;
+      }
+    }
+
+    // Apply marks in reverse order per node to avoid offset shifts
+    const byNode = new Map();
+    ranges.forEach(r => {
+      if (!byNode.has(r.node)) byNode.set(r.node, []);
+      byNode.get(r.node).push(r);
+    });
+
+    const marks = [];
+    byNode.forEach((hits, node) => {
+      hits.sort((a, b) => b.start - a.start);
+      hits.forEach(({ start, end }) => {
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, end);
+        const mark = document.createElement('mark');
+        mark.className = 'search-match';
+        range.surroundContents(mark);
+        marks.push(mark);
+      });
+    });
+
+    fvSearchMatches = Array.from(fileViewerBody.querySelectorAll('.search-match'))
+      .sort((a, b) => {
+        const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+        return ra.top !== rb.top ? ra.top - rb.top : ra.left - rb.left;
+      });
+    fvSearchIndex = 0;
+    fvHighlightCurrentMatch();
+    fileViewerSearchCount.textContent = fvSearchMatches.length ? `1 / ${fvSearchMatches.length}` : '0';
+  }
+
+  function fvHighlightCurrentMatch() {
+    fvSearchMatches.forEach((m, i) => {
+      m.classList.toggle('search-current', i === fvSearchIndex);
+    });
+    if (fvSearchMatches.length) {
+      fvSearchMatches[fvSearchIndex].scrollIntoView({ block: 'center' });
+      fileViewerSearchCount.textContent = `${fvSearchIndex + 1} / ${fvSearchMatches.length}`;
+    }
+  }
+
+  let fvSearchTimer = null;
+  fileViewerSearch.addEventListener('input', () => {
+    clearTimeout(fvSearchTimer);
+    fvSearchTimer = setTimeout(() => fvRunSearch(fileViewerSearch.value), 150);
+  });
+
+  fileViewerSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!fvSearchMatches.length) return;
+      if (e.shiftKey) {
+        fvSearchIndex = (fvSearchIndex - 1 + fvSearchMatches.length) % fvSearchMatches.length;
+      } else {
+        fvSearchIndex = (fvSearchIndex + 1) % fvSearchMatches.length;
+      }
+      fvHighlightCurrentMatch();
+    } else if (e.key === 'Escape') {
+      fileViewerSearch.value = '';
+      fvClearSearch();
+    }
+  });
+
+  // Drag-resize
+  (function () {
+    const savedW = localStorage.getItem('fv-width');
+    if (savedW) fileViewerPanel.style.width = savedW;
+
+    let dragging = false, startX, startW;
+    fileViewerResize.addEventListener('mousedown', e => {
+      dragging = true;
+      startX = e.clientX;
+      startW = fileViewerPanel.offsetWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const dx = startX - e.clientX;
+      const newW = Math.max(280, Math.min(window.innerWidth * 0.9, startW + dx));
+      fileViewerPanel.style.width = newW + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (!fileViewerPanel.classList.contains('maximized')) {
+        localStorage.setItem('fv-width', fileViewerPanel.style.width);
+      }
+    });
+  })();
 
   document.addEventListener('click', async (e) => {
     const link = e.target.closest('code.msg-file-link');
@@ -989,13 +1420,25 @@
     fetch('/open-file', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ path: fileViewerTitle.textContent })
+      body: JSON.stringify({ path: fvCurrentPath })
     });
   });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && fileViewerPanel.classList.contains('open')) {
-      fileViewerPanel.classList.remove('open');
+      if (document.activeElement === fileViewerSearch) {
+        fileViewerSearch.value = '';
+        fvClearSearch();
+        fileViewerSearch.blur();
+      } else {
+        fileViewerPanel.classList.remove('open');
+      }
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && fileViewerPanel.classList.contains('open')) {
+      e.preventDefault();
+      fileViewerSearch.focus();
+      fileViewerSearch.select();
     }
   });
 

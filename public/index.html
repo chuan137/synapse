@@ -6,7 +6,9 @@
 <title>Synapse</title>
 <script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/common.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -18,10 +20,11 @@
   <span id="msg-count-badge"></span>
 </header>
 <main>
-  <aside id="runs-sidebar">
-    <div class="sidebar-header"><span>Runs</span></div>
-    <div id="runs-sidebar-list"></div>
-    <button id="new-run-btn" class="new-run-btn" title="Start a new run">+ New Run</button>
+  <div id="messages-panel">
+    <div id="tabs-container">
+      <div id="runs-tabs"></div>
+      <div id="history-panel"></div>
+    </div>
     <div id="start-run-panel" class="start-run-panel">
       <textarea id="start-goal-input" placeholder="Goal for the new run"></textarea>
       <div class="start-run-actions">
@@ -30,20 +33,21 @@
       </div>
       <span id="start-run-status"></span>
     </div>
-  </aside>
-  <div id="messages-panel">
     <div id="thread-header">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div style="display:flex;align-items:baseline;gap:8px;min-width:0">
+      <div id="thread-header-row">
+        <div id="thread-title-group">
           <div id="thread-title">Thread</div>
           <span id="thread-sep" class="thread-sep">·</span>
           <div id="thread-goal" class="thread-goal"></div>
         </div>
-        <button id="stop-run-btn" style="display:none" title="Stop this run and kill tmux session">Stop Run</button>
+        <div id="thread-header-right">
+          <div id="agents-strip" class="agents-strip">
+            <span class="agents-strip-label">Agents</span>
+            <span class="agents-empty">no agents</span>
+          </div>
+          <button id="stop-run-btn" style="display:none" title="Stop this run and kill tmux session">Stop Run</button>
+        </div>
       </div>
-    </div>
-    <div id="agents-strip" class="agents-strip">
-      <span class="agents-empty">no agents</span>
     </div>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
     <div id="session-actions">
@@ -60,10 +64,25 @@
   </div>
 </main>
 <div id="file-viewer-panel">
+  <div id="file-viewer-resize"></div>
   <div id="file-viewer-header">
-    <span id="file-viewer-title"></span>
-    <button id="file-viewer-open-ext">Open in Editor</button>
-    <button id="file-viewer-close">✕</button>
+    <div id="file-viewer-topbar">
+      <span id="file-viewer-breadcrumb"></span>
+      <div id="file-viewer-topbar-actions">
+        <button id="file-viewer-open-ext" title="Open in Editor">✎ Edit</button>
+        <button id="file-viewer-maximize" title="Maximize">⤢</button>
+        <button id="file-viewer-close" title="Close">✕</button>
+      </div>
+    </div>
+    <div id="file-viewer-toolbar">
+      <span id="file-viewer-linecount"></span>
+      <button id="file-viewer-copy" title="Copy file contents">Copy</button>
+      <button id="file-viewer-wrap-toggle" title="Toggle line wrap">No wrap</button>
+      <div id="file-viewer-search-wrap">
+        <input id="file-viewer-search" type="text" placeholder="Search… (⌘F)">
+        <span id="file-viewer-search-count"></span>
+      </div>
+    </div>
   </div>
   <div id="file-viewer-body"></div>
 </div>
