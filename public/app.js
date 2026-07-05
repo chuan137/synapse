@@ -5,8 +5,6 @@
   const connStatus  = $('conn-status');
   const msgInput    = $('msg-input');
   const sendBtn     = $('send-btn');
-  const feedback    = $('send-feedback');
-  const countBadge  = $('msg-count-badge');
   const sessionActions = $('session-actions');
   const killSessionBtn = $('kill-session-btn');
   const finishRunBtn   = $('finish-run-btn');
@@ -520,7 +518,6 @@
       }
     }
     totalMsgs++;
-    countBadge.textContent = totalMsgs + ' messages';
     const allMsgs = state.messages.get(msg.run_id) || [msg];
     const row = buildMessageRow(msg, allMsgs);
     if (row) msgList.appendChild(row);
@@ -548,7 +545,6 @@
       const d = document.createElement('div');
       d.className = 'empty-state'; d.id = 'empty-msgs'; d.textContent = 'No messages yet.';
       msgList.appendChild(d);
-      countBadge.textContent = '';
       return;
     }
     for (const item of combined) {
@@ -575,7 +571,6 @@
         msgList.appendChild(buildActivityMarker(item.data));
       }
     }
-    countBadge.textContent = totalMsgs + ' messages';
     msgList.scrollTop = msgList.scrollHeight;
     syncComposeMode();
   }
@@ -783,11 +778,11 @@
   function updateThreadHeader(run) {
     const titleEl = $('thread-title');
     if (!titleEl || !run) return;
-    titleEl.innerHTML = '<span>run-' + run.id + '</span> ';
+    titleEl.innerHTML = run.goal ? '' : '<span>Thread</span>';
     const goalEl = $('thread-goal');
     const sepEl  = $('thread-sep');
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
-    if (sepEl)  sepEl.style.display = run.goal ? 'inline' : 'none';
+    if (sepEl)  sepEl.style.display = 'none';
   }
 
   function updateKillSessionButton(run) {
