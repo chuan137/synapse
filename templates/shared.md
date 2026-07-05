@@ -6,24 +6,30 @@ is identical for every agent; your role follows below.
 
 ## Roles and workflow
 
-The team's workflow is chosen up front for each task. Current default:
+Roles: `operator`, `manager`, `coder` (a team may run more than one),
+`reviewer`, `tester`. There is no fixed sequence — `manager` decides which
+roles a task needs and in what order, based on the task's shape, and
+announces that choice in its first `REPLY` to `operator`. If it later
+deviates (e.g. adds a tester pass it didn't originally plan), it says so
+in the next `REPLY`/`PROGRESS`.
 
-`operator` → `manager` → `coder` → `reviewer` → `coder` → `manager` → `tester` → `manager` → `operator`
+A few invariants hold regardless of the order `manager` picks:
 
-- `operator` gives the root task to `manager`.
-- `manager` decomposes it; for feature requests and bug fixes, writes a test
-  plan before delegating to `coder`.
-- `coder` implements in a worktree, then sends a review `TASK` to `reviewer`.
-- `reviewer` replies to `coder`; `coder` merges the worktree into `main`,
-  then reports done to `manager`.
-- `manager` dispatches a test `TASK` to `tester` (for feature/bug tasks).
-- `tester` executes the test plan and reports pass/fail to `manager`.
-- `manager` reports the final outcome to `operator`.
+- **Code changes generally require review** — `coder` sends a review
+  `TASK` to `reviewer` and merges into `main` only after approval,
+  skipped only if manager's `TASK` for that subtask explicitly waives
+  it.
+- **Complicated changes (feature/bug fix) generally require a test** —
+  `manager` typically writes a test plan before delegating to `coder`
+  and adds a `tester` pass after the reviewed merge, who reports
+  pass/fail directly back to `manager`. Trivial or low-risk tasks may
+  skip this.
 
-`TASK`/`REPLY` route hub-and-spoke through `manager`. The review round-trip
-between `coder` and `reviewer` is peer-to-peer. The tester reports directly
-to `manager`. Other team shapes may add or remove roles; this shape is the
-baseline.
+`TASK`/`REPLY` route hub-and-spoke through `manager` — `operator` gives
+the root task to `manager` and `manager` reports the final outcome back
+— except where a role's responsibilities say otherwise (review is
+peer-to-peer between `coder` and `reviewer`; `tester` reports directly
+to `manager`).
 
 ## Bootstrap
 
@@ -48,19 +54,26 @@ them. Project root is three levels up from cwd (`../../../`).
 
 - **`TASK`** — work assignment; sender expects a `REPLY` when done.
 - **`QUESTION`** — blocking question from `manager` to `operator`; halts sender until answered. Always include `--title`.
-- **`PROGRESS`** — one-way UI signal; no reply expected. Short markers only ("started", "delegating").
+- **`PROGRESS`** — one-way UI signal; no reply expected. Covers short activity markers ("started") and relayed verdicts from a subordinate (reviewer/tester outcome, a workflow deviation).
 - **`REPLY`** — everything else: done reports, answers, verdicts. Set `--ref-id` to close a TASK or QUESTION.
 
 > **`REPLY` vs `PROGRESS`:** if the recipient needs to read it to act, it is a `REPLY`. If it only signals activity, it is `PROGRESS`.
 
+Keep `PROGRESS` bodies to one line, pointing at evidence rather than
+restating content already visible elsewhere (e.g. a `TASK` you just sent
+shows up in the UI on its own; don't retype its body into a second
+message).
+
 ### QUESTION options
 
-Use `--options` to present 2–4 real, distinct choices. Rules:
+`--options` is required on every `QUESTION` to `operator` — the S-Deck
+card has no fallback without it, and `synapse send` rejects the message
+if it's missing.
 
-- Options must be real answers, not placeholders ("Yes", "OK") or deferrals ("describe in reply").
+- Provide 2–4 real, distinct answers — not placeholders ("Yes", "OK") or deferrals ("describe in reply").
 - If the question has multiple independent sub-questions, split into multiple QUESTIONs rather than cramming them into one.
-- If no real multiple-choice answers exist, omit `--options` entirely — the operator will use the free-text field.
-- The UI always appends an **"Other…"** button when options are shown. When the operator selects it, the free-text field is revealed for them to type. The agent will receive the typed value (not the button label) as the REPLY body — treat it as a free-text answer, not a signal to ask again.
+- If the answer space isn't naturally 2–4 buttons, give your best concrete guesses anyway — the operator can still free-type via "Chat about this" (below), so a guess that misses isn't a dead end.
+- The UI always appends a **"Chat about this"** button alongside the options. When the operator clicks it, a free-text field is revealed. The agent receives the typed value (not a button label) as the REPLY body — treat it as a free-text answer, not a signal to ask again.
 
 ## ref_id
 
@@ -84,10 +97,8 @@ unreadable.
 
 **Rule 1 — Reply to whoever tasked you, with the full result.**
 End every turn that completes assigned work by sending the result back to the
-agent who assigned it: what was done, what changed, the outcome. Not a
-summary. Manager replies to `operator`; coder to `manager`; reviewer to the
-coder who sent the review `TASK`, plus a `PROGRESS` copy to `manager`.
-Execute the `synapse send` before the turn ends.
+agent who assigned it (per the routing above): what was done, what changed,
+the outcome. Not a summary. Execute the `synapse send` before the turn ends.
 
 **Rule 2 — Announce milestones; stay silent otherwise.**
 On task started, key decision, blocker, or task complete, send a one-line
