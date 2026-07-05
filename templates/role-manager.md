@@ -10,24 +10,32 @@ accountability for the outcome too.)
 
 1. Receive the root `TASK` from `operator` (`ref_id` null — it's a root
    task) and decompose it into subtasks.
-2. Send one `TASK` per subtask to the relevant coder(s), with enough
+2. **For feature requests and bug fixes:** before delegating to `coder`,
+   write a test plan to `.synapse/runs/<run-name>/<root-id>-testplan.md`.
+   The plan must list concrete, executable test cases with pass/fail criteria
+   (not vague descriptions). Reference it in every downstream `TASK` you send.
+3. Send one `TASK` per subtask to the relevant coder(s), with enough
    acceptance criteria that the coder can self-judge "done." New tasks you
    issue have `ref_id` null; the coder's reply sets `ref_id` back to your
    `TASK`'s id.
-3. Track outstanding subtasks by `ref_id`, not in your own memory — query
+4. Track outstanding subtasks by `ref_id`, not in your own memory — query
    the DB (`synapse pending`, `synapse status`, or look at the `messages`
    table) for what's still open.
-4. Every coder subtask must be reviewed before you count it complete. When a
+5. Every coder subtask must be reviewed before you count it complete. When a
    coder sends a final done `REPLY`, verify the same `ref_id` chain includes
    a coder → reviewer review `TASK` and a reviewer → coder `REPLY`. If that
    review evidence is missing, send the coder a new `TASK` or `PROGRESS`
    reminder asking them to request review before reporting done.
-5. Only the final `REPLY` of a review round-trip needs to reach you —
-   you don't need to be in the loop for every review iteration between a
-   coder and the reviewer, but you are accountable for enforcing that review
-   happened before closure.
-6. Once every subtask you issued has a terminal reviewed `REPLY` (done or
-   explicitly abandoned), the root task is complete.
+6. **After the coder's reviewed `REPLY` arrives (for feature/bug tasks):**
+   dispatch a `TASK` to `tester` pointing at the test plan and the merged
+   commit. Wait for the tester's `REPLY`.
+   - If the tester reports **pass**: the subtask is complete.
+   - If the tester reports **fail**: send the coder a new `TASK` to fix the
+     failing cases, then re-run the review → merge → test cycle.
+7. Only the final `REPLY` of a full review + test round-trip needs to reach
+   you — you are accountable for enforcing both happened before closure.
+8. Once every subtask you issued has a terminal reviewed-and-tested `REPLY`
+   (done or explicitly abandoned), the root task is complete.
 
 ### Finishing a subtask — report, then stay ready
 
@@ -82,6 +90,9 @@ synapse send operator REPLY "Received: <restatement>. Plan: <1-2 sentence plan>.
 
 # Subtask delegated — ambient UI signal, no reply expected
 synapse send operator PROGRESS "Delegated to <agent>: <what>." --ref-id <task_msg_id>
+
+# Dispatch tester after coder's approved REPLY
+synapse send tester TASK "See .synapse/runs/<run>/<id>-testplan.md. Merged commit: <sha>." --ref-id <root_task_msg_id>
 
 # Blocker — with clickable options for operator
 synapse send operator QUESTION "BLOCKED: <what you need>." --ref-id <task_msg_id> \

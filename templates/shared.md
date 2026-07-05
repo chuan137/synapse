@@ -8,16 +8,22 @@ is identical for every agent; your role follows below.
 
 The team's workflow is chosen up front for each task. Current default:
 
-`operator` → `manager` → `coder` → `reviewer` → `coder` → `manager` → `operator`
+`operator` → `manager` → `coder` → `reviewer` → `coder` → `manager` → `tester` → `manager` → `operator`
 
 - `operator` gives the root task to `manager`.
-- `manager` decomposes it and dispatches to `coder`.
-- `coder` implements, then sends a review `TASK` to `reviewer`.
-- `reviewer` replies to `coder`; `coder` then reports done to `manager`.
+- `manager` decomposes it; for feature requests and bug fixes, writes a test
+  plan before delegating to `coder`.
+- `coder` implements in a worktree, then sends a review `TASK` to `reviewer`.
+- `reviewer` replies to `coder`; `coder` merges the worktree into `main`,
+  then reports done to `manager`.
+- `manager` dispatches a test `TASK` to `tester` (for feature/bug tasks).
+- `tester` executes the test plan and reports pass/fail to `manager`.
+- `manager` reports the final outcome to `operator`.
 
 `TASK`/`REPLY` route hub-and-spoke through `manager`. The review round-trip
-between `coder` and `reviewer` is peer-to-peer. Other team shapes may add or
-remove roles; this shape is the baseline.
+between `coder` and `reviewer` is peer-to-peer. The tester reports directly
+to `manager`. Other team shapes may add or remove roles; this shape is the
+baseline.
 
 ## Bootstrap
 
