@@ -27,7 +27,7 @@ run, if any, follows in the instance block below.
    ```bash
    cd ../../../   # project root
    git checkout main
-   git merge --no-ff task-<id> -m "task-<id>: <one-line summary>"
+   git merge --ff-only task-<id>
    git worktree remove .worktrees/task-<id>
    git branch -d task-<id>
    ```
