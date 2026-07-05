@@ -215,7 +215,24 @@
   .run-tab:hover { color: var(--text); background: var(--hover-bg); }
   .run-tab.selected { color: var(--text); border-bottom-color: var(--accent); background: var(--selected-bg); }
   .run-tab[data-history="true"] { opacity: 0.55; border-bottom-color: transparent; }
-  .run-tab[data-history="true"].selected { opacity: 0.75; }
+  .run-tab[data-history="true"].selected {
+    opacity: 1;
+    border-bottom-color: var(--muted);
+    color: var(--text);
+  }
+  .run-tab-close {
+    font-size: 9px;
+    color: var(--muted);
+    padding: 0 1px 0 3px;
+    line-height: 1;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+  }
+  .run-tab-close:hover {
+    color: var(--text);
+    background: var(--hover-bg);
+  }
   .run-dot {
     width: 7px;
     height: 7px;

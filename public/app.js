@@ -35,6 +35,7 @@
   const state = {
     runs: [],
     selectedRunId: null,
+    ghostRunId: null,
     agents: new Map(),
     messages: new Map(),
     seenMsgIds: new Set(),
@@ -676,6 +677,7 @@
         item.appendChild(name);
         item.addEventListener('click', () => {
           closeHistoryPanel();
+          state.ghostRunId = run.id;
           selectRun(run.id);
         });
         historyPanel.appendChild(item);
@@ -684,6 +686,25 @@
   }
 
   // Area 1 + 2: render tabs (running only) + history toggle + status labels
+  function closeGhostTab() {
+    state.ghostRunId = null;
+    const firstRunning = state.runs.find(r => r.status === 'running');
+    if (firstRunning) {
+      selectRun(firstRunning.id);
+    } else {
+      state.selectedRunId = null;
+      renderRunsTabs();
+      const titleEl = $('thread-title');
+      if (titleEl) titleEl.innerHTML = '<span>Thread</span>';
+      const goalEl = $('thread-goal');
+      if (goalEl) goalEl.textContent = '';
+      const sepEl = $('thread-sep');
+      if (sepEl) sepEl.style.display = 'none';
+      const msgsList = $('messages-list');
+      if (msgsList) msgsList.innerHTML = '<div class="empty-state" id="empty-msgs">No messages yet.</div>';
+    }
+  }
+
   function renderRunsTabs() {
     const tabsEl = $('runs-tabs');
     if (!tabsEl) return;
@@ -691,15 +712,16 @@
 
     const runningRuns = state.runs.filter(r => r.status === 'running');
     const historicalRuns = state.runs.filter(r => r.status !== 'running');
-    // If selected run is historical, show it as a ghost tab
-    const selectedRun = state.runs.find(r => r.id === state.selectedRunId);
-    const showGhost = selectedRun && selectedRun.status !== 'running';
+    // Ghost tab: pinned historical run, persists until ✕ is clicked
+    const ghostRun = state.ghostRunId
+      ? state.runs.find(r => r.id === state.ghostRunId && r.status !== 'running')
+      : null;
 
     for (const run of runningRuns) {
       tabsEl.appendChild(buildRunTab(run, false));
     }
-    if (showGhost) {
-      tabsEl.appendChild(buildRunTab(selectedRun, true));
+    if (ghostRun) {
+      tabsEl.appendChild(buildRunTab(ghostRun, true));
     }
 
     // Spacer pushes history + new-run to the right
@@ -771,6 +793,18 @@
       badge.className = 'run-unread';
       badge.textContent = unread;
       tab.appendChild(badge);
+    }
+
+    if (isGhost) {
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'run-tab-close';
+      closeBtn.textContent = '✕';
+      closeBtn.title = 'Close';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeGhostTab();
+      });
+      tab.appendChild(closeBtn);
     }
 
     tab.addEventListener('click', () => {
@@ -866,7 +900,7 @@
     renderRunsTabs();
     if (state.selectedRunId === null && state.runs.length > 0) {
       const firstRunning = state.runs.find(r => r.status === 'running');
-      selectRun((firstRunning || state.runs[0]).id);
+      selectRun((firstRunning || state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId) || state.runs[0]).id);
     } else if (state.selectedRunId !== null && !state.runs.some(r => r.id === state.selectedRunId) && state.runs.length > 0) {
       selectRun(state.runs[0].id);
     } else if (state.selectedRunId !== null) {
