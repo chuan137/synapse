@@ -985,6 +985,12 @@
         updateKillSessionButton(run);
       }
       syncComposeMode();
+      const hasRunning = state.runs.some(r => r.status === 'running');
+      const ghostActive = state.ghostRunId !== null && state.runs.some(r => r.id === state.ghostRunId);
+      if (!hasRunning && !ghostActive) {
+        state.selectedRunId = null;
+        showLanding();
+      }
     }
   }
 
