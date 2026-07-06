@@ -13,7 +13,6 @@
 </head>
 <body>
 <header id="header">
-  <span class="logo">SYNAPSE</span>
   <span id="project-name" class="project-name" title="Click to focus UI server terminal"></span>
   <span id="conn-status" class="disconnected">● connecting</span>
   <button id="theme-btn" title="Toggle light/dark theme">☀︎</button>
@@ -32,6 +31,7 @@
       </div>
       <span id="start-run-status"></span>
     </div>
+    <div id="history-landing" style="display:none"></div>
     <div id="thread-header">
       <div id="thread-header-row">
         <div id="thread-title-group">
@@ -55,8 +55,8 @@
     </div>
     <div id="compose">
       <div class="compose-input-wrap">
-        <textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>
-        <button id="send-btn" title="Send (⌘↵)">↑</button>
+        <textarea id="msg-input" placeholder="Message… (↵ send, ⇧↵ newline, ⌘↵ discussion)"></textarea>
+        <button id="send-btn" title="Send (↵)">↑</button>
       </div>
       <span id="send-feedback"></span>
     </div>

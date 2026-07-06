@@ -39,7 +39,7 @@
     --hover-soft: rgba(0,0,0,0.03);
     --hover-bg: rgba(0,0,0,0.04);
     --selected-bg: rgba(74,110,245,0.08);
-    --status-busy: #b45309;
+    --status-busy: #d97706;
   }
   html, body { height: 100%; }
   body {
@@ -67,16 +67,6 @@
     transition: border-color 0.3s;
   }
   header.disconnected { border-bottom-color: var(--error); }
-  .logo {
-    font-family: var(--mono);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--text);
-    padding-right: 12px;
-    border-right: 1px solid var(--border);
-    white-space: nowrap;
-  }
   .project-name {
     font-family: var(--mono);
     font-size: 0.7rem;
@@ -88,6 +78,7 @@
     border-radius: 4px;
     transition: color 0.15s, background 0.15s;
     white-space: nowrap;
+    flex: 1;
     user-select: none;
   }
   .project-name:hover { color: var(--text); background: var(--hover-bg); }
@@ -365,6 +356,63 @@
     min-height: 0;
     overflow: hidden;
     background: var(--surface);
+  }
+  #history-landing {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 24px 20px;
+    background: var(--bg);
+  }
+  #history-landing h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 0 0 16px 0;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .history-landing-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .history-landing-item:hover { background: var(--hover-bg); }
+  .history-landing-item .hl-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .history-landing-item .hl-date {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .history-landing-item .hl-goal {
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .history-landing-item .hl-status {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  #history-landing .empty-state {
+    margin: 40px auto;
+    text-align: center;
   }
   #thread-header {
     padding: 6px 14px;

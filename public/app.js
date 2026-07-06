@@ -374,7 +374,9 @@
 
     const compose = document.createElement('div');
     compose.className = 'question-compose';
-    if (options.length > 0) compose.style.display = 'none';
+    // Always start hidden — options are required server-side, so the only
+    // way to reveal free text is clicking "Chat about this" above.
+    compose.style.display = 'none';
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'question-input';
@@ -680,6 +682,72 @@
     }
   }
 
+  const landingEl = $('history-landing');
+  const threadHeaderEl = $('thread-header');
+  const messagesListEl = $('messages-list');
+  const sessionActionsEl = $('session-actions');
+  const composeEl = $('compose');
+
+  function renderHistoryLanding() {
+    if (!landingEl) return;
+    landingEl.innerHTML = '';
+    const h2 = document.createElement('h2');
+    h2.textContent = 'Run History';
+    landingEl.appendChild(h2);
+    const sorted = [...state.runs].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+    if (sorted.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No runs yet.';
+      landingEl.appendChild(empty);
+      return;
+    }
+    sorted.forEach(run => {
+      const item = document.createElement('div');
+      item.className = 'history-landing-item';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'hl-name';
+      nameEl.textContent = run.name || ('run-' + run.id);
+      const dateEl = document.createElement('span');
+      dateEl.className = 'hl-date';
+      dateEl.textContent = run.started_at ? run.started_at.slice(0, 16).replace('T', ' ') : '';
+      const goalEl = document.createElement('span');
+      goalEl.className = 'hl-goal';
+      const goalText = run.goal || '';
+      goalEl.textContent = goalText.length > 80 ? goalText.slice(0, 80) + '…' : goalText;
+      goalEl.title = goalText;
+      const statusEl = document.createElement('span');
+      statusEl.className = 'hl-status';
+      statusEl.textContent = run.status || '';
+      item.append(nameEl, dateEl, goalEl, statusEl);
+      item.addEventListener('click', () => {
+        state.ghostRunId = run.id;
+        selectRun(run.id);
+      });
+      landingEl.appendChild(item);
+    });
+  }
+
+  function showLanding() {
+    renderHistoryLanding();
+    if (landingEl) landingEl.style.display = 'flex';
+    if (threadHeaderEl) threadHeaderEl.style.display = 'none';
+    if (messagesListEl) messagesListEl.style.display = 'none';
+    if (sessionActionsEl) sessionActionsEl.style.display = 'none';
+    if (composeEl) composeEl.style.display = 'none';
+  }
+
+  function hideLanding() {
+    if (landingEl) landingEl.style.display = 'none';
+    if (threadHeaderEl) threadHeaderEl.style.display = '';
+    if (messagesListEl) messagesListEl.style.display = '';
+    if (sessionActionsEl) sessionActionsEl.style.display = '';
+    if (composeEl) composeEl.style.display = '';
+  }
+
+  // Show landing immediately on page load; hideLanding() is called by selectRun()
+  showLanding();
+
   // Area 1 + 2: render tabs (running only) + history toggle + status labels
   function closeGhostTab() {
     state.ghostRunId = null;
@@ -689,14 +757,7 @@
     } else {
       state.selectedRunId = null;
       renderRunsTabs();
-      const titleEl = $('thread-title');
-      if (titleEl) titleEl.innerHTML = '<span>Thread</span>';
-      const goalEl = $('thread-goal');
-      if (goalEl) goalEl.textContent = '';
-      const sepEl = $('thread-sep');
-      if (sepEl) sepEl.style.display = 'none';
-      const msgsList = $('messages-list');
-      if (msgsList) msgsList.innerHTML = '<div class="empty-state" id="empty-msgs">No messages yet.</div>';
+      showLanding();
     }
   }
 
@@ -846,8 +907,10 @@
 
   async function selectRun(runId, knownRun) {
     state.selectedRunId = runId;
+    sessionStorage.setItem('synapse-selected-run', String(runId));
     state.unreadCounts.delete(runId);
     renderRunsTabs();
+    hideLanding();
 
     const run = state.runs.find(r => r.id === runId) || knownRun;
     updateThreadHeader(run);
@@ -891,11 +954,27 @@
   }
 
   function handleRunsList(payload) {
+    const prevRunIds = new Set(state.runs.map(r => r.id));
     state.runs = payload.runs || [];
     renderRunsTabs();
+
+    // Auto-select a brand-new running run (prevRunIds.size > 0 guards against
+    // the initial page-load case where every run looks "new")
+    const newRunning = prevRunIds.size > 0
+      ? state.runs.find(r => r.status === 'running' && !prevRunIds.has(r.id))
+      : null;
+    if (newRunning) {
+      selectRun(newRunning.id);
+      return;
+    }
+
     if (state.selectedRunId === null && state.runs.length > 0) {
       const firstRunning = state.runs.find(r => r.status === 'running');
-      selectRun((firstRunning || state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId) || state.runs[0]).id);
+      const savedId = Number(sessionStorage.getItem('synapse-selected-run'));
+      const savedRun = savedId ? state.runs.find(r => r.id === savedId) : null;
+      selectRun((savedRun || firstRunning || state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId) || state.runs[0]).id);
+    } else if (state.selectedRunId === null && state.runs.length === 0) {
+      showLanding();
     } else if (state.selectedRunId !== null && !state.runs.some(r => r.id === state.selectedRunId) && state.runs.length > 0) {
       selectRun(state.runs[0].id);
     } else if (state.selectedRunId !== null) {
@@ -1022,16 +1101,6 @@
     const body = mi ? mi.value.trim() : '';
     if (!body) { flash('body required', false); return; }
     if (!state.selectedRunId) { flash('no run selected', false); return; }
-    const hasNewlines = body.includes('\n');
-    const tooLong = body.length > 500;
-    if ((hasNewlines || tooLong) && !sb._overrideWarning) {
-      const reason = hasNewlines && tooLong ? 'multiline and >500 chars'
-        : hasNewlines ? 'multiline' : '>500 chars';
-      flash('Warning: message is ' + reason + ' — paste into a file and send a pointer instead. Click Send again to override.', false);
-      sb._overrideWarning = true;
-      return;
-    }
-    if (sb) sb._overrideWarning = false;
     if (sb) sb.disabled = true;
     try {
       const res = await fetch('/send', {
@@ -1480,13 +1549,13 @@
   killSessionBtn.addEventListener('click', killSession);
   finishRunBtn.addEventListener('click', finishRun);
   if (stopRunBtn) stopRunBtn.addEventListener('click', finishRun);
-  msgInput.addEventListener('input', () => { sendBtn._overrideWarning = false; });
   msgInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
       e.preventDefault(); sendDiscussion();
-    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    } else if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault(); sendMessage();
     }
+    // Shift+Enter: pass through — browser inserts newline
   });
   startGoal.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startRun(); }
