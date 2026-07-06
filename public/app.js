@@ -708,7 +708,7 @@
       item.className = 'history-landing-item';
       const nameEl = document.createElement('span');
       nameEl.className = 'hl-name';
-      nameEl.textContent = run.name || ('run-' + run.id);
+      nameEl.textContent = run.session || ('run-' + run.id);
       const dateEl = document.createElement('span');
       dateEl.className = 'hl-date';
       dateEl.textContent = run.started_at ? run.started_at.slice(0, 16).replace('T', ' ') : '';
@@ -973,8 +973,12 @@
       const firstRunning = state.runs.find(r => r.status === 'running');
       const savedId = Number(sessionStorage.getItem('synapse-selected-run'));
       const savedRun = savedId ? state.runs.find(r => r.id === savedId) : null;
-      const toSelect = savedRun || firstRunning || (state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId)) || state.runs[0];
-      selectRun(toSelect.id);
+      const toSelect = savedRun || firstRunning || (state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId));
+      if (toSelect) {
+        selectRun(toSelect.id);
+      } else {
+        showLanding();
+      }
     } else if (state.selectedRunId === null && state.runs.length === 0) {
       showLanding();
     } else if (state.selectedRunId !== null && !state.runs.some(r => r.id === state.selectedRunId) && state.runs.length > 0) {
