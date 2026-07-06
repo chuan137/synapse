@@ -972,7 +972,7 @@
     if (state.selectedRunId === null && state.runs.length > 0) {
       const firstRunning = state.runs.find(r => r.status === 'running');
       const savedId = Number(sessionStorage.getItem('synapse-selected-run'));
-      const savedRun = savedId ? state.runs.find(r => r.id === savedId) : null;
+      const savedRun = savedId ? state.runs.find(r => r.id === savedId && r.status === 'running') : null;
       const toSelect = savedRun || firstRunning || (state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId));
       if (toSelect) {
         selectRun(toSelect.id);
