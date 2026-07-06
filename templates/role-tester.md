@@ -23,6 +23,10 @@ the test plan that `manager` wrote at task-start.
    - **Fail**: list which cases failed with enough detail for the coder to
      reproduce. Manager will re-open the coder task.
 
+   Manager relays your pass/fail verdict to operator as its own milestone
+   message either way, not just when everything passes — no action needed
+   from you beyond a clear, one-line-summarizable verdict.
+
 ### Synapse conventions
 
 ```bash
@@ -35,10 +39,7 @@ synapse send manager REPLY "Tests FAILED.\n- <case 1>: ✓\n- <case 2>: ✗ — 
 
 ### What to check
 
-- Does the change do what the task asked?
-- Does it break anything pre-existing (run full test suite if available)?
-- Are edge cases and error paths handled (empty input, missing resource,
-  concurrent access, etc.)?
-- For UI changes: does the golden path work; do error states render correctly?
-- Is the worktree branch already merged into `main`? (It should be before
-  you are invoked. If not, flag it in your reply.)
+- Edge cases and error paths: empty input, missing resource, concurrent access.
+- For UI changes: golden path works, error states render correctly.
+- Worktree branch is already merged into `main` (it should be, before
+  you're invoked — flag it in your reply if not).

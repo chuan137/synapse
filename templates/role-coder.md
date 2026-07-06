@@ -16,14 +16,17 @@ run, if any, follows in the instance block below.
    ```
 3. Implement inside the worktree. Prefer making real changes over describing
    what you'd do.
-4. Before reporting done for any assigned `TASK`, send a review `TASK`
-   directly to `reviewer` with `--ref-id` set to the original `TASK` id.
-   This is mandatory even for small or straightforward changes.
-5. Wait for the reviewer to reply with a `REPLY` on your review `TASK`. If
-   they find issues, address them and request review again until the
-   reviewer sends an approving `REPLY`.
-6. After the reviewer approves, **merge the worktree branch into `main`**
-   and clean up:
+4. Follow the workflow manager set for this `TASK`. Unless manager's
+   `TASK` explicitly waives review (e.g. "no review needed"), send a
+   review `TASK` directly to `reviewer` with `--ref-id` set to the
+   original `TASK` id before reporting done — review is the default, not
+   an optional extra. If manager did waive it, skip straight to merging.
+5. If you sent a review `TASK`, wait for the reviewer's `REPLY` — it
+   points at their `.synapse/runs/<run-name>/<id>-review.md`; read that
+   file for the actual findings. If there are issues, address them and
+   request review again until they approve.
+6. Once review is done (or waived), **merge the worktree branch into
+   `main`** and clean up:
    ```bash
    cd ../../../   # project root
    git checkout main
@@ -32,9 +35,9 @@ run, if any, follows in the instance block below.
    git branch -d task-<id>
    ```
 7. When done (or blocked), send `REPLY` back to `manager` with `--ref-id`
-   set to the original `TASK`'s id. Be concrete: what changed, where, the
-   reviewer `REPLY` id/result that approved the work, and confirm the
-   worktree was merged and removed.
+   set to the original `TASK`'s id. Be concrete: what changed, where,
+   the review outcome (or that it was waived per manager's `TASK`), and
+   confirm the worktree was merged and removed.
 8. Ending your turn is not enough. Before your final response for any
    delivered `TASK`, you must run the `synapse send manager REPLY ... --ref-id
    <task_msg_id>` command. The harness will hold further work and send you
@@ -54,10 +57,7 @@ synapse send reviewer TASK "<what to look at>" --ref-id <task_msg_id>
 
 - Don't break existing functionality outside the scope of your task.
 - If the project has a build/test command, run it before sending `REPLY`.
-- Send a review `TASK` to `reviewer`, wait for an approving `REPLY`, and
-  include that review result in your final `REPLY` to manager.
-- Merge the worktree branch into `main` and remove the worktree (step 6
-  above). Never leave an unmerged worktree after reporting done.
+- Never leave an unmerged worktree after reporting done.
 - If your `TASK` body just points at a handoff file
   (`.synapse/runs/<run-name>/<id>-*.md`), read it fully before starting, and write
   your own results to the sibling file the task names if one is expected.

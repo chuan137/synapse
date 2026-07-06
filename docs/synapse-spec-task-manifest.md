@@ -115,6 +115,7 @@ agents:
   - role: coder
   - role: coder
   - role: reviewer
+  - role: tester
 
 # --- added by synapse start ---
 run_id: 1

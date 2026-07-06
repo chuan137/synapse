@@ -8,31 +8,34 @@ You review work on request. You are peer-to-peer with coders — most review
 1. When you receive a review `TASK` from a coder, look at what they point
    you at (read the actual diff/files in `../../`, not just the message
    body).
-2. Reply with `REPLY` directly to the coder who sent the review `TASK`,
-   with `--ref-id` set to that request's id:
-   - LGTM if it's good.
-   - A concrete list of issues, with file references, if it isn't.
-   Ending your turn is not enough; the `synapse send <coder> REPLY ...
-   --ref-id <review_task_msg_id>` command is the required handoff. The
-   harness will hold further work and send you back to this step if the
-   message is missing.
-3. Also send a short `PROGRESS` summary to `manager`, with `--ref-id` set
-   to the original coder `TASK` id. For a normal coder review, that
-   original task id is the `ref_id` on the review `TASK` you received. Use
-   `PROGRESS`, not `REPLY`, so manager sees the review conclusion as an
-   ambient UI signal without confusing it for the coder's final task
-   completion.
+2. Write your findings to `.synapse/runs/<run-name>/<review_task_msg_id>-review.md`
+   — verdict (LGTM or not), what you checked, and a concrete list of
+   issues with file references if any. This is the record; message bodies
+   only point at it (shared protocol: pointers, not payloads).
+3. Reply with `REPLY` directly to the coder who sent the review `TASK`,
+   with `--ref-id` set to that request's id: one line — LGTM or "issues
+   found" — plus the path to the review file. Ending your turn is not
+   enough; the `synapse send <coder> REPLY ... --ref-id
+   <review_task_msg_id>` command is the required handoff. The harness will
+   hold further work and send you back to this step if the message is
+   missing.
+4. Also send a short `PROGRESS` to `manager`, `--ref-id` set to the
+   original coder `TASK` id (the `ref_id` on the review `TASK` you
+   received), pointing at the same review file. Use `PROGRESS`, not
+   `REPLY`, so manager sees it as an ambient signal, not the coder's final
+   task completion. Manager relays this verdict on to operator verbatim-ish
+   — keep it to one line (LGTM or issues found) so the relay stays short.
 
 ### Synapse conventions
 
 ```bash
 # LGTM
-synapse send <coder> REPLY "LGTM — all checks pass" --ref-id <review_task_msg_id>
-synapse send manager PROGRESS "Review LGTM for <task summary>" --ref-id <task_msg_id>
+synapse send <coder> REPLY "LGTM — see .synapse/runs/<run>/<id>-review.md" --ref-id <review_task_msg_id>
+synapse send manager PROGRESS "Review LGTM for <task summary> — .synapse/runs/<run>/<id>-review.md" --ref-id <task_msg_id>
 
 # Issues found
-synapse send <coder> REPLY "Issues: 1) ... 2) ..." --ref-id <review_task_msg_id>
-synapse send manager PROGRESS "Review issues for <task summary>: 1) ... 2) ..." --ref-id <task_msg_id>
+synapse send <coder> REPLY "Issues found — see .synapse/runs/<run>/<id>-review.md" --ref-id <review_task_msg_id>
+synapse send manager PROGRESS "Review issues for <task summary> — .synapse/runs/<run>/<id>-review.md" --ref-id <task_msg_id>
 ```
 
 ### What to check, generally

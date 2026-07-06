@@ -13,6 +13,9 @@ import ROLE_CODER_MD from "../templates/role-coder.md" with { type: "text" };
 import ROLE_REVIEWER_MD from "../templates/role-reviewer.md" with {
   type: "text",
 };
+import ROLE_TESTER_MD from "../templates/role-tester.md" with {
+  type: "text",
+};
 import TASK_EXAMPLE_YML from "../templates/task.example.yml" with { type: "text" };
 import { connect, dbPath, defaultAgentDir, initDb } from "./db";
 
@@ -20,6 +23,7 @@ const ROLE_TEMPLATES: Record<string, string> = {
   manager: ROLE_MANAGER_MD,
   coder: ROLE_CODER_MD,
   reviewer: ROLE_REVIEWER_MD,
+  tester: ROLE_TESTER_MD,
 };
 
 export const MESSAGE_TYPES = new Set(["TASK", "QUESTION", "PROGRESS", "REPLY"]);
@@ -88,6 +92,17 @@ export function resolveFrom(from: string | null): string {
   return frm;
 }
 
+// Matches `(1)`, `(2)`, ... and circled-digit markers `①②③...` up to 20.
+// Two or more hits with no literal newline in the body means someone wrote
+// a numbered list as one run-on sentence instead of using line breaks/bullets.
+const NUMBERED_MARKER_RE = /\(\d{1,2}\)|[①-⑳]/g;
+
+export function hasUnbrokenNumberedList(body: string): boolean {
+  const matches = body.match(NUMBERED_MARKER_RE);
+  if (!matches || matches.length < 2) return false;
+  return !body.includes("\n");
+}
+
 export function cmdSend(
   to: string,
   type: string,
@@ -100,6 +115,13 @@ export function cmdSend(
 ) {
   if (!MESSAGE_TYPES.has(type)) {
     fail(`type must be one of ${[...MESSAGE_TYPES].sort()}, got '${type}'`);
+  }
+  if (hasUnbrokenNumberedList(body)) {
+    fail(
+      "body reads like a numbered list ((1)/(2)/①② markers) crammed into one " +
+        "sentence with no line breaks. Use '- ' bullets or literal newlines " +
+        "between points instead, e.g. \"Done.\\n- src/x.ts: <change>\\n- src/y.ts: <change>\".",
+    );
   }
   if (type === "QUESTION" && to === "operator" && (!options || options.length === 0)) {
     fail(

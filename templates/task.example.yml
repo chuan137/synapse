@@ -5,3 +5,4 @@ agents:
   - role: coder
   - role: coder
   - role: reviewer
+  - role: tester
