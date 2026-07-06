@@ -336,6 +336,8 @@ describe("status", () => {
 describe("pending / deliver", () => {
   beforeEach(() => {
     run(["init"]);
+    // Insert a running run with id=1 so pending scoping works (SYNAPSE_RUN_ID=1 default).
+    openDbWritable().run("INSERT INTO runs (session, goal, status) VALUES ('team-1', 'test', 'running')");
     run(["register", "manager", "manager", "sess-p"]);
     run(["register", "coder-1", "coder", "sess-c"]);
     run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
@@ -497,6 +499,8 @@ describe("ref_id chain", () => {
   // Validates the TASK -> REPLY -> TASK(review) -> REPLY chain from spec section 6.3/6.4.
   beforeEach(() => {
     run(["init"]);
+    // Insert a running run with id=1 so pending scoping works (SYNAPSE_RUN_ID=1 default).
+    openDbWritable().run("INSERT INTO runs (session, goal, status) VALUES ('team-1', 'test', 'running')");
     run(["register", "operator", "operator", null]);
     run(["register", "manager", "manager", "sess-p"]);
     run(["register", "coder-1", "coder", "sess-c"]);

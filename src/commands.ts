@@ -164,9 +164,21 @@ export function cmdSend(
 export function cmdStatus() {
   const db = connect();
 
-  const activeRun =
-    (db.query("SELECT id, session, status, goal FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
-    (db.query("SELECT id, session, status, goal FROM runs ORDER BY id DESC LIMIT 1").get() as any);
+  const activeRun = (() => {
+    const envRunId = process.env.SYNAPSE_RUN_ID
+      ? parseInt(process.env.SYNAPSE_RUN_ID, 10)
+      : null;
+    if (envRunId) {
+      return db.query(
+        "SELECT id, session, status, goal FROM runs WHERE id=?",
+      ).get(envRunId) as any;
+    }
+    return (db.query(
+      "SELECT id, session, status, goal FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1",
+    ).get() as any) ?? (db.query(
+      "SELECT id, session, status, goal FROM runs ORDER BY id DESC LIMIT 1",
+    ).get() as any);
+  })();
 
   const agents = activeRun
     ? db.query("SELECT * FROM agents WHERE (run_id=? OR run_id=0) ORDER BY role, window_name").all(activeRun.id) as any[]
@@ -248,13 +260,23 @@ export function cmdPending(agent: string | null, all?: boolean) {
   const targetAgent = agent ?? envAgent;
   const shouldConsume = !!targetAgent && envAgent === targetAgent;
 
-  const activeRun = all ? null :
-    (() => {
-      const envRunId = process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null;
-      if (envRunId) return db.query("SELECT id FROM runs WHERE id=?").get(envRunId) as any;
-      return (db.query("SELECT id FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any) ??
-             (db.query("SELECT id FROM runs ORDER BY id DESC LIMIT 1").get() as any);
-    })();
+  let activeRun: any = null;
+  if (!all) {
+    const envRunId = process.env.SYNAPSE_RUN_ID
+      ? parseInt(process.env.SYNAPSE_RUN_ID, 10)
+      : null;
+    if (envRunId) {
+      activeRun = db.query("SELECT id FROM runs WHERE id=?").get(envRunId) as any;
+      if (!activeRun) fail(`no run with id=${envRunId}`);
+    } else {
+      activeRun = db.query(
+        "SELECT id FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1",
+      ).get() as any;
+      if (!activeRun) fail(
+        "cannot resolve run — set SYNAPSE_RUN_ID, or pass --all to see every run",
+      );
+    }
+  }
 
   const rows = targetAgent
     ? (activeRun

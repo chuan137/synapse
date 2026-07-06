@@ -174,6 +174,8 @@ describe("monitor: idle detection", () => {
 describe("monitor: pull nudges", () => {
   beforeEach(() => {
     run(["init"]);
+    // Insert a running run with id=1 so pending scoping works (SYNAPSE_RUN_ID=1 default).
+    new Database(dbFile).run("INSERT INTO runs (session, goal, status) VALUES ('team', 'test', 'running')");
     run(["register", "manager", "manager", "sess-manager"]);
     run(["register", "coder-1", "coder", "sess-coder"]);
     run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
