@@ -389,6 +389,7 @@
       if (val) submitQuestionReply(msg, val, card);
     });
     input.addEventListener('keydown', e => {
+      if (e.isComposing) return;
       if (e.key === 'Enter') { e.preventDefault(); const val = input.value.trim(); if (val) submitQuestionReply(msg, val, card); }
     });
     compose.appendChild(input);
@@ -708,7 +709,7 @@
       item.className = 'history-landing-item';
       const nameEl = document.createElement('span');
       nameEl.className = 'hl-name';
-      nameEl.textContent = run.session || ('run-' + run.id);
+      nameEl.textContent = 'run-' + run.id;
       const dateEl = document.createElement('span');
       dateEl.className = 'hl-date';
       dateEl.textContent = run.started_at ? run.started_at.slice(0, 16).replace('T', ' ') : '';
@@ -1566,12 +1567,19 @@
   finishRunBtn.addEventListener('click', finishRun);
   if (stopRunBtn) stopRunBtn.addEventListener('click', finishRun);
   msgInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+    if (e.isComposing) return;
+    if (e.key === 'Enter' && e.metaKey && !e.shiftKey) {
       e.preventDefault(); sendDiscussion();
     } else if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault(); sendMessage();
     }
     // Shift+Enter: pass through — browser inserts newline
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Meta') msgInput.classList.add('meta-held');
+  });
+  document.addEventListener('keyup', e => {
+    if (e.key === 'Meta') msgInput.classList.remove('meta-held');
   });
   startGoal.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startRun(); }

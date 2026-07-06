@@ -69,19 +69,14 @@
   header.disconnected { border-bottom-color: var(--error); }
   .project-name {
     font-family: var(--mono);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 500;
     color: var(--muted);
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: color 0.15s, background 0.15s;
     white-space: nowrap;
     flex: 1;
     user-select: none;
   }
-  .project-name:hover { color: var(--text); background: var(--hover-bg); }
   .project-name:empty { display: none; }
   #conn-status {
     font-family: var(--mono);
@@ -775,6 +770,8 @@
     line-height: 1.5;
   }
   textarea#msg-input:focus { border-color: var(--accent); }
+  textarea#msg-input.meta-held { border-color: var(--warning, #e8a020); background: color-mix(in srgb, var(--warning, #e8a020) 6%, var(--bg)); }
+  textarea#msg-input.meta-held:focus { border-color: var(--warning, #e8a020); }
   textarea#msg-input:disabled { opacity: 0.4; cursor: not-allowed; }
   .compose-input-wrap { position: relative; }
   .compose-bottom { display: flex; align-items: center; gap: 8px; }
