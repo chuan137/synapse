@@ -956,6 +956,7 @@
 
   function handleRunsList(payload) {
     const prevRunIds = new Set(state.runs.map(r => r.id));
+    const prevRunStatuses = new Map(state.runs.map(r => [r.id, r.status]));
     state.runs = payload.runs || [];
     renderRunsTabs();
 
@@ -993,7 +994,9 @@
       const hasRunning = state.runs.some(r => r.status === 'running');
       const ghostActive = state.ghostRunId !== null && state.runs.some(r => r.id === state.ghostRunId);
       const selectedIsNonRunning = run && run.status !== 'running';
-      if (!hasRunning && !ghostActive && !selectedIsNonRunning) {
+      const selectedWasRunning = prevRunStatuses.get(state.selectedRunId) === 'running';
+      const selectedJustClosed = selectedWasRunning && selectedIsNonRunning;
+      if (!hasRunning && !ghostActive && (!selectedIsNonRunning || selectedJustClosed)) {
         state.selectedRunId = null;
         showLanding();
       }
