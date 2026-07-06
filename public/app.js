@@ -974,9 +974,6 @@
       const savedId = Number(sessionStorage.getItem('synapse-selected-run'));
       const savedRun = savedId ? state.runs.find(r => r.id === savedId) : null;
       const toSelect = savedRun || firstRunning || (state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId)) || state.runs[0];
-      if (savedRun && savedRun.status !== 'running') {
-        state.ghostRunId = savedRun.id;
-      }
       selectRun(toSelect.id);
     } else if (state.selectedRunId === null && state.runs.length === 0) {
       showLanding();
@@ -991,7 +988,8 @@
       syncComposeMode();
       const hasRunning = state.runs.some(r => r.status === 'running');
       const ghostActive = state.ghostRunId !== null && state.runs.some(r => r.id === state.ghostRunId);
-      if (!hasRunning && !ghostActive) {
+      const selectedIsNonRunning = run && run.status !== 'running';
+      if (!hasRunning && !ghostActive && !selectedIsNonRunning) {
         state.selectedRunId = null;
         showLanding();
       }
