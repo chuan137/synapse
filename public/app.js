@@ -973,7 +973,11 @@
       const firstRunning = state.runs.find(r => r.status === 'running');
       const savedId = Number(sessionStorage.getItem('synapse-selected-run'));
       const savedRun = savedId ? state.runs.find(r => r.id === savedId) : null;
-      selectRun((savedRun || firstRunning || state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId) || state.runs[0]).id);
+      const toSelect = savedRun || firstRunning || (state.ghostRunId && state.runs.find(r => r.id === state.ghostRunId)) || state.runs[0];
+      if (savedRun && savedRun.status !== 'running') {
+        state.ghostRunId = savedRun.id;
+      }
+      selectRun(toSelect.id);
     } else if (state.selectedRunId === null && state.runs.length === 0) {
       showLanding();
     } else if (state.selectedRunId !== null && !state.runs.some(r => r.id === state.selectedRunId) && state.runs.length > 0) {
