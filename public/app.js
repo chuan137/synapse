@@ -1049,7 +1049,7 @@
           state.messages.set(run.id, messages);
           messages.forEach(m => state.seenMsgIds.add(m.id));
           state.managerActivity.set(run.id, managerActivity);
-          if (state.selectedRunId === null) {
+          if (state.selectedRunId === null && run.status === 'running') {
             selectRun(run.id, run);
           } else if (run.id === state.selectedRunId) {
             renderThread();
