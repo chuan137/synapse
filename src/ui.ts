@@ -173,7 +173,7 @@ export function startUi(port: number, dev = false) {
   function managerActivityForRun(runId: number | null): any[] {
     if (!runId) return [];
     return db.query(
-      `SELECT 'message' AS source, m.id, m.type, m.body, m.created_at
+      `SELECT 'message' AS source, m.id, m.type, m.body, m.created_at, m.to_agent
        FROM messages m
        WHERE m.from_agent = 'manager'
          AND m.to_agent != 'operator'

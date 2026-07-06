@@ -481,6 +481,7 @@
     div.className = 'activity-marker activity-' + item.type;
     div.innerHTML =
       '<span class="activity-icon">' + esc(icon) + '</span>' +
+      (item.to_agent ? '<span class="activity-to">' + esc(item.to_agent) + '</span>' : '') +
       '<span class="activity-time">' + esc(fmtTime(item.created_at)) + '</span>';
     const timeSpan = div.querySelector('.activity-time');
     const bodyEl = renderMdHighlighted(item.body);

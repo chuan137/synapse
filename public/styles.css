@@ -619,6 +619,7 @@
     color: var(--muted);
   }
   .activity-icon { font-size: 0.7rem; flex-shrink: 0; }
+  .activity-to { font-size: 0.75rem; color: var(--muted); margin-right: 4px; font-weight: 500; flex-shrink: 0; }
   .activity-time { margin-left: auto; font-family: var(--mono); font-size: 0.7rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
   .activity-marker.activity-collapsed .message-content { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
   .activity-marker:not(.activity-collapsed) .message-content { display: block; overflow: visible; }
