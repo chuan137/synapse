@@ -476,19 +476,41 @@
     }
   }
 
+  // [start]/[done]/[blocked] lifecycle markers (direct PROGRESS from
+  // coder/reviewer/tester to operator — see docs/progress-direct-signal-spec.md
+  // decision 4) get their own icons instead of the flat "•" every PROGRESS
+  // used to share, so a milestone reads at a glance without opening it.
+  const MILESTONE_PREFIX_RE = /^\[(start|done|blocked)\]\s*/;
+  const MILESTONE_ICONS = { start: '▶', done: '✓', blocked: '⚠' };
+
   function buildActivityMarker(item) {
-    const icons = { TASK: '↳', PROGRESS: '•' };
-    const icon = icons[item.type] || '•';
+    const body = item.body || '';
+    const milestoneMatch = MILESTONE_PREFIX_RE.exec(body);
+    const milestone = milestoneMatch ? milestoneMatch[1] : null;
+    const displayBody = milestone ? body.slice(milestoneMatch[0].length) : body;
+    const icon = milestone ? MILESTONE_ICONS[milestone]
+      : (item.type === 'TASK' ? '↳' : '•');
     const div = document.createElement('div');
-    div.className = 'activity-marker activity-' + item.type;
+    div.className = 'activity-marker activity-' + item.type +
+      (milestone ? ' activity-milestone-' + milestone : '');
+    // from_agent is the sender identity — the piece that matters once
+    // coder/reviewer/tester can post here directly, not just manager.
+    // to_agent is only worth showing when it isn't the constant 'operator'
+    // (i.e. manager's own delegation-pointer activity to a subordinate).
+    const fromLabel = item.from_agent
+      ? '<span class="activity-from" data-agent="' + esc(item.from_agent) + '">' + esc(item.from_agent) + '</span>'
+      : '';
+    const toLabel = (item.to_agent && item.to_agent !== 'operator')
+      ? '<span class="activity-to">' + esc(item.to_agent) + '</span>'
+      : '';
     div.innerHTML =
       '<span class="activity-icon">' + esc(icon) + '</span>' +
-      (item.to_agent ? '<span class="activity-to">' + esc(item.to_agent) + '</span>' : '') +
+      fromLabel + toLabel +
       '<span class="activity-time">' + esc(fmtTime(item.created_at)) + '</span>';
     const timeSpan = div.querySelector('.activity-time');
-    const bodyEl = renderMdHighlighted(item.body);
+    const bodyEl = renderMdHighlighted(displayBody);
     div.insertBefore(bodyEl, timeSpan);
-    if ((item.body || '').length > 80 && !div.querySelector('code.msg-file-link')) {
+    if (displayBody.length > 80 && !div.querySelector('code.msg-file-link')) {
       div.classList.add('activity-collapsed');
       div.style.cursor = 'pointer';
       div.addEventListener('click', (e) => {

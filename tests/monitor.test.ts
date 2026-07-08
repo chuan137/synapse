@@ -774,7 +774,7 @@ describe("start: full agent launch against task.yml", () => {
 
     const reviewerMd = readFileSync(join(agentsRoot, "reviewer", "CLAUDE.md"), "utf8");
     expect(reviewerMd).toContain("Your role: reviewer");
-    expect(reviewerMd).toContain("send a short `PROGRESS` summary to `manager`");
+    expect(reviewerMd).toContain("send a short `PROGRESS` to `manager`");
     expect(reviewerMd).toContain("`PROGRESS`, not `REPLY`");
     expect(reviewerMd).toContain('synapse send manager PROGRESS "Review LGTM');
 

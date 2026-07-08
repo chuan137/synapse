@@ -99,6 +99,11 @@ export function resolveFrom(from: string | null): string {
 // a numbered list as one run-on sentence instead of using line breaks/bullets.
 const NUMBERED_MARKER_RE = /\(\d{1,2}\)|[①-⑳]/g;
 
+// A non-manager agent (coder/reviewer/tester) may PROGRESS directly to
+// operator, but only as a lifecycle marker — start/done/blocked — never as
+// process narration. See docs/progress-direct-signal-spec.md.
+const DIRECT_PROGRESS_PREFIX_RE = /^\[(start|done|blocked)\]/;
+
 export function hasUnbrokenNumberedList(body: string): boolean {
   const matches = body.match(NUMBERED_MARKER_RE);
   if (!matches || matches.length < 2) return false;
@@ -137,6 +142,17 @@ export function cmdSend(
     fail("broadcast messages are no longer supported; send to a specific agent");
   }
   const frm = resolveFrom(from);
+  if (type === "PROGRESS" && to === "operator" && frm !== "manager") {
+    if (!DIRECT_PROGRESS_PREFIX_RE.test(body)) {
+      fail(
+        "direct PROGRESS to operator from a non-manager agent must lead with " +
+          "[start], [done], or [blocked] — this path is for lifecycle markers only " +
+          "(one per TASK you accept, one before the REPLY that closes it). Process " +
+          "narration (\"trying X\", \"still working on Y\") goes to your supervisor " +
+          "via PROGRESS/REPLY, not to operator. See docs/progress-direct-signal-spec.md.",
+      );
+    }
+  }
   const db = connect();
   // Resolve run_id: explicit arg -> SYNAPSE_RUN_ID env -> null
   const resolvedRunId = runId !== undefined && runId !== null
@@ -257,6 +273,44 @@ export function cmdRuns() {
   for (const row of rows) console.log(fmt(row));
 }
 
+// Checkpoint (docs/progress-direct-signal-spec.md, decision 3): every time
+// manager pulls pending, flag ref_id chains it received a message on but
+// never sent a matching-ref_id message back to operator for. Best-effort
+// nudge, not a formal completeness proof — templates anchor ref_id on
+// different ids for different chains (subtask TASK id for coder/reviewer,
+// root TASK id for tester), so this can miss or over-flag at the margins.
+// It replaces "manager remembers to relay" with "manager gets reminded on
+// every wake-up", which is the actual gap being closed.
+function printUnrelayedCheckpoint(db: ReturnType<typeof connect>, runId: number | null) {
+  const rows = (runId !== null
+    ? db.query(
+        `SELECT DISTINCT ref_id FROM messages
+         WHERE to_agent = 'manager' AND ref_id IS NOT NULL AND run_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM messages m2
+             WHERE m2.from_agent = 'manager' AND m2.to_agent = 'operator'
+               AND m2.ref_id = messages.ref_id AND m2.run_id = ?
+           )`,
+      ).all(runId, runId)
+    : db.query(
+        `SELECT DISTINCT ref_id FROM messages
+         WHERE to_agent = 'manager' AND ref_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM messages m2
+             WHERE m2.from_agent = 'manager' AND m2.to_agent = 'operator'
+               AND m2.ref_id = messages.ref_id
+           )`,
+      ).all()) as any[];
+  if (rows.length === 0) return;
+  const ids = rows.map((r: any) => `#${r.ref_id}`).join(", ");
+  console.log(
+    `${c.yellow}synapse: checkpoint — ref_id ${ids} has a reply/progress addressed to ` +
+      `you with no manager -> operator message on the same ref_id yet. If that's a real ` +
+      `subtask milestone, relay it before you move on.${c.reset}`,
+  );
+  console.log();
+}
+
 export function cmdPending(agent: string | null, all?: boolean) {
   const db = connect();
   const envAgent = process.env.SYNAPSE_AGENT ?? null;
@@ -279,6 +333,10 @@ export function cmdPending(agent: string | null, all?: boolean) {
         "cannot resolve run — set SYNAPSE_RUN_ID, or pass --all to see every run",
       );
     }
+  }
+
+  if (targetAgent === "manager") {
+    printUnrelayedCheckpoint(db, activeRun ? activeRun.id : null);
   }
 
   const rows = targetAgent

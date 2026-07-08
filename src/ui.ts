@@ -172,8 +172,14 @@ export function startUi(port: number, dev = false) {
 
   function managerActivityForRun(runId: number | null): any[] {
     if (!runId) return [];
+    // from_agent is always 'manager' here (see WHERE below) but is selected
+    // explicitly so buildActivityMarker on the frontend can render a sender
+    // badge off one uniform field, same as the direct-PROGRESS messages that
+    // now also flow through the activity marker renderer (see
+    // docs/progress-direct-signal-spec.md decision 4) — no special-casing
+    // "this feed implies manager" in the client.
     return db.query(
-      `SELECT 'message' AS source, m.id, m.type, m.body, m.created_at, m.to_agent
+      `SELECT 'message' AS source, m.id, m.type, m.body, m.created_at, m.from_agent, m.to_agent
        FROM messages m
        WHERE m.from_agent = 'manager'
          AND m.to_agent != 'operator'
@@ -227,7 +233,7 @@ export function startUi(port: number, dev = false) {
 
       const lastDelegateId = lastManagerMsgId.get(run.id) ?? 0;
       const newDelegations = db.query(
-        `SELECT 'message' AS source, m.id AS id, m.type AS type, m.body, m.created_at
+        `SELECT 'message' AS source, m.id AS id, m.type AS type, m.body, m.created_at, m.from_agent
          FROM messages m
          WHERE m.from_agent = 'manager'
            AND m.to_agent != 'operator'

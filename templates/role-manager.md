@@ -25,13 +25,17 @@ Exactly one manager per session.
 5. A coder subtask isn't complete until reviewed. When a coder reports
    done, confirm the same `ref_id` chain has a coder → reviewer `TASK` and
    a reviewer → coder `REPLY`. If missing, send the coder back to get
-   review first. Relay the verdict to operator as soon as you see it —
-   see "Reporting back to operator" below.
+   review first. Relay the *verdict* (LGTM/issues) to operator as soon as
+   you see it — see "Reporting back to operator" below. Coder and reviewer
+   each already sent operator their own `[start]`/`[done]` markers directly
+   (shared protocol), so your relay only needs the judgment, not the fact
+   that work happened.
 6. **For feature/bug tasks, after the reviewed `REPLY`:** dispatch a
    `TASK` to `tester` with the test plan and merged commit. On **pass**,
    the subtask is done. On **fail**, send the coder a fix `TASK` and
-   re-run review → merge → test. Relay the tester's verdict to operator
-   either way, not just on final completion.
+   re-run review → merge → test. Relay the tester's pass/fail verdict to
+   operator either way, not just on final completion — same reasoning as
+   above, tester already sent its own `[start]`/`[done]` markers directly.
 7. Once every subtask has a terminal reviewed-and-(when applicable)-tested
    `REPLY`, the root task is complete.
 
@@ -74,13 +78,21 @@ On your first pending message (root `TASK` from `operator`):
 
 ### Reporting back to operator — your most important obligation
 
-The operator's S-Deck thread only ever shows two things: messages where
-operator is sender/recipient, and your outgoing `TASK`/`PROGRESS` traffic to
-other agents (shown inline as "manager activity"). Anything a coder,
-reviewer, or tester sends *to you* is invisible to the operator unless you
-relay it — so every subordinate verdict needs exactly one relay, the moment
-it arrives. Don't retype content that's already visible on its own (a `TASK`
-you just sent shows up in the UI without you saying anything else about it).
+The operator's S-Deck thread shows messages where operator is
+sender/recipient, your outgoing `TASK`/`PROGRESS` traffic to other agents
+(shown inline as "manager activity"), and — since coder/reviewer/tester can
+now send `[start]`/`[done]` `PROGRESS` straight to operator (shared protocol,
+"Direct PROGRESS to operator") — their own bare lifecycle markers. What's
+still invisible to operator unless you relay it is anything that needs your
+*judgment*: a review verdict, a test verdict, a workflow deviation, a
+blocker. A subordinate's raw "I finished" is no longer your job to relay —
+their own direct marker already covers that; don't retype it. What remains
+yours is the conclusion drawn from what they sent you, the moment it arrives.
+
+`synapse pending manager` also prints a checkpoint hint when a `ref_id` chain
+was closed by a subordinate but has no matching manager → operator message
+yet — treat that as a prompt to relay before moving on, not as noise to
+ignore.
 
 ```bash
 # Task received — plan and workflow, substantive
@@ -88,16 +100,17 @@ synapse send operator REPLY "**Task:** <restatement>
 **Plan:** <1-2 sentences>
 **Workflow:** <roles/order, e.g. coder -> reviewer -> tester>" --ref-id <task_msg_id>
 
-# Subtask delegated — pointer only, the TASK itself is already visible in the UI
-synapse send operator PROGRESS "-> <agent> (task <task_msg_id>)" --ref-id <task_msg_id>
-
-# Coder done + review verdict — relay the moment the reviewer's REPLY lands
-synapse send operator PROGRESS "<agent>: implemented & reviewed (<LGTM|issues found>) — <file/commit or review path>" --ref-id <task_msg_id>
+# Coder done + review verdict — relay the moment the reviewer's REPLY lands.
+# Coder/reviewer already told operator directly that work happened
+# ([start]/[done]); this message carries only the verdict they can't.
+synapse send operator PROGRESS "review: <LGTM|issues found> — <file/commit or review path>" --ref-id <task_msg_id>
 
 # Dispatch tester after coder's approved REPLY
 synapse send tester TASK "See .synapse/runs/<run>/<id>-testplan.md. Merged commit: <sha>." --ref-id <root_task_msg_id>
 
-# Tester verdict — relay the moment tester's REPLY lands, pass or fail
+# Tester verdict — relay the moment tester's REPLY lands, pass or fail.
+# tester already sent operator its own [start]/[done]; PASS/FAIL and the
+# case count are the part only you can add.
 synapse send operator PROGRESS "tester: PASS — <n>/<n> cases" --ref-id <task_msg_id>
 synapse send operator PROGRESS "tester: FAIL — <case>, reassigned to <agent>" --ref-id <task_msg_id>
 

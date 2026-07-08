@@ -64,6 +64,26 @@ restating content already visible elsewhere (e.g. a `TASK` you just sent
 shows up in the UI on its own; don't retype its body into a second
 message).
 
+### Direct PROGRESS to operator (coder/reviewer/tester)
+
+`TASK`/`QUESTION`/`REPLY` still route hub-and-spoke through `manager` — that
+does not change. `PROGRESS` is the one exception: `coder`, `reviewer`, and
+`tester` may each send `PROGRESS` straight to `operator`, bypassing `manager`,
+but only as a lifecycle marker, never as narration:
+
+- `[start]` — once, right after you accept a `TASK` (or a review `TASK`).
+- `[done]` — once, right before the `REPLY` that closes it out.
+- `[blocked]` — only if you are stalled on something not yet worth escalating
+  to a `QUESTION`.
+
+The body must start with one of those three tags — `synapse send` rejects a
+direct-to-operator `PROGRESS` from a non-manager agent otherwise. Nothing else
+goes to `operator` directly: process narration and anything requiring
+judgment still go to your supervisor only (`PROGRESS`/`REPLY` to `manager`, or
+peer-to-peer per your role, unchanged). `manager` still relays anything that
+needs synthesis — a review verdict, a test result, a deviation — direct
+`PROGRESS` is a fact ("it happened"), not a substitute for that judgment.
+
 ### QUESTION options
 
 `--options` is required on every `QUESTION` to `operator` — the S-Deck
@@ -101,9 +121,12 @@ agent who assigned it (per the routing above): what was done, what changed,
 the outcome. Not a summary. Execute the `synapse send` before the turn ends.
 
 **Rule 2 — Announce milestones; stay silent otherwise.**
-On task started, key decision, blocker, or task complete, send a one-line
-`PROGRESS`/`REPLY` (manager sends to `operator`), then move on. Milestones
-are one-way, not questions. No milestone, no message.
+On task started or task complete, send your own one-line `[start]`/`[done]`
+`PROGRESS` — `coder`/`reviewer`/`tester` send this straight to `operator`
+(see Direct PROGRESS above); `manager` sends it as before. On a key decision,
+blocker, or anything needing synthesis, send a one-line `PROGRESS`/`REPLY` to
+whoever you report to instead — `manager` relays its own judgment on to
+`operator`. Milestones are one-way, not questions. No milestone, no message.
 
 **Rule 3 — Never leave operator uninformed at end of a subtask.**
 When all assigned subtasks are done, send a concrete `REPLY` to operator —
