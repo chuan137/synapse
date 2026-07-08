@@ -15,8 +15,13 @@ import { dirname, join } from "path";
 import { dbPath, connect } from "./db";
 import { fail, nowIso, DEFAULT_TMUX_SESSION } from "./commands";
 
-// Cheap mailbox/roster sweep — idle detection is event-driven, not on this timer.
-export const DEFAULT_SWEEP_INTERVAL_MS = 1000;
+// Sweep loop is the primary busy/idle driver (and mailbox/roster checker).
+// fs.watch does not trigger delivery directly — it only records a
+// high-resolution last-activity timestamp per agent (see FileWatchPool) that
+// feeds the sweep's debounce calculation, so debounce timing isn't at the
+// mercy of coarse filesystem mtime granularity. Latency to notice an agent
+// went idle is bounded by this interval, so it's kept short.
+export const DEFAULT_SWEEP_INTERVAL_MS = 250;
 export const DEFAULT_DEBOUNCE_MS = 2000;
 export const DEFAULT_AUTO_TEARDOWN_MS = 30 * 60 * 1000;
 
@@ -163,9 +168,14 @@ function lastAssistantStopReason(path: string): string | null {
 }
 
 // Idle is derived from the transcript's latest assistant stop_reason plus file quiet time.
+// watcherActivityMs, when supplied, is fs.watch's own wall-clock timestamp of
+// the last observed write to this transcript — used alongside the file's
+// mtime (whichever is more recent) since some filesystems report mtime at
+// coarse resolution, which can make a just-written file look older than it is.
 function readTranscriptState(
   sessionId: string,
   debounceMs: number,
+  watcherActivityMs?: number,
 ): AgentState {
   const path = findTranscriptPath(sessionId);
   if (!path) return { status: "unknown", detail: "no transcript found yet" };
@@ -179,12 +189,15 @@ function readTranscriptState(
     return { status: "busy", detail: `stop_reason=${stopReason}` };
   }
 
-  let ageMs: number;
+  let mtimeMs: number;
   try {
-    ageMs = Date.now() - statSync(path).mtimeMs;
+    mtimeMs = statSync(path).mtimeMs;
   } catch {
     return { status: "unknown", detail: "transcript unreadable" };
   }
+  const lastActivityMs =
+    watcherActivityMs !== undefined ? Math.max(watcherActivityMs, mtimeMs) : mtimeMs;
+  const ageMs = Date.now() - lastActivityMs;
   if (ageMs < debounceMs) {
     return {
       status: "busy",
@@ -355,20 +368,6 @@ function nudgeForPendingWork(
   return false;
 }
 
-function hasPendingDirectMessageForWindow(
-  db: Database,
-  windowName: string,
-  runId: number,
-): boolean {
-  const row = db
-    .query(
-      `SELECT 1 FROM messages WHERE status='pending' AND to_agent=? AND run_id=?
-         AND (next_retry_at IS NULL OR next_retry_at <= ?) LIMIT 1`,
-    )
-    .get(windowName, runId, nowIso());
-  return !!row;
-}
-
 function readTmuxPaneState(
   tmuxSession: string,
   windowName: string,
@@ -395,10 +394,11 @@ function refreshAgentState(
   log: (s: string) => void,
   runId: number,
   tmuxSession?: string,
+  watcherActivityMs?: number,
 ): AgentState | null {
   let state: AgentState;
   if (agent.session_id && agent.session_id !== "-") {
-    state = readTranscriptState(agent.session_id, debounceMs);
+    state = readTranscriptState(agent.session_id, debounceMs, watcherActivityMs);
   } else if (tmuxSession) {
     state = readTmuxPaneState(tmuxSession, agent.window_name);
   } else {
@@ -541,30 +541,35 @@ function pollOnce(
   if (runId !== undefined) markOperatorMessagesDelivered(db, runId, log);
 }
 
-// Tracks transcript files for activity-driven delivery, combining fs.watch
-// events with sweep rechecks so missed watcher events still get noticed.
+// Tracks per-agent transcript watchers. fs.watch's role is intentionally
+// narrow: capture a high-resolution "last write observed" wall-clock
+// timestamp per agent so the sweep loop's debounce math isn't limited by
+// coarse filesystem mtime granularity. It never triggers evaluation or
+// delivery itself — the sweep loop (runLiveMonitor's sweepInner) is the sole
+// place busy/idle is decided and agents are nudged, on a fixed cadence.
 class FileWatchPool {
   private watchers = new Map<string, ReturnType<typeof fsWatch>>();
-  private paths = new Map<string, string>();
+  private lastActivityMs = new Map<string, number>();
 
-  constructor(private onChange: (key: string, source: "sweep" | "watch") => void) {}
-
-  // Idempotent. Fires onChange immediately so callers don't need a separate
-  // initial-evaluation step.
+  // Idempotent. Seeds the activity timestamp from the file's current mtime so
+  // debounce math is correct even before the first fs.watch event fires.
   watch(key: string, path: string): void {
     if (this.watchers.has(key)) return;
-    this.paths.set(key, path);
+    try {
+      this.lastActivityMs.set(key, statSync(path).mtimeMs);
+    } catch {
+      this.lastActivityMs.set(key, Date.now());
+    }
     this.watchers.set(
       key,
-      fsWatch(path, () => this.onChange(key, "watch")),
+      fsWatch(path, () => this.lastActivityMs.set(key, Date.now())),
     );
-    this.onChange(key, "sweep");
   }
 
   unwatch(key: string): void {
     this.watchers.get(key)?.close();
     this.watchers.delete(key);
-    this.paths.delete(key);
+    this.lastActivityMs.delete(key);
   }
 
   isWatching(key: string): boolean {
@@ -575,10 +580,9 @@ class FileWatchPool {
     return this.watchers.keys();
   }
 
-  // Sweep's fallback recheck — catches fs.watch events missed via coalesced
-  // writes, NFS, etc. Only fires for keys we're actually watching.
-  emitOnTranscriptChange(key: string): void {
-    if (this.paths.has(key)) this.onChange(key, "sweep");
+  // Most recent write time fs.watch has observed for this key, if watched.
+  lastActivity(key: string): number | undefined {
+    return this.lastActivityMs.get(key);
   }
 
   closeAll(): void {
@@ -586,8 +590,11 @@ class FileWatchPool {
   }
 }
 
-// Event-driven idle detection via FileWatchPool, plus a cheap periodic sweep
-// for roster changes and pending mail (things a file watch can't signal).
+// Sweep loop is the sole driver of busy/idle evaluation and delivery,
+// running on a fixed cadence (sweepMs). fs.watch (via FileWatchPool) only
+// supplies a precise last-activity timestamp per agent that feeds the
+// debounce calculation inside refreshAgentState/readTranscriptState — it
+// does not trigger its own evaluation or delivery attempts.
 function runLiveMonitor(
   db: Database,
   tmuxSession: string,
@@ -597,13 +604,8 @@ function runLiveMonitor(
   runId?: number,
 ) {
   const agentStatuses = new Map<string, AgentStatus>();
-  const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  const lastSeenMtimes = new Map<string, number>();
   let agents: any[] = [];
-  let agentsByWindow = new Map<string, any>();
-  const sourceLog =
-    (source: "sweep" | "watch" | "timer") => (s: string) =>
-      log(`[${source}] ${s}`);
+  const sourceLog = (source: "sweep") => (s: string) => log(`[${source}] ${s}`);
 
   const reloadAgents = () => {
     agents = db
@@ -613,103 +615,9 @@ function runLiveMonitor(
           : "SELECT * FROM agents WHERE status != 'stopped' AND session_id IS NOT NULL",
       )
       .all(...(runId !== undefined ? [runId] : [])) as any[];
-    agentsByWindow = new Map(agents.map((a) => [a.window_name, a]));
   };
 
-  const refreshAgentStateByWindow = (
-    windowName: string,
-    eventLog: (s: string) => void,
-  ) => {
-    const agent = agentsByWindow.get(windowName);
-    if (!agent) return null; // deregistered/stopped between event and update
-    return refreshAgentState(db, debounceMs, agent, agentStatuses, eventLog, agent.run_id);
-  };
-
-  const deliverOrRescheduleInner = (
-    windowName: string,
-    eventLog: (s: string) => void,
-  ) => {
-    const agent = agentsByWindow.get(windowName);
-    const agentRunId = agent?.run_id ?? (runId ?? 0);
-    const agentState = refreshAgentStateByWindow(windowName, eventLog);
-    if (agentState?.status === "idle") {
-      if (
-        agent &&
-        nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agentRunId, eventLog)
-      ) {
-        nudgeForPendingWork(db, tmuxSession, windowName, agentRunId, eventLog);
-      }
-    } else if (
-      agentState?.remainingDebounceMs !== undefined &&
-      agent &&
-      (hasPendingDirectMessageForWindow(db, windowName, agentRunId) ||
-        !!newestOpenInboundWork(db, agent, agentRunId))
-    ) {
-      // Agent is still debouncing and has mail waiting — reschedule to re-evaluate when the window expires.
-      scheduleDelivery(windowName, agentState.remainingDebounceMs);
-    }
-  };
-
-  // Deliver pending messages when an agent is idle, or reschedule while it is
-  // still debouncing; keep transient DB errors from stopping this path.
-  const deliverOrReschedule = (
-    windowName: string,
-    eventLog: (s: string) => void,
-  ) => {
-    try {
-      deliverOrRescheduleInner(windowName, eventLog);
-    } catch (err) {
-      eventLog(
-        `  ${windowName}: DB error during delivery (transient, will retry): ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    }
-  };
-
-  const clearDebounceTimer = (windowName: string) => {
-    const existing = debounceTimers.get(windowName);
-    if (existing) clearTimeout(existing);
-    debounceTimers.delete(windowName);
-  };
-
-  const scheduleDelivery = (windowName: string, delayMs: number) => {
-    debounceTimers.set(
-      windowName,
-      setTimeout(
-        () => {
-          debounceTimers.delete(windowName);
-          deliverOrReschedule(windowName, sourceLog("timer"));
-        },
-        Math.max(0, delayMs),
-      ),
-    );
-  };
-
-  // Handles transcript activity from watch/sweep by confirming the transcript
-  // mtime changed, then resetting debounce delivery and logging the update.
-  const onTranscriptActivity = (windowName: string, source: "sweep" | "watch") => {
-    const agent = agentsByWindow.get(windowName);
-    const path = agent ? findTranscriptPath(agent.session_id) : undefined;
-    if (!path) return;
-    let mtime: number;
-    try {
-      mtime = statSync(path).mtimeMs;
-    } catch {
-      return;
-    }
-    const prevMtime = lastSeenMtimes.get(windowName);
-    if (mtime === prevMtime) return;
-    lastSeenMtimes.set(windowName, mtime);
-    const fmt = (ms: number | undefined) => (ms === undefined ? "none" : new Date(ms).toISOString());
-    sourceLog(source)(
-      `  ${windowName}: transcript activity (mtime ${fmt(prevMtime)} -> ${fmt(mtime)})`,
-    );
-    clearDebounceTimer(windowName);
-    deliverOrReschedule(windowName, sourceLog(source));
-  };
-
-  const pool = new FileWatchPool(onTranscriptActivity);
+  const pool = new FileWatchPool();
 
   let sweepTimer: ReturnType<typeof setInterval> | undefined;
   let stopping = false;
@@ -717,7 +625,6 @@ function runLiveMonitor(
     if (stopping) return;
     stopping = true;
     if (sweepTimer) clearInterval(sweepTimer);
-    for (const t of debounceTimers.values()) clearTimeout(t);
     pool.closeAll();
     log("synapse monitor: stopped");
     process.exit(0);
@@ -726,14 +633,16 @@ function runLiveMonitor(
   process.on("SIGTERM", shutdown);
 
   log(
-    `synapse monitor: watching tmux session '${tmuxSession}' via fs.watch (debounce=${debounceMs}ms, mail-sweep=${sweepMs}ms)`,
+    `synapse monitor: watching tmux session '${tmuxSession}' via sweep loop (interval=${sweepMs}ms, debounce=${debounceMs}ms); fs.watch supplies activity timestamps only`,
   );
 
   let terminalLogged = false;
   const teardownMs = autoTeardownMs();
 
-  // Sweep syncs watcher/timer state with the live roster, cleans up stopped
-  // agents, and retries pending nudges for agents already idle.
+  // Single evaluation pass: syncs watcher state with the live roster, cleans
+  // up stopped agents, evaluates every live agent's busy/idle state (fed by
+  // fs.watch's last-activity timestamp for debounce precision), and nudges
+  // idle agents with pending work. This is the only place delivery happens.
   const sweepInner = () => {
     const sweepLog = sourceLog("sweep");
     if (runId !== undefined && terminalRunStatus(db, runId)) {
@@ -757,31 +666,17 @@ function runLiveMonitor(
     }
     reloadAgents();
     const liveNames = new Set(agents.map((a) => a.window_name));
-    const trackedNames = new Set([
-      ...agentStatuses.keys(),
-      ...pool.watchedKeys(),
-      ...debounceTimers.keys(),
-      ...lastSeenMtimes.keys(),
-    ]);
+    const trackedNames = new Set([...agentStatuses.keys(), ...pool.watchedKeys()]);
     // Clean up stopped agents
     for (const name of trackedNames) {
       if (liveNames.has(name)) continue;
       pool.unwatch(name);
       agentStatuses.delete(name);
-      clearDebounceTimer(name);
-      lastSeenMtimes.delete(name);
       sweepLog(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
-      let nudged = false;
-      // Nudge agent when mail arrives while it's in idle. 
-      const agentState = refreshAgentStateByWindow(agent.window_name, sweepLog);
-      if (agentState?.status === "idle") {
-        if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
-          nudged = nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
-        }
-      }
-      // Poll until the transcript appears to start watching
+      // Start watching once the transcript appears, so its debounce
+      // timestamp is available; harmless no-op once already watching.
       if (!pool.isWatching(agent.window_name)) {
         const path = findTranscriptPath(agent.session_id);
         if (path) {
@@ -789,9 +684,22 @@ function runLiveMonitor(
           sweepLog(`  ${agent.window_name}: watching ${path}`);
         }
       }
-      // Recheck for real mtime changes fs.watch may have missed.
-      // Skip if we already nudged this agent directly above to avoid double-nudge.
-      if (!nudged) pool.emitOnTranscriptChange(agent.window_name);
+      const watcherActivityMs = pool.lastActivity(agent.window_name);
+      const agentState = refreshAgentState(
+        db,
+        debounceMs,
+        agent,
+        agentStatuses,
+        sweepLog,
+        agent.run_id,
+        undefined,
+        watcherActivityMs,
+      );
+      if (agentState?.status === "idle") {
+        if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
+          nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
+        }
+      }
     }
     if (runId !== undefined) markOperatorMessagesDelivered(db, runId, sweepLog);
   };

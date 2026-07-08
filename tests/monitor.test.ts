@@ -330,9 +330,11 @@ describe("monitor: pull nudges", () => {
 // --once exercises the snapshot path (deriveIdleStateFromTranscript / evaluateAgentReadiness /
 // readiness evaluation) synchronously and deterministically; these tests instead
 // run the real long-lived loop (no --once) as a background process to
-// exercise the fs.watch + debounce-timer + cheap-sweep machinery in
-// runLiveMonitor that --once never touches. Async/real-timer based by
-// necessity — fs.watch events and debounce timers don't fire on demand.
+// exercise the setInterval-driven sweep loop and fs.watch-fed debounce
+// timestamping in runLiveMonitor that --once never touches — fs.watch only
+// records activity timestamps here; the sweep loop is what evaluates
+// busy/idle and delivers. Async/real-timer based by necessity — the sweep
+// loop runs on a real timer and fs.watch events arrive asynchronously.
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -398,7 +400,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
     }
   });
 
-  test("delivers once fs.watch sees end_turn and the debounce window elapses, with no poll loop driving it", async () => {
+  test("delivers once end_turn is observed and the debounce window elapses, driven by the sweep loop", async () => {
     // Explicit per-test timeout: this test makes three sequential waitFor
     // calls (each up to 8000ms by default), so bun's 5000ms default test
     // timeout was killing it mid-wait under load — and because fixtures
@@ -413,13 +415,16 @@ describe("monitor: live event-driven loop (no --once)", () => {
     const out = collectStream(proc.stdout);
     await waitFor(() => out.text().includes("watching tmux session"));
 
-    // Transcript doesn't exist until now — the live loop has to notice it
-    // appear (via the cheap sweep, since fs.watch needs an existing path)
-    // and attach a watcher before it can react to anything.
+    // Transcript doesn't exist until now — the sweep loop has to notice it
+    // appear and attach a watcher (which seeds a debounce timestamp) before
+    // any evaluation of this agent is possible.
     writeTranscript("sess-coder", "tool_use");
     await waitFor(() => out.text().includes("watching") && out.text().includes("sess-coder"));
     expect(tmuxLogContents()).toBe(""); // still busy, nothing delivered yet
 
+    // fs.watch fires on this write and just records a timestamp; it's the
+    // next sweep tick(s) — polling on --interval — that notice end_turn and,
+    // once debounceMs of quiet has elapsed, deliver.
     writeTranscript("sess-coder", "end_turn", 0);
     await waitFor(() =>
       tmuxLogContents().includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"),
@@ -427,7 +432,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
 
     const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
     expect(msg.status).toBe("pending");
-    expect(out.text()).toContain("[watch]   coder-1: transcript activity");
+    expect(out.text()).toContain("[sweep]   coder-1: busy -> idle");
   }, 15000);
 
   test("a message sent while the agent is already idle is still nudged, via the cheap sweep", async () => {
@@ -466,10 +471,11 @@ describe("monitor: live event-driven loop (no --once)", () => {
       return row?.status === "busy";
     });
 
-    // With no queued direct mail, attemptDelivery should not schedule the
-    // debounce timer. The sweep interval is intentionally much longer than
-    // this sleep, so a transition to idle here would come from a dangling
-    // recheck timer rather than the periodic sweep.
+    // The sweep loop is the only thing that re-evaluates busy/idle, on a
+    // fixed --interval cadence — there's no separate per-agent recheck timer
+    // anymore. The sweep interval here is intentionally much longer than
+    // this sleep, so status must still read busy: nothing should re-evaluate
+    // it before the next tick.
     await sleep(250);
 
     const row = openDb().query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
@@ -477,7 +483,7 @@ describe("monitor: live event-driven loop (no --once)", () => {
     expect(tmuxLogContents()).toBe("");
   }, 15000);
 
-  test("a watcher event after an agent is stopped does not revive or deliver to it", async () => {
+  test("a transcript write after an agent is stopped does not revive or deliver to it", async () => {
     run(["send", "coder-1", "TASK", "do not deliver", "--from", "manager"]);
     writeTranscript("sess-coder", "tool_use");
     proc = spawnLiveMonitor(["--debounce", "40", "--interval", "5000"]);

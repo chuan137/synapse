@@ -245,7 +245,7 @@ const COMMANDS: CommandSpec[] = [
         title: "Options",
         lines: [
           "--session NAME  Tmux session to monitor.",
-          "--interval MS   Sweep interval for roster/mail checks.",
+          "--interval MS   Sweep interval; drives busy/idle checks, roster sync, and mail delivery.",
           "--debounce MS   Quiet window before end_turn counts as idle.",
           "--once          Run a single synchronous polling pass.",
           "--run-id N      Restrict monitor work to a run.",
