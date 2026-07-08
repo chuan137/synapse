@@ -115,6 +115,7 @@
           if (p.tagName === 'CODE' || p.tagName === 'PRE' || p.tagName === 'A') return NodeFilter.FILTER_REJECT;
           p = p.parentElement;
         }
+        HIGHLIGHT_RE.lastIndex = 0;
         return HIGHLIGHT_RE.test(node.textContent) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       }
     });
@@ -603,7 +604,7 @@
       const chip = document.createElement('span');
       chip.className = 'agent-chip';
       chip.dataset.window = a.window_name;
-      chip.title = a.window_name + ' · ' + st;
+      chip.title = a.window_name + ' · ' + st + (a.model ? ' · ' + a.model : '');
 
       const avatar = document.createElement('span');
       avatar.className = 'agent-avatar';
@@ -949,7 +950,7 @@
     if (mi) {
       mi.disabled = !isRunning;
       mi.placeholder = isRunning
-        ? 'Send a task to manager…'
+        ? 'Message… (↵ send, ⌥↵ discuss, ⇧↵ newline)'
         : 'Run ' + (run ? run.status : 'ended') + ' — read only';
     }
     if (sb) sb.disabled = !isRunning;
@@ -1568,19 +1569,21 @@
   if (stopRunBtn) stopRunBtn.addEventListener('click', finishRun);
   msgInput.addEventListener('keydown', e => {
     if (e.isComposing) return;
-    if (e.key === 'Enter' && e.metaKey && !e.shiftKey) {
-      e.preventDefault(); sendDiscussion();
-    } else if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+    if (e.key === 'Enter' && e.altKey && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault(); sendDiscussion(); return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault(); sendMessage();
     }
     // Shift+Enter: pass through — browser inserts newline
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Meta') msgInput.classList.add('meta-held');
+    if (e.key === 'Alt') msgInput.classList.add('alt-held');
   });
   document.addEventListener('keyup', e => {
-    if (e.key === 'Meta') msgInput.classList.remove('meta-held');
+    if (e.key === 'Alt') msgInput.classList.remove('alt-held');
   });
+  window.addEventListener('blur', () => { msgInput.classList.remove('alt-held'); });
   startGoal.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startRun(); }
   });
