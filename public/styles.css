@@ -458,6 +458,13 @@
     flex-shrink: 0;
     display: none;
   }
+  .thread-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: 8px;
+    white-space: nowrap;
+  }
 
   /* ── Agents strip ── */
   .agents-strip {
