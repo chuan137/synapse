@@ -260,6 +260,13 @@ const COMMANDS: CommandSpec[] = [
     summary: "Start a task from a task manifest.",
     help: [
       {
+        title: "Config resolution (no argument)",
+        lines: [
+          "1. .synapse/task.yml  — project-level config, used when present.",
+          "2. Built-in example   — fallback when no project config exists.",
+        ],
+      },
+      {
         title: "Options",
         lines: [
           "--goal text    Override the goal from the task manifest.",

@@ -199,7 +199,7 @@ export function startUi(port: number, dev = false) {
 
     for (const run of runningRuns) {
       const agents = db.query(
-        `SELECT window_name, role, status, last_seen_at,
+        `SELECT window_name, role, model, status, last_seen_at,
                 (SELECT COUNT(*) FROM messages m
                  WHERE m.status='pending' AND m.to_agent=a.window_name
                    AND m.run_id = ?) AS pending_count

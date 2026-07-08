@@ -68,21 +68,23 @@ export function cmdRegister(
   role: string,
   sessionId: string | null,
   runId?: number | null,
+  model?: string | null,
 ) {
   const db = connect();
   const resolvedRunId = runId ?? null;
   db.run(
-    `INSERT INTO agents (window_name, run_id, role, session_id, status, last_seen_at)
-     VALUES (?, ?, ?, ?, 'unknown', ?)
+    `INSERT INTO agents (window_name, run_id, role, model, session_id, status, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, 'unknown', ?)
      ON CONFLICT(window_name, run_id) DO UPDATE SET
        role=excluded.role,
+       model=excluded.model,
        session_id=excluded.session_id,
        status='unknown',
        last_seen_at=excluded.last_seen_at`,
-    [name, resolvedRunId, role, sessionId, nowIso()],
+    [name, resolvedRunId, role, model ?? null, sessionId, nowIso()],
   );
   console.log(
-    `synapse: registered '${name}' (role=${role}, session_id=${sessionId ?? "-"})`,
+    `synapse: registered '${name}' (role=${role}${model ? ", model=" + model : ""}, session_id=${sessionId ?? "-"})`,
   );
 }
 
@@ -205,7 +207,7 @@ export function cmdStatus() {
     console.log("");
   }
 
-  const headers = ["WINDOW", "ROLE", "STATE", "LAST_SEEN", "PENDING"];
+  const headers = ["WINDOW", "ROLE", "MODEL", "STATE", "LAST_SEEN", "PENDING"];
   const rows = agents.map((a) => {
     const pending = activeRun
       ? (pendingStmt.get(a.window_name, activeRun.id) as any).n
@@ -213,6 +215,7 @@ export function cmdStatus() {
     return [
       a.window_name,
       a.role,
+      a.model ?? "-",
       a.status,
       a.last_seen_at ?? "-",
       String(pending),
@@ -351,6 +354,8 @@ interface AgentConfig {
   // Instance block: free text distinguishing this specific agent from other
   // agents of the same role (e.g. coder-1 vs coder-2).
   focus?: string;
+  // Optional model override, e.g. "claude-opus-4-8" or alias "opus".
+  model?: string;
 }
 
 interface TaskConfig {
@@ -495,6 +500,10 @@ function parseTaskYaml(text: string): TaskConfig {
       current.focus = unquoteYamlScalar(line.replace(/^\s+focus:\s+/, ""));
       continue;
     }
+    if (current && /^\s+model:\s/.test(line)) {
+      current.model = unquoteYamlScalar(line.replace(/^\s+model:\s+/, ""));
+      continue;
+    }
   }
   flushBlock();
   if (current) agents.push(current);
@@ -632,9 +641,10 @@ function launchAgentWindow(
   // ANTHROPIC_BASE_URL to an enterprise proxy).
   const direnvPath = Bun.spawnSync(["which", "direnv"]).stdout.toString().trim() || "direnv";
   const initialPrompt = `synapse pending ${agent.name}`;
+  const modelFlag = agent.model ? `--model ${agent.model} ` : "";
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions '${initialPrompt}'
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions ${modelFlag}'${initialPrompt}'
   `;
 
   if (process.env.SYNAPSE_DEBUG) {
@@ -660,14 +670,21 @@ function launchAgentWindow(
 
 export function cmdStart(configPath: string, flags: Record<string, string>) {
   let taskText: string;
-  if (!existsSync(configPath)) {
-    if (configPath === DEFAULT_TASK_TEMPLATE) {
-      taskText = TASK_EXAMPLE_YML;
-    } else {
-      fail(`task config not found: ${configPath}`);
-    }
-  } else {
+  const defaultUserConfig = join(dirname(dbPath()), "task.yml");
+  if (configPath !== DEFAULT_TASK_TEMPLATE) {
+    // Explicit path provided — must exist.
+    if (!existsSync(configPath)) fail(`task config not found: ${configPath}`);
     taskText = readFileSync(resolve(configPath), "utf8");
+  } else if (existsSync(defaultUserConfig)) {
+    // .synapse/task.yml exists — use it silently.
+    taskText = readFileSync(defaultUserConfig, "utf8");
+  } else {
+    // No .synapse/task.yml yet — copy the built-in example there so the user
+    // can edit it next time, then use it for this run.
+    mkdirSync(dirname(defaultUserConfig), { recursive: true });
+    writeFileSync(defaultUserConfig, TASK_EXAMPLE_YML, "utf8");
+    console.log(`synapse: created ${defaultUserConfig} from built-in example — edit it to customise your team`);
+    taskText = TASK_EXAMPLE_YML;
   }
   const config = parseTaskYaml(taskText);
   const goal = flags["goal"] ?? config.goal;
@@ -775,7 +792,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
       `synapse: launching window '${agent.name}' (${agent.role}) in ${absCwd}`,
     );
     launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, runId, projectRoot);
-    cmdRegister(agent.name, agent.role, sessionId, runId);
+    cmdRegister(agent.name, agent.role, sessionId, runId, agent.model ?? null);
   }
 
   // Start monitor in the 'monitor' tmux window

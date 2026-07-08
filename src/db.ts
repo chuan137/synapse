@@ -12,8 +12,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v7 added session_killed_at to runs so UI teardown state survives refresh/SSE updates.
 // v8 renamed an intermediate session-completion column to session_killed_at.
 // v9 added title column to messages (optional short title for QUESTION cards).
-// v10 added run_id column to events for the (now-removed) log-command activity ribbon.
-export const SCHEMA_VERSION = 10;
+// v11 added model column to agents.
+export const SCHEMA_VERSION = 11;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -141,6 +141,15 @@ export function initDb() {
       db.close();
       currentVersion = 10;
       console.log(`synapse: migrated ${path} from schema v9 to v10`);
+    }
+    if (hasTables && currentVersion === 10) {
+      // Migrate v10 → v11: add model column to agents (non-destructive).
+      const db = connect(true);
+      db.exec(`ALTER TABLE agents ADD COLUMN model TEXT;`);
+      db.exec(`PRAGMA user_version=11;`);
+      db.close();
+      currentVersion = 11;
+      console.log(`synapse: migrated ${path} from schema v10 to v11`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

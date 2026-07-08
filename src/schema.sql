@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS agents (
   window_name TEXT NOT NULL,
   run_id      INTEGER NOT NULL,    -- 0 = operator sentinel; N = run id (N ≥ 1)
   role        TEXT NOT NULL,       -- manager | coder | reviewer | operator | ...
+  model       TEXT,                -- claude model override, e.g. claude-opus-4-8 (null = default)
   session_id  TEXT,                -- Claude Code session id, for jsonl path
   status      TEXT NOT NULL DEFAULT 'unknown',  -- idle | busy | stopped | unknown
   last_seen_at TEXT,
