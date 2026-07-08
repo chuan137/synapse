@@ -738,6 +738,7 @@
     if (messagesListEl) messagesListEl.style.display = 'none';
     if (sessionActionsEl) sessionActionsEl.style.display = 'none';
     if (composeEl) composeEl.style.display = 'none';
+    updateThreadFooter(null);
   }
 
   function hideLanding() {
@@ -881,11 +882,14 @@
     const sepEl  = $('thread-sep');
     if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
     if (sepEl)  sepEl.style.display = 'none';
-    const metaEl = $('thread-meta');
-    if (metaEl) {
-      const msgs = state.messages.get(run.id) || [];
-      metaEl.textContent = 'run-' + run.id + ' · ' + run.status + ' · ' + msgs.length + ' messages';
-    }
+  }
+
+  function updateThreadFooter(run) {
+    const footEl = $('thread-footer');
+    if (!footEl) return;
+    if (!run) { footEl.textContent = ''; return; }
+    const msgs = state.messages.get(run.id) || [];
+    footEl.textContent = msgs.length + ' messages';
   }
 
   function updateKillSessionButton(run) {
@@ -922,6 +926,7 @@
 
     const run = state.runs.find(r => r.id === runId) || knownRun;
     updateThreadHeader(run);
+    updateThreadFooter(run);
     updateKillSessionButton(run);
 
     renderAgentsStrip(state.agents.get(runId) || []);
@@ -995,6 +1000,7 @@
       const run = state.runs.find(r => r.id === state.selectedRunId);
       if (run) {
         updateThreadHeader(run);
+        updateThreadFooter(run);
         updateKillSessionButton(run);
       }
       syncComposeMode();
@@ -1040,7 +1046,7 @@
           if (payload.run_id === state.selectedRunId) {
             renderAgentsStrip(payload.agents);
             const run = state.runs.find(r => r.id === payload.run_id);
-            if (run) updateThreadHeader(run);
+            if (run) { updateThreadHeader(run); updateThreadFooter(run); }
           }
           renderRunsTabs();
         } else {
@@ -1064,6 +1070,7 @@
           } else if (run.id === state.selectedRunId) {
             renderThread();
             updateThreadHeader(run);
+            updateThreadFooter(run);
             updateKillSessionButton(run);
           }
         } else {
@@ -1091,7 +1098,9 @@
           runMsgs.push(msg);
           if (msg.run_id === state.selectedRunId) {
             appendMessage(msg);
-            updateThreadHeader(state.runs.find(r => r.id === state.selectedRunId));
+            const _selRun = state.runs.find(r => r.id === state.selectedRunId);
+            updateThreadHeader(_selRun);
+            updateThreadFooter(_selRun);
           } else {
             state.unreadCounts.set(msg.run_id, (state.unreadCounts.get(msg.run_id) || 0) + 1);
             renderRunsTabs();

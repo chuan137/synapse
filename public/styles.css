@@ -458,13 +458,16 @@
     flex-shrink: 0;
     display: none;
   }
-  .thread-meta {
+  #thread-footer {
     font-family: var(--mono);
     font-size: 11px;
     color: var(--muted);
-    margin-left: 8px;
-    white-space: nowrap;
+    text-align: right;
+    padding: 4px 12px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
   }
+  #thread-footer:empty { display: none; }
 
   /* ── Agents strip ── */
   .agents-strip {
