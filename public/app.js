@@ -1585,6 +1585,10 @@
   });
   window.addEventListener('blur', () => { msgInput.classList.remove('alt-held'); });
   startGoal.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startRun(); }
+    if (e.isComposing) return;
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault(); startRun();
+    }
+    // Shift+Enter: pass through — browser inserts newline
   });
 })();
