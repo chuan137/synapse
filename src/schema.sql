@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS agents (
   session_id  TEXT,                -- Claude Code session id, for jsonl path
   status      TEXT NOT NULL DEFAULT 'unknown',  -- idle | busy | stopped | unknown
   last_seen_at TEXT,
+  context_tokens  INTEGER,  -- last known total input context tokens, null if unknown
   UNIQUE(window_name, run_id)
 );
 

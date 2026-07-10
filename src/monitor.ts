@@ -169,6 +169,30 @@ function lastAssistantStopReason(path: string): string | null {
   return null;
 }
 
+function readContextTokens(sessionId: string): number | null {
+  const path = findTranscriptPath(sessionId);
+  if (!path) return null;
+  let lines: string[];
+  try {
+    lines = readFileSync(path, "utf8").split("\n");
+  } catch {
+    return null;
+  }
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let entry: any;
+    try { entry = JSON.parse(line); } catch { continue; }
+    if (entry.type === "assistant" && entry.message?.usage) {
+      const u = entry.message.usage;
+      return (u.input_tokens ?? 0)
+        + (u.cache_creation_input_tokens ?? 0)
+        + (u.cache_read_input_tokens ?? 0);
+    }
+  }
+  return null;
+}
+
 // Idle is derived from the transcript's latest assistant stop_reason plus file quiet time.
 // watcherActivityMs, when supplied, is fs.watch's own wall-clock timestamp of
 // the last observed write to this transcript — used alongside the file's
@@ -453,6 +477,13 @@ function refreshAgentState(
       agentStatuses.delete(agent.window_name);
       log(`  ${agent.window_name}: stopped before readiness update`);
       return null;
+    }
+  }
+
+  if (agent.session_id && agent.session_id !== "-") {
+    const ctx = readContextTokens(agent.session_id);
+    if (ctx !== null) {
+      db.run("UPDATE agents SET context_tokens=? WHERE id=?", [ctx, agent.id]);
     }
   }
 

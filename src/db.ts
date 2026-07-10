@@ -13,7 +13,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v8 renamed an intermediate session-completion column to session_killed_at.
 // v9 added title column to messages (optional short title for QUESTION cards).
 // v11 added model column to agents.
-export const SCHEMA_VERSION = 11;
+// v12 added context_tokens column to agents.
+export const SCHEMA_VERSION = 12;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -150,6 +151,15 @@ export function initDb() {
       db.close();
       currentVersion = 11;
       console.log(`synapse: migrated ${path} from schema v10 to v11`);
+    }
+    if (hasTables && currentVersion === 11) {
+      // Migrate v11 → v12: add context_tokens column to agents (non-destructive).
+      const db = connect(true);
+      db.exec(`ALTER TABLE agents ADD COLUMN context_tokens INTEGER;`);
+      db.exec(`PRAGMA user_version=12;`);
+      db.close();
+      currentVersion = 12;
+      console.log(`synapse: migrated ${path} from schema v11 to v12`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

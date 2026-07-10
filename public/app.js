@@ -180,6 +180,12 @@
     } catch { return ts ?? ''; }
   }
 
+  function fmtCtx(tokens) {
+    if (tokens == null) return null;
+    const k = Math.round(tokens / 1000);
+    return k < 1 ? '<1k' : k + 'k';
+  }
+
   function initials(name) {
     const parts = String(name ?? '').split(/[-_\s]+/).filter(Boolean);
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -640,6 +646,13 @@
         chip.appendChild(badge);
       }
 
+      if (a.context_tokens != null) {
+        const ctx = document.createElement('span');
+        ctx.className = 'agent-ctx';
+        ctx.textContent = fmtCtx(a.context_tokens);
+        chip.appendChild(ctx);
+      }
+
       if (run) {
         chip.addEventListener('click', () => {
           fetch('/focus-agent', {
@@ -910,7 +923,10 @@
     if (!footEl) return;
     if (!run) { footEl.textContent = ''; return; }
     const msgs = state.messages.get(run.id) || [];
-    footEl.textContent = msgs.length + ' messages';
+    const agents = state.agents.get(run.id) || [];
+    const maxCtx = agents.reduce((m, a) => a.context_tokens != null ? Math.max(m, a.context_tokens) : m, 0);
+    const ctxStr = maxCtx > 0 ? ' · ' + fmtCtx(maxCtx) + ' ctx' : '';
+    footEl.textContent = msgs.length + ' messages' + ctxStr;
   }
 
   function updateKillSessionButton(run) {
