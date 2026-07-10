@@ -25,6 +25,7 @@ export const DEFAULT_SWEEP_INTERVAL_MS = 250;
 export const DEFAULT_DEBOUNCE_MS = 2000;
 export const DEFAULT_AUTO_TEARDOWN_MS = 30 * 60 * 1000;
 export const DEFAULT_UNKNOWN_IDLE_TIMEOUT_MS = 30_000;
+const SENDBACK_COOLDOWN_MS = 60_000;
 
 export type DisbandResult = {
   sessionKilled: boolean;
@@ -332,9 +333,18 @@ function nudgeForMissingStatusBeforeMoreWork(
   agent: any,
   runId: number,
   log: (s: string) => void,
+  sendBackSentAt: Map<string, number>,
 ): boolean {
   const open = newestOpenInboundWork(db, agent, runId);
   if (!open) return true;
+
+  const key = `${agent.window_name}:${open.id}`;
+  const lastSent = sendBackSentAt.get(key) ?? 0;
+  if (Date.now() - lastSent < SENDBACK_COOLDOWN_MS) {
+    // Already nudged recently — don't repeat
+    log(`  ${agent.window_name}: send-back reminder suppressed (cooldown) for ${open.type} #${open.id}`);
+    return false;
+  }
 
   nudgeAgent(
     tmuxSession,
@@ -342,6 +352,7 @@ function nudgeForMissingStatusBeforeMoreWork(
     sendBackReminderBody(agent.window_name, open),
     log,
   );
+  sendBackSentAt.set(key, Date.now());
 
   log(
     `  ${agent.window_name}: send-back required for ${open.type} #${open.id}; held further delivery`,
@@ -541,6 +552,7 @@ function pollOnce(
     .all(...(runId !== undefined ? [runId] : [])) as any[];
   const agentStatuses = new Map<string, AgentStatus>();
   const unknownSinceMs = new Map<string, number>();
+  const sendBackSentAt = new Map<string, number>();
   for (const agent of agents) {
     if (agent.window_name === "operator") continue;
     const result = refreshAgentState(
@@ -555,7 +567,7 @@ function pollOnce(
       tmuxSession,
     );
     if (result?.status === "idle") {
-      if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, log)) {
+      if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, log, sendBackSentAt)) {
         nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, log);
       }
     }
@@ -627,6 +639,7 @@ function runLiveMonitor(
 ) {
   const agentStatuses = new Map<string, AgentStatus>();
   const unknownSinceMs = new Map<string, number>();
+  const sendBackSentAt = new Map<string, number>();
   let agents: any[] = [];
   const sourceLog = (source: "sweep") => (s: string) => log(`[${source}] ${s}`);
 
@@ -722,7 +735,7 @@ function runLiveMonitor(
         watcherActivityMs,
       );
       if (agentState?.status === "idle") {
-        if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
+        if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog, sendBackSentAt)) {
           nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
         }
       }
