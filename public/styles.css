@@ -533,7 +533,8 @@
   }
   .agent-ctx {
     position: absolute;
-    bottom: -14px;
+    bottom: 100%;
+    margin-bottom: 4px;
     left: 50%;
     transform: translateX(-50%);
     background: var(--tooltip-bg);
