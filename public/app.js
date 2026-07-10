@@ -4,7 +4,6 @@
   const header      = $('header');
   const connStatus  = $('conn-status');
   const msgInput    = $('msg-input');
-  const sendBtn     = $('send-btn');
   const sessionActions = $('session-actions');
   const killSessionBtn = $('kill-session-btn');
   const finishRunBtn   = $('finish-run-btn');
@@ -978,14 +977,12 @@
 
     const isRunning = run && run.status === 'running';
     const mi = $('msg-input');
-    const sb = $('send-btn');
     if (mi) {
       mi.disabled = !isRunning;
       mi.placeholder = isRunning
         ? 'Message… (↵ send, ⌥↵ discuss, ⇧↵ newline)'
         : 'Run ' + (run ? run.status : 'ended') + ' — read only';
     }
-    if (sb) sb.disabled = !isRunning;
   }
 
   function handleRunsList(payload) {
@@ -1152,11 +1149,9 @@
 
   async function sendMessage() {
     const mi = $('msg-input');
-    const sb = $('send-btn');
     const body = mi ? mi.value.trim() : '';
     if (!body) { flash('body required', false); return; }
     if (!state.selectedRunId) { flash('no run selected', false); return; }
-    if (sb) sb.disabled = true;
     try {
       const res = await fetch('/send', {
         method: 'POST',
@@ -1172,17 +1167,14 @@
       if (json.ok) { if (mi) mi.value = ''; }
       else flash(json.error || 'error', false);
     } catch (err) { flash(String(err), false); }
-    finally { const s = $('send-btn'); if (s) s.disabled = false; }
   }
 
   async function sendDiscussion() {
     const mi = $('msg-input');
-    const sb = $('send-btn');
     const rawBody = mi ? mi.value.trim() : '';
     if (!rawBody) { flash('body required', false); return; }
     if (!state.selectedRunId) { flash('no run selected', false); return; }
     const body = '[Discussion — 请表达真实想法，不要立即执行]\n\n' + rawBody;
-    if (sb) sb.disabled = true;
     try {
       const res = await fetch('/send', {
         method: 'POST',
@@ -1198,7 +1190,6 @@
       if (json.ok) { if (mi) mi.value = ''; }
       else flash(json.error || 'error', false);
     } catch (err) { flash(String(err), false); }
-    finally { const s = $('send-btn'); if (s) s.disabled = false; }
   }
 
   async function killSession() {
@@ -1600,7 +1591,6 @@
     setStartStatus('', true);
   });
   startSubmit.addEventListener('click', startRun);
-  sendBtn.addEventListener('click', sendMessage);
   killSessionBtn.addEventListener('click', killSession);
   finishRunBtn.addEventListener('click', finishRun);
   if (stopRunBtn) stopRunBtn.addEventListener('click', finishRun);
