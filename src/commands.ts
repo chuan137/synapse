@@ -100,7 +100,7 @@ export function resolveFrom(from: string | null): string {
 const NUMBERED_MARKER_RE = /\(\d{1,2}\)|[①-⑳]/g;
 
 // A non-manager agent (coder/reviewer/tester) may PROGRESS directly to
-// operator, but only as a lifecycle marker — start/done/blocked — never as
+// operator, but only as a lifecycle marker — start/done/blocked/step — never as
 // process narration. See docs/progress-direct-signal-spec.md.
 const DIRECT_PROGRESS_PREFIX_RE = /^\[(start|done|blocked|step)\]/;
 
@@ -146,7 +146,7 @@ export function cmdSend(
     if (!DIRECT_PROGRESS_PREFIX_RE.test(body)) {
       fail(
         "direct PROGRESS to operator from a non-manager agent must lead with " +
-          "[start], [done], or [blocked] — this path is for lifecycle markers only " +
+          "[start], [done], [blocked], or [step] — this path is for lifecycle markers only " +
           "(one per TASK you accept, one before the REPLY that closes it). Process " +
           "narration (\"trying X\", \"still working on Y\") goes to your supervisor " +
           "via PROGRESS/REPLY, not to operator. See docs/progress-direct-signal-spec.md.",
