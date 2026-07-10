@@ -74,8 +74,8 @@ but only as a lifecycle marker, never as narration:
 
 - `[start]` — once, right after you accept a `TASK` (or a review `TASK`).
 - `[step]` — at major phase boundaries during a long task: after reading the
-  spec, after writing the core change, after build/tests pass. At most 3–4
-  per task; never one per file or per command.
+  spec, after writing the core change, after build/tests pass. One per phase,
+  however many phases the task has; never one per file or per command.
 - `[done]` — once, right before the `REPLY` that closes it out.
 - `[blocked]` — only if you are stalled on something not yet worth escalating
   to a `QUESTION`.
