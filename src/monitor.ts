@@ -24,6 +24,7 @@ import { fail, nowIso, DEFAULT_TMUX_SESSION } from "./commands";
 export const DEFAULT_SWEEP_INTERVAL_MS = 250;
 export const DEFAULT_DEBOUNCE_MS = 2000;
 export const DEFAULT_AUTO_TEARDOWN_MS = 30 * 60 * 1000;
+export const DEFAULT_UNKNOWN_IDLE_TIMEOUT_MS = 30_000;
 
 export type DisbandResult = {
   sessionKilled: boolean;
@@ -391,6 +392,8 @@ function refreshAgentState(
   debounceMs: number,
   agent: any,
   agentStatuses: Map<string, AgentStatus>,
+  unknownSinceMs: Map<string, number>,
+  unknownIdleTimeoutMs: number,
   log: (s: string) => void,
   runId: number,
   tmuxSession?: string,
@@ -405,13 +408,29 @@ function refreshAgentState(
     return null;
   }
 
-  const { status, detail } = state;
+  let { status, detail } = state;
   const prev = agentStatuses.get(agent.window_name) ?? agent.status;
-  agentStatuses.set(agent.window_name, status);
+
   if (status === "unknown") {
     log(`  ${agent.window_name}: unknown (${detail})`);
-    return state;
+    if (!unknownSinceMs.has(agent.window_name)) {
+      unknownSinceMs.set(agent.window_name, Date.now());
+    }
+    const unknownDurationMs = Date.now() - unknownSinceMs.get(agent.window_name)!;
+    if (unknownDurationMs >= unknownIdleTimeoutMs) {
+      log(`  ${agent.window_name}: unknown for ${Math.round(unknownDurationMs / 1000)}s — forcing idle`);
+      state = { status: "idle", detail: `forced idle after unknown for ${Math.round(unknownDurationMs / 1000)}s` };
+      status = "idle";
+      detail = state.detail;
+    } else {
+      agentStatuses.set(agent.window_name, status);
+      return state;
+    }
+  } else {
+    unknownSinceMs.delete(agent.window_name);
   }
+
+  agentStatuses.set(agent.window_name, status);
   if (status !== prev) {
     log(`  ${agent.window_name}: ${prev} -> ${status} (${detail})`);
     // Guarded so a concurrent deregister wins — don't resurrect a stopped row.
@@ -521,6 +540,7 @@ function pollOnce(
     )
     .all(...(runId !== undefined ? [runId] : [])) as any[];
   const agentStatuses = new Map<string, AgentStatus>();
+  const unknownSinceMs = new Map<string, number>();
   for (const agent of agents) {
     if (agent.window_name === "operator") continue;
     const result = refreshAgentState(
@@ -528,6 +548,8 @@ function pollOnce(
       debounceMs,
       agent,
       agentStatuses,
+      unknownSinceMs,
+      DEFAULT_UNKNOWN_IDLE_TIMEOUT_MS,
       log,
       agent.run_id,
       tmuxSession,
@@ -604,6 +626,7 @@ function runLiveMonitor(
   runId?: number,
 ) {
   const agentStatuses = new Map<string, AgentStatus>();
+  const unknownSinceMs = new Map<string, number>();
   let agents: any[] = [];
   const sourceLog = (source: "sweep") => (s: string) => log(`[${source}] ${s}`);
 
@@ -672,6 +695,7 @@ function runLiveMonitor(
       if (liveNames.has(name)) continue;
       pool.unwatch(name);
       agentStatuses.delete(name);
+      unknownSinceMs.delete(name);
       sweepLog(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
@@ -690,6 +714,8 @@ function runLiveMonitor(
         debounceMs,
         agent,
         agentStatuses,
+        unknownSinceMs,
+        DEFAULT_UNKNOWN_IDLE_TIMEOUT_MS,
         sweepLog,
         agent.run_id,
         undefined,
