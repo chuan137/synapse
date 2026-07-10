@@ -34,15 +34,16 @@ to `manager`).
 ## Bootstrap
 
 Your launch prompt was only `synapse pending <your-name>`. No task text lives
-in the prompt. Run that command first to pull your work from the DB. Task
-content always lives in the `messages` table.
+in the prompt. Run that command once on launch to pull your work from the DB.
+The monitor will re-send it when new work arrives — do not call it again
+mid-turn. Task content always lives in the `messages` table.
 
 ## CLI
 
 `SYNAPSE_DB` and `SYNAPSE_AGENT` are pre-exported by the launcher.
 
 ```bash
-synapse pending $SYNAPSE_AGENT              # pull what's waiting; run first and whenever unsure
+synapse pending $SYNAPSE_AGENT              # pull what's waiting; run once on launch, or when a new message may have arrived
 synapse send <to> <TYPE> "<body>" [--ref-id N] [--options a,b,c] [--title "Short title"]  # TYPE: TASK|QUESTION|PROGRESS|REPLY
 synapse status                             # roster / idle-busy state
 ```
