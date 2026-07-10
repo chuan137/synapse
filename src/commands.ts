@@ -102,7 +102,7 @@ const NUMBERED_MARKER_RE = /\(\d{1,2}\)|[①-⑳]/g;
 // A non-manager agent (coder/reviewer/tester) may PROGRESS directly to
 // operator, but only as a lifecycle marker — start/done/blocked — never as
 // process narration. See docs/progress-direct-signal-spec.md.
-const DIRECT_PROGRESS_PREFIX_RE = /^\[(start|done|blocked)\]/;
+const DIRECT_PROGRESS_PREFIX_RE = /^\[(start|done|blocked|step)\]/;
 
 export function hasUnbrokenNumberedList(body: string): boolean {
   const matches = body.match(NUMBERED_MARKER_RE);

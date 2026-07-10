@@ -73,11 +73,14 @@ does not change. `PROGRESS` is the one exception: `coder`, `reviewer`, and
 but only as a lifecycle marker, never as narration:
 
 - `[start]` — once, right after you accept a `TASK` (or a review `TASK`).
+- `[step]` — at major phase boundaries during a long task: after reading the
+  spec, after writing the core change, after build/tests pass. At most 3–4
+  per task; never one per file or per command.
 - `[done]` — once, right before the `REPLY` that closes it out.
 - `[blocked]` — only if you are stalled on something not yet worth escalating
   to a `QUESTION`.
 
-The body must start with one of those three tags — `synapse send` rejects a
+The body must start with one of those four tags — `synapse send` rejects a
 direct-to-operator `PROGRESS` from a non-manager agent otherwise. Nothing else
 goes to `operator` directly: process narration and anything requiring
 judgment still go to your supervisor only (`PROGRESS`/`REPLY` to `manager`, or

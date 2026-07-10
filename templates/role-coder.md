@@ -10,6 +10,12 @@ run, if any, follows in the instance block below.
    `TASK`'s id — once, right here, before you touch anything. This is the
    only direct-to-operator message you send until `[done]`; see shared
    protocol's "Direct PROGRESS to operator".
+2a. During the task, send a `[step]` `PROGRESS` directly to `operator` at
+    each major phase boundary — after you've read the spec and relevant files,
+    after you've written the main changes, and after build/tests pass. Keep
+    it to one short line per phase; do not send one per file edited or per
+    command run. Three or four `[step]` messages for an entire task is the
+    right amount.
 3. **Create a git worktree** before touching any files. Name it after the
    task id. All implementation happens inside that worktree, never directly
    on `main`.
@@ -54,6 +60,10 @@ run, if any, follows in the instance block below.
 ```bash
 # Task accepted — direct lifecycle marker to operator, not a substitute for anything below
 synapse send operator PROGRESS "[start] <one-line what you're building>" --ref-id <task_msg_id>
+
+# Mid-task phase marker — 3-4 max per task, at phase boundaries only
+synapse send operator PROGRESS "[step] read spec + source files, starting implementation" --ref-id <task_msg_id>
+synapse send operator PROGRESS "[step] changes written, running build" --ref-id <task_msg_id>
 
 # Report done — substantive reply to manager
 synapse send manager REPLY "<what you did, worktree merged>" --ref-id <task_msg_id>
