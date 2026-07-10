@@ -345,7 +345,7 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "done",
-    usage: 'synapse done [run-id] [--reason "<text>"] [--status done|failed] [--from NAME] [--ref-id N]',
+    usage: 'synapse done [run-id] [--reason "<text>"] [--status done|failed] [--ref-id N]',
     summary: "Mark the active run done or failed.",
     help: [
       {
@@ -359,7 +359,6 @@ const COMMANDS: CommandSpec[] = [
         lines: [
           "--reason TEXT         Summary text for the final reply. Defaults to \"Run marked done.\"",
           "--status done|failed  Terminal status to write. Defaults to done.",
-          "--from NAME           Agent sending the final status.",
           "--ref-id N            Root task message id this closes.",
         ],
       },
@@ -373,7 +372,7 @@ const COMMANDS: CommandSpec[] = [
       }
       const summary = flags["reason"] ?? null;
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
-      return cmdDone(flags["status"] ?? "done", summary, flags["from"] ?? null, refId, runId);
+      return cmdDone(flags["status"] ?? "done", summary, null, refId, runId);
     },
   },
 ];
