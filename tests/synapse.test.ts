@@ -573,7 +573,7 @@ describe("done", () => {
       .query("SELECT id FROM messages WHERE type='TASK' AND to_agent='manager'")
       .get() as any;
 
-    const r = run(["done", "All done", "--status", "done", "--run-id", String(runId)], {
+    const r = run(["done", String(runId), "--reason", "All done", "--status", "done"], {
       SYNAPSE_AGENT: "manager",
     });
     expect(r.exitCode).toBe(0);
@@ -592,7 +592,7 @@ describe("done", () => {
 
   test("--status failed marks the run failed", () => {
     const runId = insertRun();
-    const r = run(["done", "Could not finish", "--status", "failed", "--run-id", String(runId)], {
+    const r = run(["done", String(runId), "--reason", "Could not finish", "--status", "failed"], {
       SYNAPSE_AGENT: "manager",
     });
     expect(r.exitCode).toBe(0);
@@ -604,7 +604,7 @@ describe("done", () => {
     const runId = insertRun();
     run(["send", "manager", "TASK", "Build feature X", "--from", "operator"]);
     const r = run(
-      ["done", "All done", "--status", "done", "--run-id", String(runId), "--ref-id", "999"],
+      ["done", String(runId), "--reason", "All done", "--status", "done", "--ref-id", "999"],
       { SYNAPSE_AGENT: "manager" },
     );
     expect(r.exitCode).toBe(0);

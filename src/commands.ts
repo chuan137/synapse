@@ -898,12 +898,13 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 // and keeps dispatching operator follow-ups until the tmux session is killed.
 export function cmdDone(
   status: string,
-  summary: string,
+  summary: string | null,
   from: string | null,
   refIdFlag: number | null,
   runIdFlag: number | null,
 ) {
   const agent = resolveFrom(from);
+  const resolvedSummary = summary || "Run marked done.";
   const dbStatus = status === "failed" ? "failed" : "completed";
 
   const db = connect();
@@ -942,7 +943,7 @@ export function cmdDone(
     refId = root?.id ?? null;
   }
 
-  cmdSend("operator", "REPLY", summary, agent, refId, runId);
+  cmdSend("operator", "REPLY", resolvedSummary, agent, refId, runId);
   console.log(
     `synapse: done — run ${runId ?? "?"} marked '${dbStatus}', final REPLY sent to operator`,
   );

@@ -345,25 +345,34 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "done",
-    usage: 'synapse done --status done|failed "<summary>" [--from NAME] [--run-id N] [--ref-id N]',
+    usage: 'synapse done [run-id] [--reason "<text>"] [--status done|failed] [--from NAME] [--ref-id N]',
     summary: "Mark the active run done or failed.",
     help: [
       {
+        title: "Arguments",
+        lines: [
+          "run-id  Optional run id to finish. Overrides $SYNAPSE_RUN_ID.",
+        ],
+      },
+      {
         title: "Options",
         lines: [
+          "--reason TEXT         Summary text for the final reply. Defaults to \"Run marked done.\"",
           "--status done|failed  Terminal status to write. Defaults to done.",
           "--from NAME           Agent sending the final status.",
-          "--run-id N            Run to finish.",
           "--ref-id N            Root task message id this closes.",
         ],
       },
     ],
     run: (context) => {
       const { positional, flags } = context;
-      const [summary] = positional;
-      requireArgs(context, summary !== undefined);
+      let runId: number | null = null;
+      if (positional[0] !== undefined) {
+        runId = parseInt(positional[0], 10);
+        if (isNaN(runId)) fail(`synapse done: invalid run-id '${positional[0]}' — expected an integer`);
+      }
+      const summary = flags["reason"] ?? null;
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
-      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
       return cmdDone(flags["status"] ?? "done", summary, flags["from"] ?? null, refId, runId);
     },
   },
