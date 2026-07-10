@@ -470,6 +470,7 @@
     font-family: var(--mono);
     font-size: 11px;
     color: var(--muted);
+    margin-left: auto;
   }
   #thread-footer:empty { display: none; }
 
