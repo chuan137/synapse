@@ -949,6 +949,20 @@ export function cmdDone(
   );
 }
 
+export function cmdSetGoal(goal: string, runId?: number | null) {
+  const db = connect();
+  let run: any;
+  if (runId != null) {
+    run = db.query("SELECT id, status FROM runs WHERE id=?").get(runId);
+    if (!run) fail(`synapse set-goal: run #${runId} not found`);
+  } else {
+    run = db.query("SELECT id, status FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get();
+    if (!run) fail("synapse set-goal: no running run found");
+  }
+  db.run("UPDATE runs SET goal=? WHERE id=?", [goal.trim(), run.id]);
+  console.log(`synapse: goal updated for run #${run.id}`);
+}
+
 export function cmdStop(name: string, tmuxSession: string, runId?: number) {
   const db = connect();
   const resolvedRunId = runId ?? (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);

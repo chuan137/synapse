@@ -15,6 +15,7 @@
  *   synapse stop <name> [--session SESSION]
  *   synapse attach <name> [--session SESSION]
  *   synapse ui [--port N]
+ *   synapse set-goal "<text>" [--run-id N]
  *   synapse version
  *
  * DB location: $SYNAPSE_DB, else ./.synapse/synapse.db
@@ -31,6 +32,7 @@ import {
   cmdRegister,
   cmdRuns,
   cmdSend,
+  cmdSetGoal,
   cmdStart,
   cmdStatus,
   cmdStop,
@@ -373,6 +375,29 @@ const COMMANDS: CommandSpec[] = [
       const summary = flags["reason"] ?? null;
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
       return cmdDone(flags["status"] ?? "done", summary, null, refId, runId);
+    },
+  },
+  {
+    name: "set-goal",
+    usage: 'synapse set-goal "<new goal text>" [--run-id N]',
+    summary: "Update the goal of the current (or specified) running run.",
+    help: [
+      {
+        title: "Arguments",
+        lines: ["text  New goal text (required)."],
+      },
+      {
+        title: "Options",
+        lines: ["--run-id N    Target a specific run by id (default: current running run)."],
+      },
+    ],
+    run(context) {
+      const { positional, flags } = context;
+      const text = positional[0];
+      if (!text || !text.trim()) fail("synapse set-goal: goal text is required");
+      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
+      if (flags["run-id"] && isNaN(runId!)) fail(`synapse set-goal: invalid run-id '${flags["run-id"]}'`);
+      return cmdSetGoal(text, runId);
     },
   },
 ];
