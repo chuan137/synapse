@@ -911,10 +911,15 @@
   function updateThreadHeader(run) {
     const titleEl = $('thread-title');
     if (!titleEl || !run) return;
-    titleEl.innerHTML = run.goal ? '' : '<span>Thread</span>';
+    const goal = run.goal ? run.goal.slice(0, 80) : '';
+    if (goal) {
+      titleEl.textContent = goal;
+    } else {
+      titleEl.innerHTML = '<span>Thread</span>';
+    }
     const goalEl = $('thread-goal');
     const sepEl  = $('thread-sep');
-    if (goalEl) goalEl.textContent = run.goal ? run.goal.slice(0, 80) : '';
+    if (goalEl) goalEl.textContent = '';
     if (sepEl)  sepEl.style.display = 'none';
   }
 
