@@ -99,6 +99,17 @@ if it's missing.
 - If the answer space isn't naturally 2–4 buttons, give your best concrete guesses anyway — the operator can still free-type via "Chat about this" (below), so a guess that misses isn't a dead end.
 - The UI always appends a **"Chat about this"** button alongside the options. When the operator clicks it, a free-text field is revealed. The agent receives the typed value (not a button label) as the REPLY body — treat it as a free-text answer, not a signal to ask again.
 
+### Never use Claude Code's built-in question tools
+
+**Do NOT use `AskUserQuestion`, `EnterPlanMode`, or any other Claude Code
+interactive tool to ask the operator a question.** Those tools render in
+the tmux pane only — the operator is watching the S-Deck UI, not the
+terminal. Questions asked that way are invisible to the operator in the
+UI and break the coordination model.
+
+Always ask questions via `synapse send operator QUESTION "..." --options ...`.
+This is the only path that creates a clickable card in the S-Deck.
+
 ## ref_id
 
 Set `--ref-id` on every reply to the id of the message you are closing out.
