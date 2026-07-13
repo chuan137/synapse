@@ -614,7 +614,7 @@ export function startUi(port: number, dev = false) {
         });
       }
 
-      if (req.method === "POST" && pathname === "/upload") {
+      if (req.method === "POST" && url.pathname === "/upload") {
         const formData = await req.formData();
         const file = formData.get("file") as File | null;
         if (!file) return Response.json({ error: "no file" }, { status: 400 });
