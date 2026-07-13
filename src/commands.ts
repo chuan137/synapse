@@ -289,9 +289,9 @@ function printUnrelayedCheckpoint(db: ReturnType<typeof connect>, runId: number 
            AND NOT EXISTS (
              SELECT 1 FROM messages m2
              WHERE m2.from_agent = 'manager' AND m2.to_agent = 'operator'
-               AND m2.ref_id = messages.ref_id AND m2.run_id = ?
+               AND m2.ref_id = messages.ref_id
            )`,
-      ).all(runId, runId)
+      ).all(runId)
     : db.query(
         `SELECT DISTINCT ref_id FROM messages
          WHERE to_agent = 'manager' AND ref_id IS NOT NULL
