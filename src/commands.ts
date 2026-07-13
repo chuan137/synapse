@@ -894,7 +894,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 
 export function cmdSpawn(role: string, flags: Record<string, string>) {
   const VALID_ROLES = ["coder", "reviewer", "tester", "manager"];
-  if (!VALID_ROLES.includes(role)) fail(`synapse: unknown role '${role}' — must be one of ${VALID_ROLES.join(", ")}`);
+  if (!VALID_ROLES.includes(role)) fail(`unknown role '${role}' — must be one of ${VALID_ROLES.join(", ")}`);
 
   const db = connect();
   const runId = flags["run-id"] ? parseInt(flags["run-id"]) : null;
@@ -902,7 +902,7 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
   const run = runId
     ? db.query("SELECT * FROM runs WHERE id=? AND status='running'").get(runId) as any
     : db.query("SELECT * FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any;
-  if (!run) fail(runId ? `synapse: no running run with id ${runId}` : "synapse: no active running run");
+  if (!run) fail(runId ? `no running run with id ${runId}` : "no active running run");
 
   const tmuxSession = run.session as string;
   const runFolderName = `run-${run.id}`;
