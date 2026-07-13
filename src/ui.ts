@@ -1,8 +1,8 @@
-import { readFileSync, watch } from "fs";
+import { mkdirSync, readFileSync, watch } from "fs";
 import bundledHtml from "../public/index.html" with { type: "text" };
 import bundledCss from "../public/styles.css" with { type: "text" };
 import bundledJs from "../public/app.js" with { type: "text" };
-import { basename, dirname, join, resolve } from "path";
+import { basename, dirname, join, relative, resolve } from "path";
 import {
   cmdDone,
   DEFAULT_TASK_TEMPLATE,
@@ -290,7 +290,7 @@ export function startUi(port: number, dev = false) {
 
   const server = Bun.serve({
     port,
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url);
 
       if (url.pathname === "/" && req.method === "GET") {
@@ -612,6 +612,23 @@ export function startUi(port: number, dev = false) {
             .get(runId) as any;
           return Response.json({ ok: true, run_id: runId, session, session_killed_at: updated?.session_killed_at ?? null });
         });
+      }
+
+      if (req.method === "POST" && pathname === "/upload") {
+        const formData = await req.formData();
+        const file = formData.get("file") as File | null;
+        if (!file) return Response.json({ error: "no file" }, { status: 400 });
+
+        const uploadsDir = join(dirname(dbPath()), "uploads");
+        mkdirSync(uploadsDir, { recursive: true });
+
+        const safeName = basename(file.name).replace(/[^\w.\-]/g, "_");
+        const destPath = join(uploadsDir, safeName);
+        await Bun.write(destPath, await file.arrayBuffer());
+
+        const projectRoot = dirname(dirname(dbPath()));
+        const relPath = relative(projectRoot, destPath);
+        return Response.json({ path: relPath });
       }
 
       return new Response("Not Found", { status: 404 });

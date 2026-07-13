@@ -824,6 +824,7 @@
   textarea#msg-input.alt-held { border-color: var(--warning, #e8a020); background: color-mix(in srgb, var(--warning, #e8a020) 6%, var(--bg)); }
   textarea#msg-input.alt-held:focus { border-color: var(--warning, #e8a020); }
   textarea#msg-input:disabled { opacity: 0.4; cursor: not-allowed; }
+  #msg-input.drag-over { outline: 2px dashed var(--accent, #7c6af7); background: var(--drag-over-bg, rgba(124, 106, 247, 0.06)); }
   .compose-input-wrap { position: relative; }
   .compose-bottom { display: flex; align-items: center; gap: 8px; }
   #send-feedback { font-size: 11px; }

@@ -1620,6 +1620,36 @@
     }
     // Shift+Enter: pass through — browser inserts newline
   });
+  msgInput.addEventListener('dragover', e => {
+    e.preventDefault();
+    msgInput.classList.add('drag-over');
+  });
+  msgInput.addEventListener('dragleave', () => {
+    msgInput.classList.remove('drag-over');
+  });
+  msgInput.addEventListener('drop', async e => {
+    e.preventDefault();
+    msgInput.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files);
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.path) {
+          const cur = msgInput.value;
+          const sep = cur && !cur.endsWith('\n') ? '\n' : '';
+          msgInput.value = cur + sep + '`' + data.path + '`';
+          msgInput.focus();
+        } else {
+          console.error('upload error', data);
+        }
+      } catch (err) {
+        console.error('upload failed', err);
+      }
+    }
+  });
   document.addEventListener('keydown', e => {
     if (e.key === 'Alt') msgInput.classList.add('alt-held');
   });
