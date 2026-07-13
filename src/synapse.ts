@@ -33,6 +33,7 @@ import {
   cmdRuns,
   cmdSend,
   cmdSetGoal,
+  cmdSpawn,
   cmdStart,
   cmdStatus,
   cmdStop,
@@ -300,6 +301,31 @@ const COMMANDS: CommandSpec[] = [
       requireArgs(context, !!name);
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : undefined;
       return cmdStop(name, flags["session"] ?? DEFAULT_TMUX_SESSION, runId);
+    },
+  },
+  {
+    name: "spawn",
+    usage: "synapse spawn <role> [--run-id N]",
+    summary: "Spawn a new agent window in the active (or specified) run.",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "role        Agent role to launch: coder, reviewer, tester, manager.",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--run-id N  Target a specific run (default: most recent running run).",
+        ],
+      },
+    ],
+    run(context) {
+      const { positional, flags } = context;
+      const role = positional[0];
+      if (!role) fail("synapse spawn: role is required");
+      cmdSpawn(role, flags);
     },
   },
   {

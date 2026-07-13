@@ -892,6 +892,46 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
 }
 
 
+export function cmdSpawn(role: string, flags: Record<string, string>) {
+  const VALID_ROLES = ["coder", "reviewer", "tester", "manager"];
+  if (!VALID_ROLES.includes(role)) fail(`synapse: unknown role '${role}' — must be one of ${VALID_ROLES.join(", ")}`);
+
+  const db = connect();
+  const runId = flags["run-id"] ? parseInt(flags["run-id"]) : null;
+
+  const run = runId
+    ? db.query("SELECT * FROM runs WHERE id=? AND status='running'").get(runId) as any
+    : db.query("SELECT * FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1").get() as any;
+  if (!run) fail(runId ? `synapse: no running run with id ${runId}` : "synapse: no active running run");
+
+  const tmuxSession = run.session as string;
+  const runFolderName = `run-${run.id}`;
+
+  const existing = db.query(
+    "SELECT window_name FROM agents WHERE run_id=? AND role=?"
+  ).all(run.id, role) as any[];
+  const count = existing.length;
+  const name = count === 0 ? role : `${role}-${count + 1}`;
+
+  const dbFile = dbPath();
+  const projectRoot = dirname(dirname(dbFile));
+
+  const claudeWhich = Bun.spawnSync(["which", "claude"]);
+  const claudePath = claudeWhich.exitCode === 0 ? claudeWhich.stdout.toString().trim() : "claude";
+
+  const sessionId = crypto.randomUUID();
+
+  const agent: AgentConfig = { role, name };
+
+  const absCwd = resolve(defaultAgentDir(runFolderName, name));
+  writeAgentClaudeMd(absCwd, agent);
+
+  launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, run.id, projectRoot);
+  cmdRegister(name, role, sessionId, run.id, null);
+
+  console.log(`synapse: spawned '${name}' (${role}) in run #${run.id}, window '${tmuxSession}:${name}'`);
+}
+
 // The hub agent's signal that the root task has reached a terminal outcome
 // (bootstrap-spec.md #8/#13). Writes the run's terminal state and sends the
 // final REPLY back to operator. The monitor stays alive after terminal state

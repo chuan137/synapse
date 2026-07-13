@@ -3,6 +3,3 @@ workflow: hub-and-spoke
 agents:
   - role: manager
   - role: coder
-  - role: coder
-  - role: reviewer
-  - role: tester
