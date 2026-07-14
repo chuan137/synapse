@@ -35,23 +35,20 @@ You review work on request. You are peer-to-peer with coders — most review
    above: those tell operator "review is happening"; this tells manager
    the actual verdict so it can decide what's next.
 
-### Synapse conventions
+### Message sequence
 
-```bash
-# Review picked up — direct lifecycle marker to operator
-synapse send operator PROGRESS "[start] reviewing <task summary>" --ref-id <review_task_msg_id>
+Exact `send` syntax: `synapse-operator` skill. The order, and — important —
+**two different `ref_id` values** in this sequence, not one:
 
-# Review finished — direct lifecycle marker to operator, sent right before the REPLY below
-synapse send operator PROGRESS "[done] <task summary>" --ref-id <review_task_msg_id>
+`[start]` PROGRESS to operator → `REPLY` to the requesting coder (LGTM or
+"issues found" + the review-file path) → `PROGRESS` to `manager` (same
+verdict, one line, same review-file path) → `[done]` PROGRESS to operator.
 
-# LGTM
-synapse send <coder> REPLY "LGTM — see .synapse/runs/<run>/<id>-review.md" --ref-id <review_task_msg_id>
-synapse send manager PROGRESS "Review LGTM for <task summary> — .synapse/runs/<run>/<id>-review.md" --ref-id <task_msg_id>
-
-# Issues found
-synapse send <coder> REPLY "Issues found — see .synapse/runs/<run>/<id>-review.md" --ref-id <review_task_msg_id>
-synapse send manager PROGRESS "Review issues for <task summary> — .synapse/runs/<run>/<id>-review.md" --ref-id <task_msg_id>
-```
+`[start]`, `[done]`, and the coder `REPLY` all share `--ref-id
+<review_task_msg_id>` (the review request you received). The `manager`
+`PROGRESS` uses a **different** id: the `ref_id` that request itself
+carried — i.e. the original coder `TASK` id, not the review request's own
+id. Getting this swapped breaks manager's `ref_id` chain tracking.
 
 ### What to check, generally
 

@@ -17,6 +17,10 @@ import ROLE_TESTER_MD from "../templates/role-tester.md" with {
   type: "text",
 };
 import TASK_EXAMPLE_YML from "../templates/task.example.yml" with { type: "text" };
+import SKILL_TMUX_MD from "../skills/tmux/SKILL.md" with { type: "text" };
+import SKILL_SYNAPSE_OPERATOR_MD from "../skills/synapse-operator/SKILL.md" with {
+  type: "text",
+};
 import { connect, dbPath, defaultAgentDir, initDb } from "./db";
 
 const ROLE_TEMPLATES: Record<string, string> = {
@@ -25,6 +29,32 @@ const ROLE_TEMPLATES: Record<string, string> = {
   reviewer: ROLE_REVIEWER_MD,
   tester: ROLE_TESTER_MD,
 };
+
+// Packaged skills (SKILL.md content, keyed by skill directory name) that
+// ship with the synapse binary — same "embed at compile time" pattern as
+// ROLE_TEMPLATES above. Installed into any project that adopts synapse (see
+// installSkills) so both the operator's own Claude Code session and every
+// spawned agent's session can discover them.
+const SKILLS: Record<string, string> = {
+  tmux: SKILL_TMUX_MD,
+  "synapse-operator": SKILL_SYNAPSE_OPERATOR_MD,
+};
+
+// Writes (overwrites) <targetDir>/.claude/skills/<name>/SKILL.md for every
+// packaged skill. Called for the project root (so the operator's own Claude
+// Code session, if rooted there, can see them) and for each spawned agent's
+// scratch cwd (see writeAgentClaudeMd) — Claude Code only discovers
+// project-scoped skills under the cwd it was launched in, not a parent
+// project's .claude/, so each agent needs its own copy. Regenerated on every
+// call, same "always in sync with the installed synapse version, don't hand-edit"
+// convention as the generated CLAUDE.md files.
+function installSkills(targetDir: string): void {
+  for (const [name, content] of Object.entries(SKILLS)) {
+    const dir = join(targetDir, ".claude", "skills", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), content);
+  }
+}
 
 export const MESSAGE_TYPES = new Set(["TASK", "QUESTION", "PROGRESS", "REPLY"]);
 
@@ -61,6 +91,11 @@ export function colorType(t: string): string {
 
 export function cmdInit() {
   initDb();
+  // Project root: two levels up from the DB file (./.synapse/synapse.db ->
+  // project root), same derivation cmdStart uses for direnv/claude launch.
+  const projectRoot = dirname(dirname(dbPath()));
+  installSkills(projectRoot);
+  console.log(`synapse: installed skills to ${join(projectRoot, ".claude", "skills")}`);
 }
 
 export function cmdRegister(
@@ -613,10 +648,14 @@ function assembleClaudeMd(agent: AgentConfig): string {
   return sections.join("\n\n") + "\n";
 }
 
-// Writes (overwrites) <absCwd>/CLAUDE.md, creating the directory if needed.
+// Writes (overwrites) <absCwd>/CLAUDE.md, creating the directory if needed,
+// and installs the packaged skills into <absCwd>/.claude/skills/ — this
+// agent's cwd is its own Claude Code project root, so it needs its own copy
+// (see installSkills) rather than inheriting the main project's.
 function writeAgentClaudeMd(absCwd: string, agent: AgentConfig): void {
   mkdirSync(absCwd, { recursive: true });
   writeFileSync(join(absCwd, "CLAUDE.md"), assembleClaudeMd(agent));
+  installSkills(absCwd);
 }
 
 // ---------- unattended preflight (bootstrap-spec.md #7) ----------
@@ -769,7 +808,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   const runId = Number(runResult.lastInsertRowid);
   const pathHash = Bun.hash(projectRoot).toString(16).slice(0, 4);
   const taskName = `${projectSlug}-${pathHash}-${runId}`;
-  const runFolderName = `run-${runId}`;
+  const runFolderName = taskName;
 
   const abort = (msg: string): never => {
     db.run(`DELETE FROM runs WHERE id=?`, [runId]);
@@ -796,7 +835,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     [nowIso()],
   );
 
-  const tmuxSession = `-${taskName}`;
+  const tmuxSession = taskName;
 
   const sessionExists = spawnTmux(["has-session", "-t", `=${tmuxSession}`]);
   if (sessionExists.exitCode === 0) {
@@ -821,7 +860,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
     );
   }
   // Rename the default window created with the session (base-index agnostic)
-  spawnTmux(["rename-window", "-t", `=${tmuxSession}`, "monitor"]);
+  spawnTmux(["rename-window", "-t", tmuxSession, "monitor"]);
   // Use largest-client sizing so attaching a wide terminal fills the windows
   spawnTmux(["set-option", "-t", `=${tmuxSession}`, "window-size", "largest"]);
 

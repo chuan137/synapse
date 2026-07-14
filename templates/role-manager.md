@@ -94,36 +94,22 @@ was closed by a subordinate but has no matching manager → operator message
 yet — treat that as a prompt to relay before moving on, not as noise to
 ignore.
 
+Message type per scenario (exact `send`/`--options`/`--ref-id` syntax is in
+the `synapse-operator` skill — this is what to send, not how to type it):
+
+- Task received → `REPLY` with **Task**/**Plan**/**Workflow** bullets, `--ref-id <task_msg_id>` (see format below — this one's worth memorizing).
+- Coder done + review verdict → `PROGRESS` the moment the reviewer's `REPLY` lands: `review: <LGTM|issues found> — <file/commit or review path>`. Coder/reviewer already told operator directly that work happened ([start]/[done]); this carries only the verdict they can't.
+- Dispatch tester after coder's approved `REPLY` → `TASK` to `tester`, pointing at the test plan and merged commit, `--ref-id <root_task_msg_id>`.
+- Tester verdict → `PROGRESS` the moment tester's `REPLY` lands, pass or fail: `tester: PASS — <n>/<n> cases` or `tester: FAIL — <case>, reassigned to <agent>`.
+- Workflow deviation (you add/skip a role, or reopen after a failure) → `PROGRESS`: `Deviation: <what changed and why>.`
+- Blocker → `QUESTION` with `--title`/`--options` (clickable choices, not a dead end).
+- All subtasks done → `REPLY` with a concrete summary — run stays open.
+
 ```bash
-# Task received — plan and workflow, substantive
+# The one format worth memorizing verbatim — task-received ack:
 synapse send operator REPLY "**Task:** <restatement>
 **Plan:** <1-2 sentences>
 **Workflow:** <roles/order, e.g. coder -> reviewer -> tester>" --ref-id <task_msg_id>
-
-# Coder done + review verdict — relay the moment the reviewer's REPLY lands.
-# Coder/reviewer already told operator directly that work happened
-# ([start]/[done]); this message carries only the verdict they can't.
-synapse send operator PROGRESS "review: <LGTM|issues found> — <file/commit or review path>" --ref-id <task_msg_id>
-
-# Dispatch tester after coder's approved REPLY
-synapse send tester TASK "See .synapse/runs/<run>/<id>-testplan.md. Merged commit: <sha>." --ref-id <root_task_msg_id>
-
-# Tester verdict — relay the moment tester's REPLY lands, pass or fail.
-# tester already sent operator its own [start]/[done]; PASS/FAIL and the
-# case count are the part only you can add.
-synapse send operator PROGRESS "tester: PASS — <n>/<n> cases" --ref-id <task_msg_id>
-synapse send operator PROGRESS "tester: FAIL — <case>, reassigned to <agent>" --ref-id <task_msg_id>
-
-# Workflow deviation — you add/skip a role, or reopen after a failure;
-# this is the "important decision" case, not covered by any of the above
-synapse send operator PROGRESS "Deviation: <what changed and why>." --ref-id <task_msg_id>
-
-# Blocker — clickable options
-synapse send operator QUESTION "BLOCKED: <what you need>." --ref-id <task_msg_id> \
-  --title "Decision needed" --options "Option A,Option B,Skip"
-
-# All done — substantive, keep run open
-synapse send operator REPLY "<concrete summary: what changed, what was verified>" --ref-id <task_msg_id>
 ```
 
 Write bodies as if the operator wasn't watching — because often they

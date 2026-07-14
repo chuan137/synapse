@@ -55,25 +55,16 @@ run, if any, follows in the instance block below.
    <task_msg_id>` command. The harness will hold further work and send you
    back to this step if the message is missing.
 
-### Synapse conventions
+### Message sequence
 
-```bash
-# Task accepted — direct lifecycle marker to operator, not a substitute for anything below
-synapse send operator PROGRESS "[start] <one-line what you're building>" --ref-id <task_msg_id>
+Exact `send` syntax (flags, env resolution): `synapse-operator` skill. The
+order that matters:
 
-# Mid-task phase marker — one per phase, at phase boundaries only
-synapse send operator PROGRESS "[step] read spec + source files, starting implementation" --ref-id <task_msg_id>
-synapse send operator PROGRESS "[step] changes written, running build" --ref-id <task_msg_id>
-
-# Report done — substantive reply to manager
-synapse send manager REPLY "<what you did, worktree merged>" --ref-id <task_msg_id>
-
-# Ask for review — a review request is a TASK to the reviewer
-synapse send reviewer TASK "<what to look at>" --ref-id <task_msg_id>
-
-# Task done — direct lifecycle marker to operator, sent right before the REPLY above
-synapse send operator PROGRESS "[done] <one-line outcome>" --ref-id <task_msg_id>
-```
+`[start]` PROGRESS to operator → optional `[step]` PROGRESS at phase
+boundaries → review `TASK` to reviewer (unless manager's `TASK` waived it)
+→ `[done]` PROGRESS to operator → `REPLY` to manager (what you did, worktree
+merged). All of these share one `--ref-id <task_msg_id>` — the id of the
+`TASK` you were assigned.
 
 ### Before reporting done
 

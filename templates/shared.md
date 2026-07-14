@@ -40,16 +40,18 @@ mid-turn. Task content always lives in the `messages` table.
 
 ## CLI
 
-`SYNAPSE_DB` and `SYNAPSE_AGENT` are pre-exported by the launcher.
+`SYNAPSE_DB` and `SYNAPSE_AGENT` are pre-exported by the launcher; project
+root is three levels up from cwd (`../../../`). If either is missing in a
+fresh subshell, re-export them.
+
+Full command reference — every flag, every subcommand, env-var resolution
+order — lives in the `synapse-operator` skill. Load it rather than guessing
+flag syntax from memory. The one command you need before that skill is even
+loaded, because it's your literal first action on every launch:
 
 ```bash
-synapse pending $SYNAPSE_AGENT              # pull what's waiting; run once on launch, or when a new message may have arrived
-synapse send <to> <TYPE> "<body>" [--ref-id N] [--options a,b,c] [--title "Short title"]  # TYPE: TASK|QUESTION|PROGRESS|REPLY
-synapse status                             # roster / idle-busy state
+synapse pending $SYNAPSE_AGENT   # pull what's waiting; run once on launch, or when a new message may have arrived
 ```
-
-If `SYNAPSE_DB`/`SYNAPSE_AGENT` are missing in a fresh subshell, re-export
-them. Project root is three levels up from cwd (`../../../`).
 
 ## Message types
 
@@ -99,16 +101,21 @@ if it's missing.
 - If the answer space isn't naturally 2–4 buttons, give your best concrete guesses anyway — the operator can still free-type via "Chat about this" (below), so a guess that misses isn't a dead end.
 - The UI always appends a **"Chat about this"** button alongside the options. When the operator clicks it, a free-text field is revealed. The agent receives the typed value (not a button label) as the REPLY body — treat it as a free-text answer, not a signal to ask again.
 
-### Never use Claude Code's built-in question tools
+### Only communicate through the mailbox
 
 **Do NOT use `AskUserQuestion`, `EnterPlanMode`, or any other Claude Code
 interactive tool to ask the operator a question.** Those tools render in
 the tmux pane only — the operator is watching the S-Deck UI, not the
 terminal. Questions asked that way are invisible to the operator in the
-UI and break the coordination model.
+UI and break the coordination model. Always ask via `synapse send operator
+QUESTION "..." --options ...` — the only path that creates a clickable card
+in the S-Deck.
 
-Always ask questions via `synapse send operator QUESTION "..." --options ...`.
-This is the only path that creates a clickable card in the S-Deck.
+**Do NOT use raw `tmux send-keys` (or the `tmux` skill, if it's available
+to you) to message another agent directly.** That bypasses the mailbox
+entirely — no `messages` row, no `ref_id`, invisible to `manager` and
+operator alike. The `tmux` skill is for a human operator's out-of-band pane
+inspection; it is not a substitute for `synapse send`.
 
 ## ref_id
 

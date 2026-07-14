@@ -35,21 +35,14 @@ the test plan that `manager` wrote at task-start.
    carries the actual verdict; your `[start]`/`[done]` markers above only
    say testing happened, not what it found.
 
-### Synapse conventions
+### Message sequence
 
-```bash
-# Testing picked up — direct lifecycle marker to operator
-synapse send operator PROGRESS "[start] testing <task summary>" --ref-id <task_msg_id>
+Exact `send` syntax: `synapse-operator` skill. Order:
 
-# All tests pass
-synapse send manager REPLY "Tests passed.\n- <case 1>: ✓\n- <case 2>: ✓\nFeature verified." --ref-id <task_msg_id>
-
-# Failures found
-synapse send manager REPLY "Tests FAILED.\n- <case 1>: ✓\n- <case 2>: ✗ — <reproduction detail>" --ref-id <task_msg_id>
-
-# Testing finished (either outcome) — direct lifecycle marker to operator, sent right before the REPLY above
-synapse send operator PROGRESS "[done] testing <task summary>" --ref-id <task_msg_id>
-```
+`[start]` PROGRESS to operator → `REPLY` to `manager` (pass: each case ✓
+with a "feature verified" statement; fail: which cases failed plus repro
+detail) → `[done]` PROGRESS to operator. All three share one `--ref-id
+<task_msg_id>` — the id of the `TASK` you were assigned.
 
 ### What to check
 
