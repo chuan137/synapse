@@ -17,7 +17,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { basename, dirname, join } from "path";
 
@@ -471,6 +471,27 @@ describe("start — task.yml parsing", () => {
     const r = run(["start", yaml, "--no-monitor"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("requires exactly one manager");
+  });
+
+  test("run folder is named run-N, not the tmux session name", () => {
+    run(["init"]);
+    const yaml = join(dir, "team.yaml");
+    Bun.write(
+      yaml,
+      "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n  - role: manager\n    name: manager\n",
+    );
+    // Fake tmux so start doesn't need a real session.
+    const fakeBin = join(dir, "fakebin");
+    mkdirSync(fakeBin, { recursive: true });
+    writeFileSync(join(fakeBin, "tmux"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(fakeBin, "tmux"), 0o755);
+
+    run(["start", yaml, "--no-monitor"], { PATH: `${fakeBin}:${process.env.PATH}` });
+
+    const runsDir = join(dir, "runs");
+    const entries = readdirSync(runsDir);
+    expect(entries.length).toBe(1);
+    expect(entries[0]).toMatch(/^run-\d+$/);
   });
 });
 

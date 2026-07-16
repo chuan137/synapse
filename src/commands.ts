@@ -17,27 +17,14 @@ import ROLE_TESTER_MD from "../templates/role-tester.md" with {
   type: "text",
 };
 import TASK_EXAMPLE_YML from "../templates/task.example.yml" with { type: "text" };
-import SKILL_TMUX_MD from "../skills/tmux/SKILL.md" with { type: "text" };
-import SKILL_SYNAPSE_OPERATOR_MD from "../skills/synapse-operator/SKILL.md" with {
-  type: "text",
-};
 import { connect, dbPath, defaultAgentDir, initDb } from "./db";
+import { SKILLS } from "./skills.generated";
 
 const ROLE_TEMPLATES: Record<string, string> = {
   manager: ROLE_MANAGER_MD,
   coder: ROLE_CODER_MD,
   reviewer: ROLE_REVIEWER_MD,
   tester: ROLE_TESTER_MD,
-};
-
-// Packaged skills (SKILL.md content, keyed by skill directory name) that
-// ship with the synapse binary — same "embed at compile time" pattern as
-// ROLE_TEMPLATES above. Installed into any project that adopts synapse (see
-// installSkills) so both the operator's own Claude Code session and every
-// spawned agent's session can discover them.
-const SKILLS: Record<string, string> = {
-  tmux: SKILL_TMUX_MD,
-  "synapse-operator": SKILL_SYNAPSE_OPERATOR_MD,
 };
 
 // Writes (overwrites) <targetDir>/.claude/skills/<name>/SKILL.md for every
@@ -808,7 +795,7 @@ export function cmdStart(configPath: string, flags: Record<string, string>) {
   const runId = Number(runResult.lastInsertRowid);
   const pathHash = Bun.hash(projectRoot).toString(16).slice(0, 4);
   const taskName = `${projectSlug}-${pathHash}-${runId}`;
-  const runFolderName = taskName;
+  const runFolderName = `run-${runId}`;
 
   const abort = (msg: string): never => {
     db.run(`DELETE FROM runs WHERE id=?`, [runId]);
