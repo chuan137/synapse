@@ -744,10 +744,10 @@ describe("start: full agent launch against task.yml", () => {
     const log = tmuxLogContents();
     expect(log).toContain(`new-session -d -s ${tmuxSession}`);
     expect(log).toContain(`rename-window -t ${tmuxSession} monitor`);
-    expect(log).toContain(`new-window -t ${tmuxSession} -n manager`);
-    expect(log).toContain(`new-window -t ${tmuxSession} -n coder-1`);
-    expect(log).toContain(`new-window -t ${tmuxSession} -n coder-2`);
-    expect(log).toContain(`new-window -t ${tmuxSession} -n reviewer`);
+    expect(log).toContain(`new-window -a -t ${tmuxSession} -n manager`);
+    expect(log).toContain(`new-window -a -t ${tmuxSession} -n coder-1`);
+    expect(log).toContain(`new-window -a -t ${tmuxSession} -n coder-2`);
+    expect(log).toContain(`new-window -a -t ${tmuxSession} -n reviewer`);
 
     const managerAgent = db.query("SELECT * FROM agents WHERE window_name='manager'").get() as any;
     const coderAgent = db.query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
@@ -760,14 +760,14 @@ describe("start: full agent launch against task.yml", () => {
     const managerMd = readFileSync(join(agentsRoot, "manager", "CLAUDE.md"), "utf8");
     expect(managerMd).toContain("Synapse Team — Shared Protocol");
     expect(managerMd).toContain("Your role: manager");
-    expect(managerMd).toContain("Every coder subtask must be reviewed before you count it complete");
-    expect(managerMd).toContain("verify the same `ref_id` chain includes");
+    expect(managerMd).toContain("A coder subtask isn't complete until reviewed");
+    expect(managerMd).toContain("confirm the same `ref_id` chain has");
 
     const coderMd = readFileSync(join(agentsRoot, "coder-1", "CLAUDE.md"), "utf8");
     expect(coderMd).toContain("Your role: coder");
     expect(coderMd).toContain("backend");
-    expect(coderMd).toContain("mandatory even for small or straightforward changes");
-    expect(coderMd).toContain("wait for an approving `REPLY`");
+    expect(coderMd).toContain("review is the default, not");
+    expect(coderMd).toContain("wait for the reviewer's `REPLY`");
 
     const secondCoderMd = readFileSync(join(agentsRoot, "coder-2", "CLAUDE.md"), "utf8");
     expect(secondCoderMd).toContain("Your role: coder");
@@ -775,8 +775,8 @@ describe("start: full agent launch against task.yml", () => {
     const reviewerMd = readFileSync(join(agentsRoot, "reviewer", "CLAUDE.md"), "utf8");
     expect(reviewerMd).toContain("Your role: reviewer");
     expect(reviewerMd).toContain("send a short `PROGRESS` to `manager`");
-    expect(reviewerMd).toContain("`PROGRESS`, not `REPLY`");
-    expect(reviewerMd).toContain('synapse send manager PROGRESS "Review LGTM');
+    expect(reviewerMd).toContain("Use `PROGRESS`, not");
+    expect(reviewerMd).toContain("LGTM or");
 
     const runTask = readFileSync(join(dir, "runs", tmuxSession, "task.yml"), "utf8");
     expect(runTask).toContain("run_id: 1");

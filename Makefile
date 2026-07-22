@@ -13,6 +13,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 build: $(SRC)
 	mkdir -p $(BINDIR)
+	bun run scripts/gen-skills.ts
 	bun build $(SRC) --compile --define SYNAPSE_VERSION="\"$(VERSION)\"" --outfile $(BINDIR)/$(BIN)
 
 init: build
