@@ -11,7 +11,7 @@
  *   synapse pending [agent]
  *   synapse deliver <id>
  *   synapse monitor [--session NAME] [--interval MS] [--debounce MS] [--once]
- *   synapse start <task.yml> [--goal "text"] [--no-monitor]
+ *   synapse start --goal "text" [--manager-model MODEL] [--no-monitor]
  *   synapse stop <name> [--session SESSION]
  *   synapse attach <name> [--session SESSION]
  *   synapse ui [--port N]
@@ -37,7 +37,7 @@ import {
   cmdStart,
   cmdStatus,
   cmdStop,
-  DEFAULT_TASK_TEMPLATE,
+  DEFAULT_MANAGER_MODEL,
   DEFAULT_TMUX_SESSION,
   fail,
 } from "./commands";
@@ -259,28 +259,19 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "start",
-    usage: 'synapse start [task.yml] [--goal "text"] [--no-monitor]',
-    summary: "Start a task from a task manifest.",
+    usage: 'synapse start --goal "text" [--manager-model MODEL] [--no-monitor]',
+    summary: "Start a new run: launch manager with the given goal.",
     help: [
-      {
-        title: "Config resolution (no argument)",
-        lines: [
-          "1. .synapse/task.yml  — project-level config, used when present.",
-          "2. Built-in example   — fallback when no project config exists.",
-        ],
-      },
       {
         title: "Options",
         lines: [
-          "--goal text    Override the goal from the task manifest.",
-          "--no-monitor   Create the team without starting the monitor.",
+          '--goal text             Goal to send to manager as the root TASK (required).',
+          `--manager-model MODEL   Model for the manager agent (default: "${DEFAULT_MANAGER_MODEL}").`,
+          "--no-monitor            Create the team without starting the monitor.",
         ],
       },
     ],
-    run: ({ positional, flags }) => {
-      const [configPath = DEFAULT_TASK_TEMPLATE] = positional;
-      return cmdStart(configPath, flags);
-    },
+    run: ({ flags }) => cmdStart(flags),
   },
   {
     name: "stop",
@@ -305,7 +296,7 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "spawn",
-    usage: "synapse spawn <role> [--run-id N]",
+    usage: "synapse spawn <role> [--model MODEL] [--focus text] [--run-id N]",
     summary: "Spawn a new agent window in the active (or specified) run.",
     help: [
       {
@@ -317,7 +308,9 @@ const COMMANDS: CommandSpec[] = [
       {
         title: "Options",
         lines: [
-          "--run-id N  Target a specific run (default: most recent running run).",
+          "--model MODEL   Model override for the new agent.",
+          '--focus text    Focus text appended to the agent\'s CLAUDE.md instance block.',
+          "--run-id N      Target a specific run (default: most recent running run).",
         ],
       },
     ],

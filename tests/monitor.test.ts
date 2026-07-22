@@ -601,11 +601,9 @@ describe("monitor: terminal run handling", () => {
   }, 15000);
 });
 
-// End-to-end `synapse start` against a real task.yml — templates assembled
-// into CLAUDE.md, a task-scoped tmux session, manager goal routing, all with the same fake
-// tmux used elsewhere in this file so it doesn't touch a real session.
+// End-to-end `synapse start` — manager-led dynamic workflow, manager only launched.
 describe("start: full agent launch against task.yml", () => {
-  test("uses templates/task.example.yml when no config path is provided", () => {
+  test("fails when --goal is not provided", () => {
     writeFileSync(
       join(fakeBinDir, "tmux"),
       `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
@@ -613,32 +611,18 @@ describe("start: full agent launch against task.yml", () => {
     run(["init"]);
 
     const r = runFromRepoRoot(["start", "--no-monitor"]);
-    expect(r.exitCode).toBe(0);
-
-    const db = openDb();
-    const runRow = db.query("SELECT * FROM runs").get() as any;
-    expect(runRow.session).toMatch(/^[a-z0-9]+-[0-9a-f]+-\d+$/);
-    expect(runRow.goal).toBe("");
-
-    const task = db
-      .query("SELECT * FROM messages WHERE type='TASK' AND from_agent='operator'")
-      .get() as any;
-    expect(task).toBeNull();
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("--goal is required");
   }, 15000);
 
-  test("routes an explicit --goal to manager when using the default template", () => {
+  test("routes --goal to manager as TASK", () => {
     writeFileSync(
       join(fakeBinDir, "tmux"),
       `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
     );
     run(["init"]);
 
-    const r = runFromRepoRoot([
-      "start",
-      "--no-monitor",
-      "--goal",
-      "Build feature X",
-    ]);
+    const r = runFromRepoRoot(["start", "--no-monitor", "--goal", "Build feature X"]);
     expect(r.exitCode).toBe(0);
 
     const db = openDb();
@@ -658,7 +642,7 @@ describe("start: full agent launch against task.yml", () => {
       `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
     );
 
-    const r = runFromRepoRoot(["start"]);
+    const r = runFromRepoRoot(["start", "--goal", "some goal"]);
     expect(r.exitCode).toBe(0);
 
     const session = (openDb().query("SELECT session FROM runs").get() as any).session;
@@ -672,67 +656,14 @@ describe("start: full agent launch against task.yml", () => {
     expect(log).not.toContain(`sweep-${session}.log`);
   }, 15000);
 
-  test("accepts any task template filename and stores the run copy as task.yml", () => {
+  test("launches only manager, writes its CLAUDE.md, and uses opus model by default", () => {
     writeFileSync(
       join(fakeBinDir, "tmux"),
       `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
     );
     run(["init"]);
 
-    const yaml = join(dir, "team.yaml");
-    writeFileSync(
-      yaml,
-      [
-        "synapse_version: 0.1.0",
-        "workflow: hub-and-spoke",
-        "agents:",
-        "  - role: manager",
-        "",
-      ].join("\n"),
-    );
-
-    const r = run(["start", yaml, "--no-monitor"]);
-    expect(r.exitCode).toBe(0);
-    const runRow = openDb().query("SELECT id, session FROM runs").get() as any;
-    const runFolder = `run-${runRow.id}`;
-    expect(readFileSync(join(dir, "runs", runFolder, "task.yml"), "utf8")).toContain(
-      "run_id: 1",
-    );
-  }, 15000);
-
-  test("writes CLAUDE.md per agent, creates a task-scoped tmux session, and routes the goal to manager", () => {
-    // The shared fake tmux (above) always exits 0, which works for every
-    // command this suite uses elsewhere — except `has-session`, where exit
-    // code is the actual signal (0 = exists). cmdStart relies on that to
-    // detect a stuck/colliding session, so override it here to report "no
-    // such session", matching a real fresh run id.
-    writeFileSync(
-      join(fakeBinDir, "tmux"),
-      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
-    );
-    run(["init"]);
-
-    const taskName = "feature-x";
-    const taskDir = join(dir, "tasks", taskName);
-    mkdirSync(taskDir, { recursive: true });
-    const yaml = join(taskDir, "task.yml");
-    writeFileSync(
-      yaml,
-      [
-        "synapse_version: 0.1.0",
-        "workflow: hub-and-spoke",
-        'goal: "Build feature X"',
-        "agents:",
-        "  - role: manager",
-        "  - role: coder",
-        "    focus: backend",
-        "  - role: coder",
-        "  - role: reviewer",
-        "",
-      ].join("\n"),
-    );
-
-    const r = run(["start", yaml, "--no-monitor"]);
+    const r = runFromRepoRoot(["start", "--no-monitor", "--goal", "Build feature X"]);
     expect(r.exitCode).toBe(0);
 
     const db = openDb();
@@ -747,16 +678,15 @@ describe("start: full agent launch against task.yml", () => {
     expect(log).toContain(`new-session -d -s ${tmuxSession}`);
     expect(log).toContain(`rename-window -t ${tmuxSession} monitor`);
     expect(log).toContain(`new-window -a -t ${tmuxSession} -n manager`);
-    expect(log).toContain(`new-window -a -t ${tmuxSession} -n coder-1`);
-    expect(log).toContain(`new-window -a -t ${tmuxSession} -n coder-2`);
-    expect(log).toContain(`new-window -a -t ${tmuxSession} -n reviewer`);
+    // only manager — no pre-launched coders or reviewers
+    expect(log).not.toContain(`-n coder`);
+    expect(log).not.toContain(`-n reviewer`);
+    // manager uses opus model
+    expect(log).toContain("--model opus");
 
     const managerAgent = db.query("SELECT * FROM agents WHERE window_name='manager'").get() as any;
-    const coderAgent = db.query("SELECT * FROM agents WHERE window_name='coder-1'").get() as any;
-    const reviewerAgent = db.query("SELECT * FROM agents WHERE window_name='reviewer'").get() as any;
     expect(managerAgent.role).toBe("manager");
-    expect(coderAgent.role).toBe("coder");
-    expect(reviewerAgent.role).toBe("reviewer");
+    expect(managerAgent.model).toBe("opus");
 
     const agentsRoot = join(dir, "agents", runFolder);
     const managerMd = readFileSync(join(agentsRoot, "manager", "CLAUDE.md"), "utf8");
@@ -764,25 +694,6 @@ describe("start: full agent launch against task.yml", () => {
     expect(managerMd).toContain("Your role: manager");
     expect(managerMd).toContain("A coder subtask isn't complete until reviewed");
     expect(managerMd).toContain("confirm the same `ref_id` chain has");
-
-    const coderMd = readFileSync(join(agentsRoot, "coder-1", "CLAUDE.md"), "utf8");
-    expect(coderMd).toContain("Your role: coder");
-    expect(coderMd).toContain("backend");
-    expect(coderMd).toContain("review is the default, not");
-    expect(coderMd).toContain("wait for the reviewer's `REPLY`");
-
-    const secondCoderMd = readFileSync(join(agentsRoot, "coder-2", "CLAUDE.md"), "utf8");
-    expect(secondCoderMd).toContain("Your role: coder");
-
-    const reviewerMd = readFileSync(join(agentsRoot, "reviewer", "CLAUDE.md"), "utf8");
-    expect(reviewerMd).toContain("Your role: reviewer");
-    expect(reviewerMd).toContain("send a short `PROGRESS` to `manager`");
-    expect(reviewerMd).toContain("Use `PROGRESS`, not");
-    expect(reviewerMd).toContain("LGTM or");
-
-    const runTask = readFileSync(join(dir, "runs", runFolder, "task.yml"), "utf8");
-    expect(runTask).toContain("run_id: 1");
-    expect(runTask).toContain(`agents_dir: ${agentsRoot}`);
 
     // Goal routes to manager.
     const task = db

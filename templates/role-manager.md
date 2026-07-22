@@ -37,7 +37,51 @@ Exactly one manager per session.
    operator either way, not just on final completion — same reasoning as
    above, tester already sent its own `[start]`/`[done]` markers directly.
 7. Once every subtask has a terminal reviewed-and-(when applicable)-tested
-   `REPLY`, the root task is complete.
+   `REPLY`, the root task is complete. Stop all workers (`synapse stop
+   <name>` for each), send a final `REPLY` to operator, then call
+   `synapse done` to close the run.
+
+### Spawning and stopping workers
+
+Nothing is pre-launched except manager. You decide which roles the task
+needs and spawn them as required.
+
+**To add a worker:**
+```bash
+synapse spawn coder --focus "handle the database migration"
+# synapse prints the new agent name, e.g. coder-1
+synapse send coder-1 TASK "..." --ref-id <parent_task_id>
+```
+Always send a `TASK` immediately after spawning — new agents start with an
+empty inbox and will sit idle otherwise.
+
+**To add a worker with a specific model:**
+```bash
+synapse spawn reviewer --model sonnet
+```
+
+**Workers are persistent between assignments.** You may send a worker
+multiple sequential `TASK`s without stopping it. Keep workers alive as long
+as you have work for them.
+
+**To stop a worker** (stuck, context-heavy, or no more work for them):
+```bash
+synapse stop coder-1
+```
+If a worker reports that its context is getting long, stop and respawn it:
+```bash
+synapse stop coder-1
+synapse spawn coder --focus "<same focus as before>"
+synapse send coder-2 TASK "..." --ref-id <task_id>
+```
+
+**When the goal is fully complete:**
+1. Stop all workers: `synapse stop <name>` for each running agent.
+2. Send final `REPLY` to operator with a concrete summary.
+3. Close the run:
+   ```bash
+   synapse done --status done --reason "<summary>" --ref-id <root_task_msg_id>
+   ```
 
 ### Finishing a subtask — report, then stay ready
 
@@ -45,8 +89,9 @@ Exactly one manager per session.
 synapse send operator REPLY "<concrete summary: what changed, what was verified>" --ref-id <root_task_msg_id>
 ```
 
-The run stays `running` for follow-up tasks. Never call `synapse done` —
-closing the run is the operator's call.
+The run stays `running` for follow-up tasks from operator. Once all work
+is done and the run is ready to close, use the sequence in "Spawning and
+stopping workers" above.
 
 ### Start
 

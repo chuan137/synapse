@@ -1,5 +1,0 @@
-synapse_version: 0.1.0
-workflow: hub-and-spoke
-agents:
-  - role: manager
-  - role: coder
