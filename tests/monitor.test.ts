@@ -693,8 +693,9 @@ describe("start: full agent launch against task.yml", () => {
 
     const r = run(["start", yaml, "--no-monitor"]);
     expect(r.exitCode).toBe(0);
-    const session = (openDb().query("SELECT session FROM runs").get() as any).session;
-    expect(readFileSync(join(dir, "runs", session, "task.yml"), "utf8")).toContain(
+    const runRow = openDb().query("SELECT id, session FROM runs").get() as any;
+    const runFolder = `run-${runRow.id}`;
+    expect(readFileSync(join(dir, "runs", runFolder, "task.yml"), "utf8")).toContain(
       "run_id: 1",
     );
   }, 15000);
@@ -741,6 +742,7 @@ describe("start: full agent launch against task.yml", () => {
     expect(runRow.session).toMatch(/^[a-z0-9]+-[0-9a-f]+-\d+$/);
 
     const tmuxSession = runRow.session;
+    const runFolder = `run-${runRow.id}`;
     const log = tmuxLogContents();
     expect(log).toContain(`new-session -d -s ${tmuxSession}`);
     expect(log).toContain(`rename-window -t ${tmuxSession} monitor`);
@@ -756,7 +758,7 @@ describe("start: full agent launch against task.yml", () => {
     expect(coderAgent.role).toBe("coder");
     expect(reviewerAgent.role).toBe("reviewer");
 
-    const agentsRoot = join(dir, "agents", tmuxSession);
+    const agentsRoot = join(dir, "agents", runFolder);
     const managerMd = readFileSync(join(agentsRoot, "manager", "CLAUDE.md"), "utf8");
     expect(managerMd).toContain("Synapse Team — Shared Protocol");
     expect(managerMd).toContain("Your role: manager");
@@ -778,7 +780,7 @@ describe("start: full agent launch against task.yml", () => {
     expect(reviewerMd).toContain("Use `PROGRESS`, not");
     expect(reviewerMd).toContain("LGTM or");
 
-    const runTask = readFileSync(join(dir, "runs", tmuxSession, "task.yml"), "utf8");
+    const runTask = readFileSync(join(dir, "runs", runFolder, "task.yml"), "utf8");
     expect(runTask).toContain("run_id: 1");
     expect(runTask).toContain(`agents_dir: ${agentsRoot}`);
 
