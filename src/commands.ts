@@ -728,7 +728,7 @@ function launchAgentWindow(
   const modelFlag = agent.model ? `--model ${agent.model} ` : "";
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions ${modelFlag}'${initialPrompt}'
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions --disallowedTools AskUserQuestion,EnterPlanMode ${modelFlag}'${initialPrompt}'
   `;
 
   if (process.env.SYNAPSE_DEBUG) {
