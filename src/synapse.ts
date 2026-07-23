@@ -39,7 +39,6 @@ import {
   cmdStatus,
   cmdStop,
   DEFAULT_MANAGER_MODEL,
-  DEFAULT_TMUX_SESSION,
   fail,
 } from "./commands";
 import { cmdMonitor } from "./monitor";
@@ -292,7 +291,7 @@ const COMMANDS: CommandSpec[] = [
       const [name] = positional;
       requireArgs(context, !!name);
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : undefined;
-      return cmdStop(name, flags["session"] ?? DEFAULT_TMUX_SESSION, runId);
+      return cmdStop(name, flags["session"], runId);
     },
   },
   {
@@ -336,7 +335,7 @@ const COMMANDS: CommandSpec[] = [
       const { positional, flags } = context;
       const [name] = positional;
       requireArgs(context, !!name);
-      return cmdAttach(name, flags["session"] ?? DEFAULT_TMUX_SESSION);
+      return cmdAttach(name, flags["session"]);
     },
   },
   {

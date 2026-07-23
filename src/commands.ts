@@ -850,7 +850,7 @@ export function cmdSetGoal(goal: string, runId?: number | null) {
   console.log(`synapse: goal updated for run #${run.id}`);
 }
 
-export function cmdStop(name: string, tmuxSession: string, runId?: number) {
+export function cmdStop(name: string, explicitSession: string | undefined, runId?: number) {
   const db = connect();
   const resolvedRunId = runId ?? (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
   const agent = resolvedRunId !== null
@@ -858,10 +858,9 @@ export function cmdStop(name: string, tmuxSession: string, runId?: number) {
     : db.query("SELECT * FROM agents WHERE window_name=?").get(name) as any;
   if (!agent) fail(`no registered agent named '${name}'${resolvedRunId !== null ? ` in run ${resolvedRunId}` : ""}`);
 
-  db.run(
-    "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=? AND run_id=?",
-    [nowIso(), name, agent.run_id],
-  );
+  const tmuxSession = explicitSession
+    ?? (db.query("SELECT session FROM runs WHERE id=?").get(agent.run_id) as any)?.session;
+  if (!tmuxSession) fail(`cannot resolve tmux session for agent '${name}' (run_id=${agent.run_id})`);
 
   const killResult = Bun.spawnSync([
     "tmux",
@@ -871,12 +870,34 @@ export function cmdStop(name: string, tmuxSession: string, runId?: number) {
   ]);
   if (killResult.exitCode !== 0) {
     const stderr = killResult.stderr.toString().trim();
-    console.error(`synapse: warning — tmux kill-window failed: ${stderr}`);
+    // Verify the window is actually still present — only block the DB flip if it is.
+    // If tmux isn't running or the window is already gone, treat as successfully stopped.
+    const checkResult = Bun.spawnSync(["tmux", "list-windows", "-t", `=${tmuxSession}`, "-F", "#{window_name}"]);
+    if (checkResult.exitCode === 0) {
+      const windows = checkResult.stdout.toString().split("\n").map(l => l.trim()).filter(Boolean);
+      if (windows.includes(name)) {
+        console.error(`synapse: warning — tmux kill-window failed: ${stderr} (agent not marked stopped)`);
+        return;
+      }
+    }
+    // Window is gone (or tmux not running) — safe to mark stopped
+    if (stderr) console.error(`synapse: warning — tmux kill-window: ${stderr}`);
   }
+
+  db.run(
+    "UPDATE agents SET status='stopped', last_seen_at=? WHERE window_name=? AND run_id=?",
+    [nowIso(), name, agent.run_id],
+  );
   console.log(`synapse: agent '${name}' stopped`);
 }
 
-export function cmdAttach(name: string, tmuxSession: string) {
+export function cmdAttach(name: string, explicitSession: string | undefined) {
+  const db = connect();
+  const agent = db.query("SELECT * FROM agents WHERE window_name=?").get(name) as any;
+  const tmuxSession = explicitSession
+    ?? (agent ? (db.query("SELECT session FROM runs WHERE id=?").get(agent.run_id) as any)?.session : undefined);
+  if (!tmuxSession) fail(`cannot resolve tmux session for agent '${name}'`);
+
   const result = Bun.spawnSync(
     ["tmux", "attach-session", "-t", `=${tmuxSession}:${name}`],
     { stdio: ["inherit", "inherit", "inherit"] },
