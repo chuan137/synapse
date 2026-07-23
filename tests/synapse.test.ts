@@ -430,63 +430,23 @@ describe("help", () => {
   });
 });
 
-describe("start — task.yml parsing", () => {
-  // We test the YAML parsing indirectly: pass a malformed config path and
-  // check the error, then a valid file but tmux-free (--no-monitor prevents
-  // side-effects that require a live tmux session).
-
-  test("fails when config file does not exist", () => {
+describe("start", () => {
+  test("fails when --goal is missing", () => {
     run(["init"]);
-    const r = run(["start", "/nonexistent/task.yml", "--no-monitor"]);
+    const r = run(["start", "--no-monitor"]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("task config not found");
-  });
-
-  test("fails when yaml has no agents", () => {
-    run(["init"]);
-    const taskDir = join(dir, ".synapse", "tasks", "empty-task");
-    mkdirSync(taskDir, { recursive: true });
-    const yaml = join(taskDir, "task.yml");
-    Bun.write(yaml, "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n");
-    const r = run(["start", yaml, "--no-monitor"]);
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("no agents defined");
-  });
-
-  test("fails when yaml is missing workflow field", () => {
-    run(["init"]);
-    const taskDir = join(dir, ".synapse", "tasks", "no-workflow");
-    mkdirSync(taskDir, { recursive: true });
-    const yaml = join(taskDir, "task.yml");
-    Bun.write(yaml, "synapse_version: 0.1.0\nagents:\n  - role: manager\n");
-    const r = run(["start", yaml, "--no-monitor"]);
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("missing 'workflow'");
-  });
-
-  test("fails when hub-and-spoke has no manager role", () => {
-    run(["init"]);
-    const yaml = join(dir, "team.yaml");
-    Bun.write(yaml, "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n  - role: coder\n");
-    const r = run(["start", yaml, "--no-monitor"]);
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain("requires exactly one manager");
+    expect(r.stderr).toContain("--goal is required");
   });
 
   test("run folder is named run-N, not the tmux session name", () => {
     run(["init"]);
-    const yaml = join(dir, "team.yaml");
-    Bun.write(
-      yaml,
-      "synapse_version: 0.1.0\nworkflow: hub-and-spoke\nagents:\n  - role: manager\n    name: manager\n",
-    );
     // Fake tmux so start doesn't need a real session.
     const fakeBin = join(dir, "fakebin");
     mkdirSync(fakeBin, { recursive: true });
     writeFileSync(join(fakeBin, "tmux"), "#!/bin/sh\nexit 0\n");
     chmodSync(join(fakeBin, "tmux"), 0o755);
 
-    run(["start", yaml, "--no-monitor"], { PATH: `${fakeBin}:${process.env.PATH}` });
+    run(["start", "--goal", "test goal", "--no-monitor"], { PATH: `${fakeBin}:${process.env.PATH}` });
 
     const runsDir = join(dir, "runs");
     const entries = readdirSync(runsDir);
