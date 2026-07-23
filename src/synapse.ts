@@ -31,6 +31,7 @@ import {
   cmdInit,
   cmdPending,
   cmdRegister,
+  cmdReply,
   cmdRuns,
   cmdSend,
   cmdSetGoal,
@@ -202,6 +203,45 @@ const COMMANDS: CommandSpec[] = [
         : null;
       const title = flags["title"] ?? null;
       return cmdSend(to, type, body, flags["from"] ?? null, refId, runId, options, title);
+    },
+  },
+  {
+    name: "reply",
+    usage: "synapse reply <ref-id> <body> [--from NAME] [--run-id N] [--body-file PATH]",
+    summary: "Reply to a message by id; recipient is resolved to its sender, so it can't be misrouted.",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "ref-id  Id of the message you are replying to (shown by 'synapse pending').",
+          "body    Reply body (omit when --body-file is used).",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
+          "--run-id N        Reply within a specific run.",
+          "--body-file PATH  Read body from file (use - for stdin).",
+        ],
+      },
+    ],
+    run: async (context) => {
+      const { positional, flags } = context;
+      const [refIdStr] = positional;
+      let body: string;
+      if (flags["body-file"]) {
+        const src = flags["body-file"];
+        body = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
+        body = body.trimEnd();
+      } else {
+        body = positional[1];
+      }
+      requireArgs(context, !!refIdStr && !!body);
+      const refId = parseInt(refIdStr, 10);
+      if (isNaN(refId)) fail(`synapse reply: invalid ref-id '${refIdStr}'`);
+      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
+      return cmdReply(refId, body, flags["from"] ?? null, runId);
     },
   },
   {

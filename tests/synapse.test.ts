@@ -648,6 +648,111 @@ describe("done", () => {
   });
 });
 
+describe("REPLY routing enforcement (cmdSend)", () => {
+  // Seeds a TASK from `fromAgent` to `toAgent` and returns its message id.
+  function seedTask(fromAgent: string, toAgent: string): number {
+    const db = openDbWritable();
+    const res = db.run(
+      "INSERT INTO messages (run_id, from_agent, to_agent, type, body) VALUES (1, ?, ?, 'TASK', 'review please')",
+      [fromAgent, toAgent],
+    );
+    return Number(res.lastInsertRowid);
+  }
+
+  beforeEach(() => {
+    run(["init"]);
+  });
+
+  test("rejects a REPLY routed to someone other than the sender", () => {
+    const id = seedTask("coder-1", "reviewer");
+    const r = run(["send", "coder-2", "REPLY", "issues found: x.md", "--ref-id", String(id)], {
+      SYNAPSE_AGENT: "reviewer",
+    });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("misrouted");
+    expect(r.stderr).toContain("coder-1"); // names the correct recipient
+    // and no message was written
+    const count = openDb()
+      .query("SELECT COUNT(*) AS n FROM messages WHERE type='REPLY'")
+      .get() as any;
+    expect(count.n).toBe(0);
+  });
+
+  test("allows a REPLY routed back to the sender", () => {
+    const id = seedTask("coder-1", "reviewer");
+    const r = run(["send", "coder-1", "REPLY", "issues found: x.md", "--ref-id", String(id)], {
+      SYNAPSE_AGENT: "reviewer",
+    });
+    expect(r.exitCode).toBe(0);
+    const msg = openDb()
+      .query("SELECT to_agent, ref_id FROM messages WHERE type='REPLY'")
+      .get() as any;
+    expect(msg.to_agent).toBe("coder-1");
+    expect(msg.ref_id).toBe(id);
+  });
+
+  test("does not constrain PROGRESS carrying a ref-id", () => {
+    const id = seedTask("coder-1", "reviewer");
+    const r = run(["send", "manager", "PROGRESS", "LGTM: x.md", "--ref-id", String(id)], {
+      SYNAPSE_AGENT: "reviewer",
+    });
+    expect(r.exitCode).toBe(0);
+  });
+
+  test("fails open when the referenced message does not exist (wrong-id, not misroute)", () => {
+    const r = run(["send", "coder-2", "REPLY", "done", "--ref-id", "999"], {
+      SYNAPSE_AGENT: "reviewer",
+    });
+    expect(r.exitCode).toBe(0);
+  });
+});
+
+describe("synapse reply (recipient resolved from ref-id)", () => {
+  function seedTask(fromAgent: string, toAgent: string): number {
+    const db = openDbWritable();
+    const res = db.run(
+      "INSERT INTO messages (run_id, from_agent, to_agent, type, body) VALUES (1, ?, ?, 'TASK', 'review please')",
+      [fromAgent, toAgent],
+    );
+    return Number(res.lastInsertRowid);
+  }
+
+  beforeEach(() => {
+    run(["init"]);
+  });
+
+  test("routes the reply to the sender of the referenced message", () => {
+    const id = seedTask("coder-1", "reviewer");
+    const r = run(["reply", String(id), "issues found: x.md"], { SYNAPSE_AGENT: "reviewer" });
+    expect(r.exitCode).toBe(0);
+    const msg = openDb()
+      .query("SELECT from_agent, to_agent, type, ref_id FROM messages WHERE type='REPLY'")
+      .get() as any;
+    expect(msg.from_agent).toBe("reviewer");
+    expect(msg.to_agent).toBe("coder-1"); // never named on the command line
+    expect(msg.ref_id).toBe(id);
+  });
+
+  test("fails clearly when the ref-id names no message", () => {
+    const r = run(["reply", "999", "done"], { SYNAPSE_AGENT: "reviewer" });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("no message #999");
+  });
+
+  test("rejects a non-numeric ref-id", () => {
+    const r = run(["reply", "abc", "done"], { SYNAPSE_AGENT: "reviewer" });
+    expect(r.exitCode).not.toBe(0);
+  });
+
+  test("pending prints a ready-to-run reply hint for an inbound TASK", () => {
+    openDbWritable().run("INSERT INTO runs (session, goal, status) VALUES ('t', 'g', 'running')");
+    seedTask("coder-1", "reviewer");
+    const r = run(["pending", "reviewer"], { SYNAPSE_AGENT: "reviewer" });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain(`synapse reply`);
+  });
+});
+
 describe("buildClaudeArgs (TC1/TC2 — prompt-swallowing regression)", () => {
   // TC1: prompt survives, disallowedTools has no extra entries (no model)
   test("TC1: prompt is a positional arg, not consumed by --disallowedTools", () => {

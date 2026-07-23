@@ -133,6 +133,21 @@ export function hasUnbrokenNumberedList(body: string): boolean {
   return !body.includes("\n");
 }
 
+// Looks up the message a REPLY would close, scoped to the run when known.
+// Returns { from_agent, type } — from_agent is who a REPLY must go back to — or
+// null if the message doesn't exist. Shared by cmdSend (enforcement), cmdReply
+// (recipient resolution), and cmdPending (the reply hint).
+export function replyTargetFor(
+  db: any,
+  refId: number,
+  runId: number | null,
+): { from_agent: string; type: string } | null {
+  const row = runId !== null
+    ? db.query("SELECT from_agent, type FROM messages WHERE id=? AND run_id=?").get(refId, runId)
+    : db.query("SELECT from_agent, type FROM messages WHERE id=?").get(refId);
+  return row ?? null;
+}
+
 export function cmdSend(
   to: string,
   type: string,
@@ -189,6 +204,21 @@ export function cmdSend(
       `synapse: warning — '${to}' not in agents registry yet (sending anyway)`,
     );
   }
+  // Routing invariant: a REPLY closes the message named by --ref-id, so it must
+  // go back to that message's sender (protocol Rule 1). Enforced here, at the
+  // single point every send flows through, so it holds no matter how `send` is
+  // invoked. Fails open when the referenced message can't be found (unknown id,
+  // other run) — that's a wrong-ref-id problem, not a routing one.
+  if (type === "REPLY" && refId !== null) {
+    const ref = replyTargetFor(db, refId, resolvedRunId);
+    if (ref && ref.from_agent && ref.from_agent !== to) {
+      fail(
+        `REPLY misrouted: #${refId} (${ref.type}) was sent by ${ref.from_agent}, not ${to}. ` +
+          `A REPLY goes back to the sender of the message its --ref-id names. ` +
+          `Use 'synapse reply ${refId} "<result>"' — it fills in ${ref.from_agent} for you.`,
+      );
+    }
+  }
   const optionsJson = options && options.length > 0 ? JSON.stringify(options) : null;
   const result = db.run(
     `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body, options, title)
@@ -200,6 +230,31 @@ export function cmdSend(
       refId ? ", ref=" + refId : ""
     }${resolvedRunId ? ", run=" + resolvedRunId : ""})`,
   );
+}
+
+// Reply to a message by id, without naming the recipient: the recipient is the
+// sender of message #refId, resolved from the DB. This makes a misrouted REPLY
+// structurally impossible — the caller can't pick the wrong agent because it
+// never picks one. The only input the agent supplies is the ref-id, which
+// `synapse pending` prints for every open item.
+export function cmdReply(
+  refId: number,
+  body: string,
+  from: string | null,
+  runId?: number | null,
+) {
+  const db = connect();
+  const resolvedRunId = runId !== undefined && runId !== null
+    ? runId
+    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
+  const ref = replyTargetFor(db, refId, resolvedRunId);
+  if (!ref || !ref.from_agent) {
+    fail(
+      `no message #${refId}${resolvedRunId ? ` in run ${resolvedRunId}` : ""} to reply to. ` +
+        `Check the id — 'synapse pending' lists open messages and their ids.`,
+    );
+  }
+  cmdSend(ref!.from_agent, "REPLY", body, from, refId, resolvedRunId);
 }
 
 export function cmdStatus() {
@@ -413,6 +468,12 @@ export function cmdPending(agent: string | null, all?: boolean) {
     const id = `${c.dim}#${String(r.id).padStart(2)}${c.reset}`;
     console.log(`${id}  ${route}  ${type}  ${ref}  ${ts}`);
     console.log(`      ${r.body}`);
+    // TASK/QUESTION addressed to this agent expects a reply back to its sender.
+    // Print the exact command so the agent never has to name a recipient (and so
+    // can't misroute it) — it only needs this id, shown here.
+    if (targetAgent && r.to_agent === targetAgent && (r.type === "TASK" || r.type === "QUESTION")) {
+      console.log(`      ${c.dim}↳ reply with: synapse reply ${r.id} "<result>"${c.reset}`);
+    }
     console.log();
   }
 }
