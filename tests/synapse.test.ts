@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { buildClaudeArgs } from "../src/launch-args";
 import { basename, dirname, join } from "path";
 
 const SYNAPSE_CLI = join(import.meta.dir, "..", "src", "synapse.ts");
@@ -593,5 +594,37 @@ describe("done", () => {
       .query("SELECT ref_id FROM messages WHERE type='REPLY' AND from_agent='manager'")
       .get() as any;
     expect(status.ref_id).toBe(999);
+  });
+});
+
+describe("buildClaudeArgs (TC1/TC2 — prompt-swallowing regression)", () => {
+  // TC1: prompt survives, disallowedTools has no extra entries (no model)
+  test("TC1: prompt is a positional arg, not consumed by --disallowedTools", () => {
+    const args = buildClaudeArgs("sess-1", undefined, "synapse pending coder-1");
+    // '--' must appear and the prompt must follow it
+    const sepIdx = args.indexOf("--");
+    expect(sepIdx).toBeGreaterThan(-1);
+    expect(args[sepIdx + 1]).toBe("synapse pending coder-1");
+    // disallowedTools value is exactly the two tools, nothing more
+    const dtIdx = args.indexOf("--disallowedTools");
+    expect(dtIdx).toBeGreaterThan(-1);
+    expect(args[dtIdx + 1]).toBe("AskUserQuestion,EnterPlanMode");
+    // prompt words must not appear inside the disallowedTools value
+    expect(args[dtIdx + 1]).not.toContain("synapse");
+    expect(args[dtIdx + 1]).not.toContain("pending");
+    expect(args[dtIdx + 1]).not.toContain("coder-1");
+  });
+
+  // TC2: same, with a model flag present
+  test("TC2: --model flag present and prompt still survives as positional", () => {
+    const args = buildClaudeArgs("sess-2", "sonnet", "synapse pending coder-2");
+    const modelIdx = args.indexOf("--model");
+    expect(modelIdx).toBeGreaterThan(-1);
+    expect(args[modelIdx + 1]).toBe("sonnet");
+    const sepIdx = args.indexOf("--");
+    expect(sepIdx).toBeGreaterThan(-1);
+    expect(args[sepIdx + 1]).toBe("synapse pending coder-2");
+    const dtIdx = args.indexOf("--disallowedTools");
+    expect(args[dtIdx + 1]).toBe("AskUserQuestion,EnterPlanMode");
   });
 });

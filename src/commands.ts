@@ -18,6 +18,7 @@ import ROLE_TESTER_MD from "../templates/role-tester.md" with {
   type: "text",
 };
 import { connect, dbPath, defaultAgentDir, initDb } from "./db";
+import { buildClaudeArgs } from "./launch-args";
 import { SKILLS } from "./skills.generated";
 
 const ROLE_TEMPLATES: Record<string, string> = {
@@ -560,11 +561,12 @@ function launchAgentWindow(
   // whatever the launching shell had (e.g. a ~/ccloud direnv that sets
   // ANTHROPIC_BASE_URL to an enterprise proxy).
   const direnvPath = Bun.spawnSync(["which", "direnv"]).stdout.toString().trim() || "direnv";
-  const initialPrompt = `synapse pending ${agent.name}`;
-  const modelFlag = agent.model ? `--model ${agent.model} ` : "";
+  const claudeArgs = buildClaudeArgs(sessionId, agent.model, `synapse pending ${agent.name}`);
+  // Shell-quote each arg; none contain single quotes, so this is safe.
+  const quotedArgs = claudeArgs.map((a) => `'${a}'`).join(" ");
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' --session-id '${sessionId}' --dangerously-skip-permissions --disallowedTools AskUserQuestion,EnterPlanMode ${modelFlag}'${initialPrompt}'
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' ${quotedArgs}
   `;
 
   if (process.env.SYNAPSE_DEBUG) {

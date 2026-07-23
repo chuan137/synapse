@@ -682,7 +682,7 @@ describe("start: full agent launch against task.yml", () => {
     expect(log).not.toContain(`-n coder`);
     expect(log).not.toContain(`-n reviewer`);
     // manager uses opus model
-    expect(log).toContain("--model opus");
+    expect(log).toContain("'--model' 'opus'");
 
     const managerAgent = db.query("SELECT * FROM agents WHERE window_name='manager'").get() as any;
     expect(managerAgent.role).toBe("manager");
