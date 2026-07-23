@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   writeFileSync,
 } from "fs";
 import { homedir } from "os";
@@ -78,9 +79,8 @@ export function colorType(t: string): string {
 
 export function cmdInit() {
   initDb();
-  // Project root: two levels up from the DB file (./.synapse/synapse.db ->
-  // project root), same derivation cmdStart uses for direnv/claude launch.
   const projectRoot = dirname(dirname(dbPath()));
+  migrateLegacyFolders(dirname(dbPath()));
   installSkills(projectRoot);
   console.log(`synapse: installed skills to ${join(projectRoot, ".claude", "skills")}`);
 }
@@ -585,6 +585,17 @@ function launchAgentWindow(
     fail(
       `failed to create tmux window '${agent.name}': ${result.stderr.toString().trim()}`,
     );
+  }
+}
+
+export function migrateLegacyFolders(dataDir: string) {
+  for (const [oldName, newName] of [["runs", "artifacts"], ["agents", "workdirs"]] as const) {
+    const oldPath = join(dataDir, oldName);
+    const newPath = join(dataDir, newName);
+    if (existsSync(oldPath) && !existsSync(newPath)) {
+      renameSync(oldPath, newPath);
+      console.log(`synapse: migrated ${oldName}/ → ${newName}/`);
+    }
   }
 }
 
