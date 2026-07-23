@@ -1,11 +1,4 @@
-import { readFileSync, watch } from "fs";
-import { dirname, resolve } from "path";
-import { connect, disbandTeam, MESSAGE_TYPES, nowIso } from "./commands";
-import PUBLIC_INDEX_HTML from "./public/index.html" with { type: "text" };
-
-// ---------- ui ----------
-
-const FRONTEND_HTML = `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -32,6 +25,23 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     --tooltip-bg: rgba(240,240,240,0.95);
     --tooltip-text: #111;
     --hover-soft: rgba(255,255,255,0.02);
+  }
+  body.light {
+    --bg:      #f5f5f7;
+    --surface: #ffffff;
+    --border:  #d1d1d6;
+    --text:    #1c1c1e;
+    --muted:   #86868b;
+    --accent:  #4a6ef5;
+    --idle:    #16a34a;
+    --working: #d97706;
+    --error:   #dc2626;
+    --p0:      #dc2626;
+    --p0-bg:   #fef2f2;
+    --p0-text: #991b1b;
+    --tooltip-bg: rgba(30,30,30,0.92);
+    --tooltip-text: #f5f5f7;
+    --hover-soft: rgba(0,0,0,0.03);
   }
   html, body { height: 100%; }
   body {
@@ -92,6 +102,18 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     font-size: 11px;
     color: var(--muted);
   }
+  #theme-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    line-height: 1;
+  }
+  #theme-btn:hover { color: var(--text); border-color: var(--text); }
   #ack-run-btn {
     display: none;
     background: var(--error);
@@ -239,16 +261,16 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     border-left: 2px solid transparent;
   }
   .message-row.from-human {
-    background: rgba(112,145,245,0.07);
-    border-left-color: rgba(112,145,245,0.35);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    border-left-color: color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .message-row.from-agent {
-    background: rgba(255,255,255,0.025);
+    background: color-mix(in srgb, var(--muted) 6%, var(--surface));
     transition: background 0.15s, border-left-color 0.15s;
   }
   .message-row.from-agent:hover {
-    background: rgba(255,255,255,0.055);
-    border-left-color: rgba(112,145,245,0.4);
+    background: color-mix(in srgb, var(--muted) 12%, var(--surface));
+    border-left-color: color-mix(in srgb, var(--accent) 40%, transparent);
   }
   .message-avatar {
     width: 26px;
@@ -336,12 +358,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     flex-direction: column;
     gap: 8px;
   }
-  .compose-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .compose-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
   select, input {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -355,7 +371,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
   select:focus, input:focus { border-color: var(--accent); }
   select option { background: var(--bg); }
-  #input-to { width: 130px; }
   textarea#msg-input {
     width: 100%;
     resize: vertical;
@@ -404,6 +419,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 <header id="header">
   <span class="logo">SYNAPSE</span>
   <span id="conn-status" class="disconnected">● connecting</span>
+  <button id="theme-btn" title="Toggle light/dark theme">☀︎</button>
   <button id="ack-run-btn" title="Acknowledge finished task and stop the team">ACK end</button>
   <span id="msg-count-badge"></span>
 </header>
@@ -418,14 +434,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     </div>
     <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
     <div id="compose">
-      <div class="compose-row">
-        <span class="compose-label">To:</span>
-        <select id="input-to"></select>
-        <span class="compose-label">Type:</span>
-        <select id="input-type">
-          <option>STATUS</option><option>REVIEW</option><option>ACK</option><option>INFO</option>
-        </select>
-      </div>
       <textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>
       <div class="compose-bottom">
         <button id="send-btn">Send</button>
@@ -441,8 +449,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   const msgList     = $('messages-list');
   const header      = $('header');
   const connStatus  = $('conn-status');
-  const inputTo     = $('input-to');
-  const inputType   = $('input-type');
   const msgInput    = $('msg-input');
   const sendBtn     = $('send-btn');
   const feedback    = $('send-feedback');
@@ -452,6 +458,17 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   const seenIds = new Set();
   let totalMsgs = 0;
   let currentRun = null;
+
+  // Theme toggle
+  const themeBtn = $('theme-btn');
+  const savedTheme = localStorage.getItem('synapse-theme') || 'dark';
+  if (savedTheme === 'light') document.body.classList.add('light');
+  themeBtn.textContent = savedTheme === 'light' ? '☽' : '☀︎';
+  themeBtn.addEventListener('click', () => {
+    const isLight = document.body.classList.toggle('light');
+    localStorage.setItem('synapse-theme', isLight ? 'light' : 'dark');
+    themeBtn.textContent = isLight ? '☽' : '☀︎';
+  });
 
   // Markdown: marked + DOMPurify (loaded from CDN in <head>)
   function renderMd(raw) {
@@ -489,10 +506,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   }
 
   function renderAgents(agents) {
-    const cur = inputTo.value;
-    inputTo.innerHTML = agents.map(a => '<option value="' + esc(a.window_name) + '">' + esc(a.window_name) + '</option>').join('');
-    if (cur) inputTo.value = cur;
-
     if (!agents.length) {
       agentsList.innerHTML = '<div class="empty-state">No agents connected.</div>';
       return;
@@ -517,8 +530,6 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       card.addEventListener('click', () => {
         agentsList.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
-        const name = card.dataset.name;
-        if (inputTo) { inputTo.value = name; }
       });
     });
   }
@@ -608,16 +619,14 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   connectSSE();
 
   async function sendMessage() {
-    const to   = inputTo.value.trim();
-    const type = inputType.value;
     const body = msgInput.value.trim();
-    if (!to || !body) { flash('To and body required', false); return; }
+    if (!body) { flash('body required', false); return; }
     sendBtn.disabled = true;
     try {
       const res  = await fetch('/send', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({to, type, body}),
+        body: JSON.stringify({to: 'manager', type: 'TASK', body}),
       });
       const json = await res.json();
       if (json.ok) { msgInput.value = ''; flash('sent #' + json.id, true); }
@@ -651,356 +660,4 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 })();
 </script>
 </body>
-</html>`;
-
-const DEFAULT_UI_PORT = 7700;
-// In dev mode (SYNAPSE_DEV=1), HTML is read from disk on every request.
-// When running as a compiled binary, import.meta.filename is a virtual /$bunfs
-// path, so resolve relative to the real executable instead.
-function resolvePublicHtmlPath(): string {
-  const base = dirname(import.meta.filename);
-  if (base.startsWith("/$bunfs")) {
-    // compiled binary: process.execPath is the real binary path
-    // binary lives at <project>/bin/synapse; HTML is at <project>/src/public/index.html
-    return resolve(dirname(process.execPath), "../src/public/index.html");
-  }
-  return resolve(base, "public/index.html");
-}
-const PUBLIC_HTML_PATH = resolvePublicHtmlPath();
-
-export function cmdUi(flags: Record<string, string>) {
-  const port = flags["port"] !== undefined ? parseInt(flags["port"], 10) : DEFAULT_UI_PORT;
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    console.error("synapse: --port must be an integer from 0 to 65535");
-    process.exit(1);
-  }
-  const dev = !!process.env.SYNAPSE_DEV;
-  const db = connect();
-
-  const lastMessageIds = new Map<number, number>();
-
-  // SSE client registry
-  const clients = new Set<ReadableStreamDefaultController>();
-
-  function pushToAll(eventName: string, data: unknown) {
-    const chunk = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
-    for (const ctrl of clients) {
-      try {
-        ctrl.enqueue(chunk);
-      } catch {
-        clients.delete(ctrl);
-      }
-    }
-  }
-
-  function pushReload() {
-    const chunk = `event: reload\ndata: {}\n\n`;
-    for (const ctrl of clients) {
-      try {
-        ctrl.enqueue(chunk);
-      } catch {
-        clients.delete(ctrl);
-      }
-    }
-  }
-
-  function recentRuns() {
-    return db
-      .query(
-        `SELECT id, session, status, goal, started_at, ended_at
-         FROM runs
-         ORDER BY id DESC
-         LIMIT 20`,
-      )
-      .all() as any[];
-  }
-
-  function runningRuns() {
-    return db
-      .query(
-        `SELECT id, session, status, goal, started_at, ended_at
-         FROM runs
-         WHERE status='running'
-         ORDER BY id DESC
-         LIMIT 10`,
-      )
-      .all() as any[];
-  }
-
-  function runById(runId: number) {
-    return (
-      (db
-        .query(
-          `SELECT id, session, status, goal, started_at, ended_at
-           FROM runs
-           WHERE id=?`,
-        )
-        .get(runId) as any) ?? null
-    );
-  }
-
-  function operatorThreadMessages(runId: number) {
-    return db
-      .query(
-        `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
-         FROM messages
-         WHERE (from_agent='operator' OR to_agent='operator')
-           AND run_id = ?
-         ORDER BY id DESC LIMIT 200`,
-      )
-      .all(runId)
-      .reverse();
-  }
-
-  function agentsForRun(runId: number) {
-    return db
-      .query(
-        `SELECT window_name, role, status, last_seen_at,
-                (SELECT COUNT(*) FROM messages m
-                 WHERE m.status='pending'
-                   AND (m.to_agent=a.window_name OR m.to_agent='broadcast')
-                   AND m.run_id=?) AS pending_count
-         FROM agents a
-         WHERE run_id=? OR run_id=0
-         ORDER BY role, window_name`,
-      )
-      .all(runId, runId) as any[];
-  }
-
-  function pushRunsList() {
-    pushToAll("runs-list", { runs: recentRuns() });
-  }
-
-  function pushOperatorThread(ctrl: ReadableStreamDefaultController, run: any) {
-    const messages = operatorThreadMessages(run.id);
-    const chunk = `event: operator-thread\ndata: ${JSON.stringify({ run, messages })}\n\n`;
-    ctrl.enqueue(chunk);
-  }
-
-  function pollDb() {
-    pushRunsList();
-
-    for (const run of runningRuns()) {
-      const runId = Number(run.id);
-      pushToAll("agent-status", { run_id: runId, agents: agentsForRun(runId) });
-
-      const lastMessageId = lastMessageIds.get(runId) ?? 0;
-      const newMessages = db
-        .query(
-          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
-           FROM messages
-           WHERE id > ?
-             AND (from_agent='operator' OR to_agent='operator')
-             AND run_id = ?
-           ORDER BY id`,
-        )
-        .all(lastMessageId, runId) as any[];
-      if (newMessages.length > 0) {
-        lastMessageIds.set(runId, newMessages[newMessages.length - 1].id);
-        for (const msg of newMessages) {
-          pushToAll("message-stream", msg);
-        }
-      }
-    }
-  }
-
-  const pollTimer = setInterval(pollDb, 1000);
-
-  // Dev mode: watch src/public/index.html and push reload to clients on change.
-  let reloadDebounce: ReturnType<typeof setTimeout> | null = null;
-  if (dev) {
-    try {
-      const watcher = watch(PUBLIC_HTML_PATH, () => {
-        if (reloadDebounce) clearTimeout(reloadDebounce);
-        reloadDebounce = setTimeout(() => {
-          console.log("synapse ui: index.html changed — pushing reload");
-          pushReload();
-          reloadDebounce = null;
-        }, 150);
-      });
-      process.on("SIGINT",  () => { watcher.close(); shutdown(); });
-      process.on("SIGTERM", () => { watcher.close(); shutdown(); });
-      console.log(`synapse ui: dev mode — watching ${PUBLIC_HTML_PATH}`);
-    } catch {
-      process.on("SIGINT",  shutdown);
-      process.on("SIGTERM", shutdown);
-    }
-  } else {
-    process.on("SIGINT",  shutdown);
-    process.on("SIGTERM", shutdown);
-  }
-
-  const server = Bun.serve({
-    port,
-    fetch(req) {
-      const url = new URL(req.url);
-
-      if (url.pathname === "/" && req.method === "GET") {
-        const html = dev
-          ? readFileSync(PUBLIC_HTML_PATH, "utf8")
-          : PUBLIC_INDEX_HTML;
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-        });
-      }
-
-      if (url.pathname === "/runs" && req.method === "GET") {
-        return Response.json({ runs: recentRuns() });
-      }
-
-      if (url.pathname === "/events" && req.method === "GET") {
-        let ctrl: ReadableStreamDefaultController;
-        const stream = new ReadableStream({
-          start(c) {
-            ctrl = c;
-            clients.add(ctrl);
-            const runs = recentRuns();
-            ctrl.enqueue(`event: runs-list\ndata: ${JSON.stringify({ runs })}\n\n`);
-            for (const run of runs) {
-              pushOperatorThread(ctrl, run);
-              ctrl.enqueue(
-                `event: agent-status\ndata: ${JSON.stringify({
-                  run_id: Number(run.id),
-                  agents: agentsForRun(Number(run.id)),
-                })}\n\n`,
-              );
-            }
-            pollDb();
-          },
-          cancel() {
-            clients.delete(ctrl);
-          },
-        });
-        return new Response(stream, {
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-          },
-        });
-      }
-
-      if (url.pathname === "/send" && req.method === "POST") {
-        return req
-          .json()
-          .then((body: any) => {
-            const { to, type, body: msgBody, run_id } = body ?? {};
-            if (!to || !type || !msgBody) {
-              return Response.json(
-                { ok: false, error: "missing to, type, or body" },
-                { status: 400 },
-              );
-            }
-            if (!MESSAGE_TYPES.has(type)) {
-              return Response.json(
-                {
-                  ok: false,
-                  error: `type must be one of ${[...MESSAGE_TYPES].sort()}`,
-                },
-                { status: 400 },
-              );
-            }
-            const runId =
-              run_id === undefined || run_id === null || run_id === ""
-                ? null
-                : Number(run_id);
-            if (runId !== null && !Number.isInteger(runId)) {
-              return Response.json(
-                { ok: false, error: "run_id must be an integer" },
-                { status: 400 },
-              );
-            }
-            const run = runId === null ? null : runById(runId);
-            if (runId !== null && !run) {
-              return Response.json(
-                { ok: false, error: `unknown run_id ${runId}` },
-                { status: 404 },
-              );
-            }
-            if (run && run.status !== "running") {
-              return Response.json(
-                { ok: false, error: `run #${runId} is ${run.status}` },
-                { status: 409 },
-              );
-            }
-            const known = db
-              .query(
-                "SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)",
-              )
-              .get(to, runId ?? -1);
-            if (!known) {
-              console.error(
-                `synapse ui: warning — '${to}' not in agents registry (sending anyway)`,
-              );
-            }
-            const result = db.run(
-              `INSERT INTO messages (run_id, from_agent, to_agent, type, body) VALUES (?, 'operator', ?, ?, ?)`,
-              [runId, to, type, msgBody],
-            );
-            return Response.json({
-              ok: true,
-              id: Number(result.lastInsertRowid),
-            });
-          })
-          .catch(() =>
-            Response.json(
-              { ok: false, error: "invalid JSON" },
-              { status: 400 },
-            ),
-          );
-      }
-
-      if (url.pathname === "/ack-run" && req.method === "POST") {
-        const runIdParam = url.searchParams.get("run_id");
-        const runId = runIdParam === null ? null : Number(runIdParam);
-        if (runId !== null && !Number.isInteger(runId)) {
-          return Response.json(
-            { ok: false, error: "run_id must be an integer" },
-            { status: 400 },
-          );
-        }
-        const run = runId === null ? recentRuns()[0] : runById(runId);
-        if (!run) {
-          return Response.json(
-            { ok: false, error: "no run to acknowledge" },
-            { status: 404 },
-          );
-        }
-        if (run.status === "running") {
-          return Response.json(
-            { ok: false, error: "run is still running" },
-            { status: 409 },
-          );
-        }
-        const resolvedRunId = Number(run.id);
-        const session = run.session;
-        db.run(
-          "INSERT INTO events (agent, type, summary, created_at) VALUES ('operator', 'decision', ?, ?)",
-          [`acknowledged terminal run ${resolvedRunId}; tearing down team ${session}`, nowIso()],
-        );
-        setTimeout(() => {
-          disbandTeam(db, session, resolvedRunId, (s) => console.log(`[ack-run] ${s}`));
-          shutdown();
-        }, 50);
-        return Response.json({ ok: true, run_id: resolvedRunId, session });
-      }
-
-      return new Response("Not Found", { status: 404 });
-    },
-  });
-
-  function shutdown() {
-    clearInterval(pollTimer);
-    for (const ctrl of clients) {
-      try { ctrl.close(); } catch {}
-    }
-    server.stop(true);
-    process.exit(0);
-  }
-
-  console.log(`synapse ui: listening on http://localhost:${server.port}`);
-  console.log(`  GET  /        — dashboard`);
-  console.log(`  GET  /runs    — recent runs`);
-  console.log(`  GET  /events  — SSE stream (runs-list, agent-status, operator-thread, message-stream, reload)`);
-  console.log(`  POST /send    — {to, type, body, run_id?}`);
-}
+</html>
