@@ -23,10 +23,12 @@ agent's pane (rare; mostly for debugging), see the `tmux` skill instead.
 - **message** — a mailbox row: `from_agent`, `to_agent`, `type`, `ref_id`,
   `body`. Delivered to a tmux pane by the monitor process when that agent
   goes idle.
-- **`ref_id`** — links a reply back to the message it closes. Always pass
-  `--ref-id <id>` when answering something; `<id>` is the number `synapse
-  send` printed when that message was sent (or the id shown in `synapse
-  pending`).
+- **`ref_id`** — links a reply back to the message it closes. `<id>` is the
+  number `synapse send` printed when that message was sent (or the id shown
+  in `synapse pending`). Prefer `synapse reply <id> "<body>"` over a raw
+  `send ... REPLY --ref-id <id>`: it resolves the recipient to the sender of
+  message `<id>` for you, so a reply can't be sent to the wrong agent. A
+  `REPLY` whose recipient isn't that sender is rejected either way.
 - **Message types**: `TASK` (assignment, expects a `REPLY`), `QUESTION`
   (blocking, halts the sender until answered, requires `--options` when
   aimed at `operator`), `PROGRESS` (one-way status ping, no reply
@@ -56,7 +58,8 @@ SYNAPSE_AGENT=operator` once.
 | `synapse runs` | List all runs: id, session, state, started/ended, goal. |
 | `synapse status` | Roster for the active run: window, role, model, idle/busy, last-seen, pending-message count. |
 | `synapse pending [agent] [--all]` | Show pending messages (defaults to the active run; `--all` spans every run). Only *marks messages read* if `$SYNAPSE_AGENT` matches the queried agent — safe to inspect anyone's inbox read-only otherwise. |
-| `synapse send <to> <type> "<body>" [--from NAME] [--ref-id N] [--run-id N] [--options a,b,c] [--title "..."] [--body-file PATH]` | Queue a message. `--body-file -` reads from stdin (use for long or backtick-heavy bodies to dodge shell interpolation). |
+| `synapse send <to> <type> "<body>" [--from NAME] [--ref-id N] [--run-id N] [--options a,b,c] [--title "..."] [--body-file PATH]` | Queue a message. `--body-file -` reads from stdin (use for long or backtick-heavy bodies to dodge shell interpolation). A `REPLY` whose recipient isn't the sender of its `--ref-id` message is rejected — use `reply` below instead. |
+| `synapse reply <ref-id> "<body>" [--from NAME] [--run-id N] [--body-file PATH]` | Reply to a message by id. Recipient is resolved to the sender of message `<ref-id>`, so you never name it and can't misroute — the preferred way to close a `TASK` or `QUESTION`. The id is shown by `synapse pending` and printed by `synapse send`. |
 | `synapse spawn <role> [--run-id N]` | Add another agent (`coder`, `reviewer`, `tester`, or a second `manager`) to a running team; auto-numbers (`coder-2`, ...). |
 | `synapse stop <name> [--session S] [--run-id N]` | Mark an agent stopped and close its tmux window. |
 | `synapse attach <name> [--session S]` | `tmux attach` shortcut to one agent's window. |
@@ -94,9 +97,9 @@ or open `synapse ui` for the live view.
 **Answer a blocking QUESTION from manager**
 `manager` sends `QUESTION` to `operator` with `--options` and then halts.
 Find the message id (`synapse pending operator` or the UI), then reply to
-whoever asked — usually `manager` — closing that id:
+it — `reply` routes it back to whoever asked (usually `manager`):
 ```bash
-synapse send manager REPLY "<chosen option, or free text>" --ref-id <question_msg_id> --from operator
+synapse reply <question_msg_id> "<chosen option, or free text>" --from operator
 ```
 
 **Send a follow-up task after the run is already going**

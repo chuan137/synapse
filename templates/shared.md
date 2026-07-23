@@ -58,7 +58,7 @@ synapse pending $SYNAPSE_AGENT   # pull what's waiting; run once on launch, or w
 - **`TASK`** — work assignment; sender expects a `REPLY` when done.
 - **`QUESTION`** — blocking question from `manager` to `operator`; halts sender until answered. Always include `--title`.
 - **`PROGRESS`** — one-way UI signal; no reply expected. Covers short activity markers ("started") and relayed verdicts from a subordinate (reviewer/tester outcome, a workflow deviation).
-- **`REPLY`** — everything else: done reports, answers, verdicts. Set `--ref-id` to close a TASK or QUESTION.
+- **`REPLY`** — everything else: done reports, answers, verdicts. Closes a TASK or QUESTION. Send it with `synapse reply <id> "<body>"` — that resolves the recipient to the sender of message `<id>` for you, so it can't be misrouted. (A raw `send ... REPLY --ref-id <id>` still works but is rejected if its recipient isn't that sender.)
 
 > **`REPLY` vs `PROGRESS`:** if the recipient needs to read it to act, it is a `REPLY`. If it only signals activity, it is `PROGRESS`.
 
@@ -119,9 +119,14 @@ inspection; it is not a substitute for `synapse send`.
 
 ## ref_id
 
-Set `--ref-id` on every reply to the id of the message you are closing out.
-Note the id `synapse send` prints when you send a `TASK`. Track open work by
-querying `ref_id` chains in the DB, not by holding state in context.
+Every reply closes exactly one message: the one whose id you pass. Prefer
+`synapse reply <id> "<body>"` — it looks up message `<id>`, sends the `REPLY`
+back to that message's sender, and needs no recipient from you, so it cannot
+go to the wrong agent. (`synapse pending` prints the ready-to-run `reply` line
+for each open item.) If you use a raw `send ... REPLY --ref-id <id>` instead,
+the recipient must be the sender of `<id>` or the send is rejected. Note the id
+`synapse send` prints when you send a `TASK`. Track open work by querying
+`ref_id` chains in the DB, not by holding state in context.
 
 ## Handoffs: pointers, not payloads
 
@@ -140,7 +145,9 @@ unreadable.
 **Rule 1 — Reply to whoever tasked you, with the full result.**
 End every turn that completes assigned work by sending the result back to the
 agent who assigned it (per the routing above): what was done, what changed,
-the outcome. Not a summary. Execute the `synapse send` before the turn ends.
+the outcome. Not a summary. Run `synapse reply <task_id> "<result>"` before the
+turn ends — it routes to the tasker automatically, so you can't send it to the
+wrong agent.
 
 **Rule 2 — Announce milestones; stay silent otherwise.**
 On task started or task complete, send your own one-line `[start]`/`[done]`

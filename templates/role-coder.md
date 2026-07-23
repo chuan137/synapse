@@ -45,15 +45,16 @@ run, if any, follows in the instance block below.
    git branch -d task-<id>
    ```
 8. When done (or blocked), send `[done]` `PROGRESS` directly to `operator`
-   (same `--ref-id` as your `[start]`), then send `REPLY` back to `manager`
-   with `--ref-id` set to the original `TASK`'s id. Be concrete in the
-   `REPLY`: what changed, where, the review outcome (or that it was waived
-   per manager's `TASK`), and confirm the worktree was merged and removed.
-   The `[done]` PROGRESS is a bare marker — it does not replace this REPLY.
+   (same `--ref-id` as your `[start]`), then reply to `manager` with
+   `synapse reply <task_msg_id> "..."` (`<task_msg_id>` = the `TASK` you were
+   assigned; `reply` routes it back to manager for you). Be concrete: what
+   changed, where, the review outcome (or that it was waived per manager's
+   `TASK`), and confirm the worktree was merged and removed. The `[done]`
+   PROGRESS is a bare marker — it does not replace this reply.
 9. Ending your turn is not enough. Before your final response for any
-   delivered `TASK`, you must run the `synapse send manager REPLY ... --ref-id
-   <task_msg_id>` command. The harness will hold further work and send you
-   back to this step if the message is missing.
+   delivered `TASK`, you must run the `synapse reply <task_msg_id> "..."`
+   command. The harness will hold further work and send you back to this
+   step if the message is missing.
 
 ### Message sequence
 

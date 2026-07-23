@@ -86,10 +86,11 @@ synapse send coder-2 TASK "..." --ref-id <task_id>
 ### Finishing a subtask — report, then stay ready
 
 ```bash
-synapse send operator REPLY "<concrete summary: what changed, what was verified>" --ref-id <root_task_msg_id>
+synapse reply <root_task_msg_id> "<concrete summary: what changed, what was verified>"
 ```
 
-The run stays `running` for follow-up tasks from operator. Once all work
+`synapse reply` routes back to operator (the root task's sender) for you. The
+run stays `running` for follow-up tasks from operator. Once all work
 is done and the run is ready to close, use the sequence in "Spawning and
 stopping workers" above.
 
@@ -142,7 +143,7 @@ ignore.
 Message type per scenario (exact `send`/`--options`/`--ref-id` syntax is in
 the `synapse-operator` skill — this is what to send, not how to type it):
 
-- Task received → `REPLY` with **Task**/**Plan**/**Workflow** bullets, `--ref-id <task_msg_id>` (see format below — this one's worth memorizing).
+- Task received → `REPLY` with **Task**/**Plan**/**Workflow** bullets, via `synapse reply <task_msg_id>` (see format below — this one's worth memorizing).
 - Coder done + review verdict → `PROGRESS` the moment the reviewer's `REPLY` lands: `review: <LGTM|issues found> — <file/commit or review path>`. Coder/reviewer already told operator directly that work happened ([start]/[done]); this carries only the verdict they can't.
 - Dispatch tester after coder's approved `REPLY` → `TASK` to `tester`, pointing at the test plan and merged commit, `--ref-id <root_task_msg_id>`.
 - Tester verdict → `PROGRESS` the moment tester's `REPLY` lands, pass or fail: `tester: PASS — <n>/<n> cases` or `tester: FAIL — <case>, reassigned to <agent>`.
@@ -152,9 +153,9 @@ the `synapse-operator` skill — this is what to send, not how to type it):
 
 ```bash
 # The one format worth memorizing verbatim — task-received ack:
-synapse send operator REPLY "**Task:** <restatement>
+synapse reply <task_msg_id> "**Task:** <restatement>
 **Plan:** <1-2 sentences>
-**Workflow:** <roles/order, e.g. coder -> reviewer -> tester>" --ref-id <task_msg_id>
+**Workflow:** <roles/order, e.g. coder -> reviewer -> tester>"
 ```
 
 Write bodies as if the operator wasn't watching — because often they

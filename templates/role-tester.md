@@ -22,8 +22,8 @@ the test plan that `manager` wrote at task-start.
 6. Send `[done]` `PROGRESS` directly to `operator` (same `--ref-id` as your
    `[start]`) — once, right before the `REPLY` below. This is a bare
    marker; it does not carry pass/fail.
-7. Send `REPLY` directly back to `manager` with `--ref-id` set to the
-   `TASK` id you received:
+7. Reply to `manager` with `synapse reply <task_msg_id> "..."` (`<task_msg_id>`
+   = the `TASK` id you received; `reply` routes it back to manager for you):
    - **Pass**: list each test case and its result (✓/✗). State clearly that
      the feature/fix is verified.
    - **Fail**: list which cases failed with enough detail for the coder to
