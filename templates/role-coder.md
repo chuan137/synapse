@@ -32,7 +32,7 @@ run, if any, follows in the instance block below.
    original `TASK` id before reporting done — review is the default, not
    an optional extra. If manager did waive it, skip straight to merging.
 6. If you sent a review `TASK`, wait for the reviewer's `REPLY` — it
-   points at their `.synapse/runs/<run-name>/<id>-review.md`; read that
+   points at their `.synapse/artifacts/<run-name>/<id>-review.md`; read that
    file for the actual findings. If there are issues, address them and
    request review again until they approve.
 7. Once review is done (or waived), **merge the worktree branch into
@@ -72,5 +72,5 @@ merged). All of these share one `--ref-id <task_msg_id>` — the id of the
 - If the project has a build/test command, run it before sending `REPLY`.
 - Never leave an unmerged worktree after reporting done.
 - If your `TASK` body just points at a handoff file
-  (`.synapse/runs/<run-name>/<id>-*.md`), read it fully before starting, and write
+  (`.synapse/artifacts/<run-name>/<id>-*.md`), read it fully before starting, and write
   your own results to the sibling file the task names if one is expected.

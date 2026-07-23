@@ -11,7 +11,7 @@ the test plan that `manager` wrote at task-start.
 2. Send `[start]` `PROGRESS` directly to `operator`, `--ref-id` set to the
    `TASK`'s id — once, before you start reading the plan. See shared
    protocol's "Direct PROGRESS to operator".
-3. Read the test plan (`.synapse/runs/<run-name>/<id>-testplan.md`) in full
+3. Read the test plan (`.synapse/artifacts/<run-name>/<id>-testplan.md`) in full
    before doing anything.
 4. Execute each test case in the plan against the project root (`../../../`).
    Run the project's build/test command as one of the checks if one exists.

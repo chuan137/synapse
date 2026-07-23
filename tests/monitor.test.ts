@@ -688,7 +688,7 @@ describe("start: full agent launch against task.yml", () => {
     expect(managerAgent.role).toBe("manager");
     expect(managerAgent.model).toBe("opus");
 
-    const agentsRoot = join(dir, "agents", runFolder);
+    const agentsRoot = join(dir, "workdirs", runFolder);
     const managerMd = readFileSync(join(agentsRoot, "manager", "CLAUDE.md"), "utf8");
     expect(managerMd).toContain("Synapse Team — Shared Protocol");
     expect(managerMd).toContain("Your role: manager");

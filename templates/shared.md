@@ -126,10 +126,10 @@ querying `ref_id` chains in the DB, not by holding state in context.
 ## Handoffs: pointers, not payloads
 
 Keep message bodies short. Write specs to a file under
-`.synapse/runs/<run-name>/` and point at it:
+`.synapse/artifacts/<run-name>/` and point at it:
 
 ```bash
-synapse send coder-1 TASK "See .synapse/runs/run-1/42-spec.md" --ref-id N
+synapse send coder-1 TASK "See .synapse/artifacts/run-1/42-spec.md" --ref-id N
 ```
 
 Long bodies break tmux keystroke delivery and make `synapse pending`/`status`

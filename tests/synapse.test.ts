@@ -448,7 +448,7 @@ describe("start", () => {
 
     run(["start", "--goal", "test goal", "--no-monitor"], { PATH: `${fakeBin}:${process.env.PATH}` });
 
-    const runsDir = join(dir, "runs");
+    const runsDir = join(dir, "artifacts");
     const entries = readdirSync(runsDir);
     expect(entries.length).toBe(1);
     expect(entries[0]).toMatch(/^run-\d+$/);

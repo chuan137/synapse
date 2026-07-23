@@ -28,9 +28,9 @@ skill; for your standing responsibilities, see `templates/role-manager.md`.
 Write all three to the current run's directory before delegating:
 
 ```
-.synapse/runs/<run-name>/<root-id>-spec.md        # what & why
-.synapse/runs/<run-name>/<root-id>-plan.md        # how, as tasks/subtasks
-.synapse/runs/<run-name>/<root-id>-testplan.md    # how we prove it
+.synapse/artifacts/<run-name>/<root-id>-spec.md        # what & why
+.synapse/artifacts/<run-name>/<root-id>-plan.md        # how, as tasks/subtasks
+.synapse/artifacts/<run-name>/<root-id>-testplan.md    # how we prove it
 ```
 
 `<root-id>` is the id of the root `TASK` from operator; `<run-name>` is the

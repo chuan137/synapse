@@ -618,11 +618,11 @@ export function cmdStart(flags: Record<string, string>) {
     fail(msg);
   };
 
-  const taskFolder = join(dataDir, "runs", runFolderName);
-  const agentsDir = join(dataDir, "agents", runFolderName);
-  mkdirSync(taskFolder, { recursive: true });
+  const artifactsFolder = join(dataDir, "artifacts", runFolderName);
+  const agentsDir = join(dataDir, "workdirs", runFolderName);
+  mkdirSync(artifactsFolder, { recursive: true });
   mkdirSync(agentsDir, { recursive: true });
-  console.log(`synapse: created run folder ${taskFolder}`);
+  console.log(`synapse: created run folder ${artifactsFolder}`);
 
   db.run(
     `INSERT INTO agents (window_name, run_id, role, session_id, status, last_seen_at)

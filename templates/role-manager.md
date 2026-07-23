@@ -12,7 +12,7 @@ Exactly one manager per session.
    fixed sequence; state your choice in the acknowledgment `REPLY` (see
    Start).
 2. **For feature requests and bug fixes:** write a test plan to
-   `.synapse/runs/<run-name>/<root-id>-testplan.md` before delegating —
+   `.synapse/artifacts/<run-name>/<root-id>-testplan.md` before delegating —
    concrete, executable test cases with pass/fail criteria. Reference it
    in every downstream `TASK`.
 3. Send one `TASK` per subtask with enough acceptance criteria that the

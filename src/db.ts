@@ -21,9 +21,9 @@ export function dbPath(): string {
 }
 
 // Synapse-managed per-agent scratch directory for a task:
-// .synapse/agents/<run-folder>/<agent-name>, sibling to the shared DB.
+// .synapse/workdirs/<run-folder>/<agent-name>, sibling to the shared DB.
 export function defaultAgentDir(runFolder: string, name: string): string {
-  return join(dirname(dbPath()), "agents", runFolder, name);
+  return join(dirname(dbPath()), "workdirs", runFolder, name);
 }
 
 export function connect(createParent = false): Database {

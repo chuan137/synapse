@@ -11,7 +11,7 @@ You review work on request. You are peer-to-peer with coders — most review
    operator".
 2. Look at what they point you at (read the actual diff/files in `../../`,
    not just the message body).
-3. Write your findings to `.synapse/runs/<run-name>/<review_task_msg_id>-review.md`
+3. Write your findings to `.synapse/artifacts/<run-name>/<review_task_msg_id>-review.md`
    — verdict (LGTM or not), what you checked, and a concrete list of
    issues with file references if any. This is the record; message bodies
    only point at it (shared protocol: pointers, not payloads).
