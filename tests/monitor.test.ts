@@ -325,6 +325,7 @@ describe("monitor: pull nudges", () => {
       .all() as any[];
     expect(pending.length).toBe(2);
   });
+
 });
 
 // --once exercises the snapshot path (deriveIdleStateFromTranscript / evaluateAgentReadiness /
@@ -515,6 +516,95 @@ describe("monitor: live event-driven loop (no --once)", () => {
     expect(exitCode).toBe(0);
     expect(out.text()).toContain("stopped");
     proc = undefined;
+  }, 15000);
+
+  // TC3: pending-nudge cooldown map persists across sweeps in the live loop.
+  // The agent receives exactly one nudge even after multiple sweep ticks fire
+  // while the same pending message remains unconsumed.
+  test("TC3: pending-nudge cooldown persists across sweeps — no repeated nudge", async () => {
+    run(["send", "coder-1", "TASK", "tc3 task", "--from", "manager"]);
+    writeTranscript("sess-coder", "end_turn", 5000);
+
+    // Short interval so several sweeps fire quickly.
+    proc = spawnLiveMonitor(["--debounce", "80", "--interval", "30"]);
+    const out = collectStream(proc.stdout);
+    await waitFor(() => out.text().includes("watching tmux session"));
+
+    // Wait for the first nudge to arrive.
+    await waitFor(() =>
+      tmuxLogContents().includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"),
+    );
+
+    // Let several more sweeps run while the message is still pending.
+    await sleep(300);
+
+    // The message was never consumed — cooldown should have suppressed all subsequent nudges.
+    const nudges = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(nudges.length).toBe(1);
+
+    const msg = openDb().query("SELECT * FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(msg.status).toBe("pending");
+  }, 15000);
+
+  // TC1: no repeat within cooldown across multiple sweep ticks (same pending message set).
+  test("TC1: pending nudge fires once; subsequent sweeps suppress it within cooldown", async () => {
+    run(["send", "coder-1", "TASK", "tc1 task", "--from", "manager"]);
+    writeTranscript("sess-coder", "end_turn", 5000);
+
+    proc = spawnLiveMonitor(["--debounce", "80", "--interval", "30"]);
+    const out = collectStream(proc.stdout);
+    await waitFor(() => out.text().includes("watching tmux session"));
+
+    // Wait for first nudge.
+    await waitFor(() =>
+      tmuxLogContents().includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"),
+    );
+    // Let more sweeps run — message still pending.
+    await sleep(250);
+
+    const count = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1")).length;
+    expect(count).toBe(1);
+  }, 15000);
+
+  // TC2: a new pending message (different ID set) bypasses the cooldown and re-fires.
+  test("TC2: adding a new pending message bypasses cooldown and triggers a second nudge", async () => {
+    run(["send", "coder-1", "TASK", "tc2 first task", "--from", "manager"]);
+    writeTranscript("sess-coder", "end_turn", 5000);
+
+    proc = spawnLiveMonitor(["--debounce", "80", "--interval", "30"]);
+    const out = collectStream(proc.stdout);
+    await waitFor(() => out.text().includes("watching tmux session"));
+
+    // Wait for first nudge.
+    await waitFor(() =>
+      tmuxLogContents().includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"),
+    );
+    // Confirm suppression — still 1 after a couple more sweeps.
+    await sleep(150);
+    const countBefore = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1")).length;
+    expect(countBefore).toBe(1);
+
+    // Add a new pending message — the ID set changes, cooldown key changes.
+    run(["send", "coder-1", "TASK", "tc2 second task", "--from", "manager"]);
+
+    // A second nudge should fire promptly.
+    await waitFor(() => {
+      const n = tmuxLogContents()
+        .split("\n")
+        .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1")).length;
+      return n >= 2;
+    });
+
+    const countAfter = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1")).length;
+    expect(countAfter).toBe(2);
   }, 15000);
 });
 
