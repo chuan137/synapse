@@ -7,8 +7,7 @@ import {
   writeFileSync,
 } from "fs";
 import { homedir } from "os";
-import { basename, dirname, join, resolve } from "path";
-import SHARED_MD from "../templates/shared.md" with { type: "text" };
+import { basename, dirname, join, resolve } from "path";import SHARED_MD from "../templates/shared.md" with { type: "text" };
 import ROLE_MANAGER_MD from "../templates/role-manager.md" with { type: "text" };
 import ROLE_CODER_MD from "../templates/role-coder.md" with { type: "text" };
 import ROLE_REVIEWER_MD from "../templates/role-reviewer.md" with {
@@ -19,7 +18,18 @@ import ROLE_TESTER_MD from "../templates/role-tester.md" with {
 };
 import { connect, dbPath, defaultAgentDir, initDb } from "./db";
 import { buildClaudeArgs } from "./launch-args";
+import {
+  markOperatorMessagesDelivered,
+  newestOpenInboundWork,
+  nudgeAgent,
+  nudgeForPendingWork,
+  readContextTokens,
+  sendBackReminderBody,
+} from "./monitor";
 import { SKILLS } from "./skills.generated";
+import { DEFAULT_TMUX_SESSION, fail, nowIso } from "./utils";
+
+export { DEFAULT_TMUX_SESSION, fail, nowIso };
 
 const ROLE_TEMPLATES: Record<string, string> = {
   manager: ROLE_MANAGER_MD,
@@ -46,18 +56,8 @@ function installSkills(targetDir: string): void {
 
 export const MESSAGE_TYPES = new Set(["TASK", "QUESTION", "PROGRESS", "REPLY"]);
 
-export const DEFAULT_TMUX_SESSION = "team";
 export const DEFAULT_TASK_TEMPLATE = "templates/task.example.yml";
 export const DEFAULT_MANAGER_MODEL = "opus";
-
-export function nowIso(): string {
-  return new Date().toISOString().slice(0, 19);
-}
-
-export function fail(msg: string): never {
-  console.error(`synapse: ${msg}`);
-  process.exit(1);
-}
 
 export const c = {
   reset: "\x1b[0m",
@@ -529,6 +529,27 @@ function spawnTmux(args: string[]): ReturnType<typeof Bun.spawnSync> {
   return Bun.spawnSync({ cmd: ["tmux", ...args], env });
 }
 
+// Injects the synapse hook-stop Stop hook into <absCwd>/.claude/settings.json.
+// Merges with any existing content; idempotent — won't duplicate an existing entry.
+function injectStopHook(absCwd: string, agentName: string, runId: number, dbFile: string): void {
+  const settingsPath = join(absCwd, ".claude", "settings.json");
+  let settings: any = {};
+  try {
+    settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+  } catch {}
+  if (!settings.hooks) settings.hooks = {};
+  if (!settings.hooks.Stop) settings.hooks.Stop = [];
+  const hookCmd = `SYNAPSE_DB='${dbFile}' SYNAPSE_AGENT='${agentName}' SYNAPSE_RUN_ID='${runId}' synapse hook-stop`;
+  const alreadyPresent = settings.hooks.Stop.some((entry: any) =>
+    entry.hooks?.some((h: any) => h.command === hookCmd)
+  );
+  if (!alreadyPresent) {
+    settings.hooks.Stop.push({ matcher: "", hooks: [{ type: "command", command: hookCmd }] });
+  }
+  mkdirSync(join(absCwd, ".claude"), { recursive: true });
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+}
+
 // Launches one agent window in the tmux session.
 //
 // tmux windows are real TTYs; claude runs directly without any pty wrapper.
@@ -555,6 +576,7 @@ function launchAgentWindow(
 ): void {
   const absCwd = resolve(defaultAgentDir(taskName, agent.name));
   presetClaudeTrust(absCwd);
+  injectStopHook(absCwd, agent.name, runId, synapseDb);
 
   // Use direnv exec to load the project root's .envrc (if any), giving each
   // agent the env that matches the project directory rather than inheriting
@@ -861,5 +883,64 @@ export function cmdAttach(name: string, tmuxSession: string) {
   );
   if (result.exitCode !== 0) {
     fail(`tmux attach failed: ${result.stderr?.toString().trim()}`);
+  }
+}
+
+export function cmdHookStop(agentName: string, runId: number): void {
+  const path = dbPath();
+  if (!existsSync(path)) {
+    process.stderr.write(`[hook-stop] DB not found at ${path}\n`);
+    return;
+  }
+  let db;
+  try {
+    db = connect();
+  } catch (err) {
+    process.stderr.write(`[hook-stop] DB unavailable: ${err instanceof Error ? err.message : String(err)}\n`);
+    return;
+  }
+
+  const log = (s: string) => process.stderr.write(`[hook-stop] ${s}\n`);
+
+  try {
+    const agent = db.query("SELECT * FROM agents WHERE window_name=? AND run_id=?")
+      .get(agentName, runId) as any;
+    if (!agent || agent.status === "stopped") return;
+
+    const tmuxSession = (db.query("SELECT session FROM runs WHERE id=?").get(runId) as any)?.session;
+    if (!tmuxSession) return;
+
+    // Update context tokens from transcript
+    if (agent.session_id && agent.session_id !== "-") {
+      const ctx = readContextTokens(agent.session_id);
+      if (ctx !== null) db.run("UPDATE agents SET context_tokens=? WHERE id=?", [ctx, agent.id]);
+    }
+
+    // Send-back enforcement takes priority — check before pending messages
+    const open = newestOpenInboundWork(db, agent, runId);
+    if (open) {
+      nudgeAgent(tmuxSession, agentName, sendBackReminderBody(agentName, open), log);
+      db.run("UPDATE agents SET sendback_nudged_at=? WHERE window_name=? AND run_id=?",
+        [nowIso(), agentName, runId]);
+      return;
+    }
+
+    // Check for pending messages
+    const hasPending = !!db.query(
+      "SELECT 1 FROM messages WHERE status='pending' AND to_agent=? AND run_id=? LIMIT 1"
+    ).get(agentName, runId);
+    if (hasPending) {
+      nudgeAgent(tmuxSession, agentName, `synapse pending ${agentName}`, log);
+      return;
+    }
+
+    // No work — agent is truly idle
+    db.run(
+      "UPDATE agents SET status='idle', last_seen_at=? WHERE window_name=? AND run_id=? AND status != 'stopped'",
+      [nowIso(), agentName, runId],
+    );
+    markOperatorMessagesDelivered(db, runId, log);
+  } catch (err) {
+    process.stderr.write(`[hook-stop] error: ${err instanceof Error ? err.message : String(err)}\n`);
   }
 }

@@ -27,6 +27,7 @@ import {
   cmdAttach,
   cmdDeliver,
   cmdDone,
+  cmdHookStop,
   cmdInit,
   cmdPending,
   cmdRegister,
@@ -417,6 +418,25 @@ const COMMANDS: CommandSpec[] = [
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
       if (flags["run-id"] && isNaN(runId!)) fail(`synapse set-goal: invalid run-id '${flags["run-id"]}'`);
       return cmdSetGoal(text, runId);
+    },
+  },
+  {
+    name: "hook-stop",
+    usage: "synapse hook-stop",
+    summary: "Called by the Claude Code Stop hook; delivers pending work or sets agent idle.",
+    run: () => {
+      const agentName = process.env.SYNAPSE_AGENT;
+      const runIdStr = process.env.SYNAPSE_RUN_ID;
+      if (!agentName || !runIdStr) {
+        process.stderr.write("[hook-stop] SYNAPSE_AGENT and SYNAPSE_RUN_ID must be set\n");
+        return;
+      }
+      const runId = parseInt(runIdStr, 10);
+      if (isNaN(runId)) {
+        process.stderr.write(`[hook-stop] invalid SYNAPSE_RUN_ID: ${runIdStr}\n`);
+        return;
+      }
+      cmdHookStop(agentName, runId);
     },
   },
 ];

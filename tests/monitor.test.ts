@@ -695,6 +695,14 @@ describe("start: full agent launch against task.yml", () => {
     expect(managerMd).toContain("A coder subtask isn't complete until reviewed");
     expect(managerMd).toContain("confirm the same `ref_id` chain has");
 
+    // Stop hook injected into manager's .claude/settings.json (V-7)
+    const settingsPath = join(agentsRoot, "manager", ".claude", "settings.json");
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.hooks?.Stop).toBeDefined();
+    const stopHooks = settings.hooks.Stop.flatMap((e: any) => e.hooks ?? []);
+    expect(stopHooks.some((h: any) => typeof h.command === "string" && h.command.includes("hook-stop"))).toBe(true);
+    expect(stopHooks.some((h: any) => typeof h.command === "string" && h.command.includes("SYNAPSE_AGENT='manager'"))).toBe(true);
+
     // Goal routes to manager.
     const task = db
       .query("SELECT * FROM messages WHERE type='TASK' AND from_agent='operator'")
@@ -702,4 +710,92 @@ describe("start: full agent launch against task.yml", () => {
     expect(task.to_agent).toBe("manager");
     expect(task.body).toBe("Build feature X");
   }, 15000);
+
+  test("synapse spawn injects Stop hook into spawned agent settings (V-7)", () => {
+    writeFileSync(
+      join(fakeBinDir, "tmux"),
+      `#!/bin/sh\necho "$@" >> "${tmuxLog}"\n[ "$1" = "has-session" ] && exit 1\nexit 0\n`,
+    );
+    run(["init"]);
+    // Start a run first so spawn has a running run to attach to
+    const db = new Database(dbFile);
+    db.run("INSERT INTO runs (session, goal, status) VALUES ('team', 'test', 'running')");
+    db.close();
+
+    const r = runFromRepoRoot(["spawn", "coder"]);
+    expect(r.exitCode).toBe(0);
+
+    const runRow = openDb().query("SELECT id FROM runs").get() as any;
+    const agentsRoot = join(dir, "workdirs", `run-${runRow.id}`);
+    const settingsPath = join(agentsRoot, "coder", ".claude", "settings.json");
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.hooks?.Stop).toBeDefined();
+    const stopHooks = settings.hooks.Stop.flatMap((e: any) => e.hooks ?? []);
+    expect(stopHooks.some((h: any) => typeof h.command === "string" && h.command.includes("hook-stop"))).toBe(true);
+    expect(stopHooks.some((h: any) => typeof h.command === "string" && h.command.includes("SYNAPSE_AGENT='coder'"))).toBe(true);
+  }, 15000);
+});
+
+describe("hook-stop: delivery (V-4)", () => {
+  beforeEach(() => {
+    run(["init"]);
+    new Database(dbFile).run("INSERT INTO runs (session, goal, status) VALUES ('team', 'test', 'running')");
+    run(["register", "coder-1", "coder", "sess-coder"]);
+    // Mark agent busy so hook-stop logic applies
+    new Database(dbFile).run("UPDATE agents SET status='busy' WHERE window_name='coder-1'");
+  });
+
+  test("with pending message: nudges agent, does NOT set status idle", () => {
+    run(["send", "coder-1", "TASK", "pending work", "--from", "manager"]);
+
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r.exitCode).toBe(0);
+
+    const log = tmuxLogContents();
+    expect(log).toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
+
+    const agent = openDb().query("SELECT status FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(agent.status).not.toBe("idle");
+  });
+
+  test("with no pending work: sets status to idle, no tmux nudge", () => {
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r.exitCode).toBe(0);
+
+    expect(tmuxLogContents()).toBe("");
+
+    const agent = openDb().query("SELECT status FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(agent.status).toBe("idle");
+  });
+});
+
+describe("hook-stop: error handling (V-6)", () => {
+  beforeEach(() => {
+    run(["init"]);
+    new Database(dbFile).run("INSERT INTO runs (session, goal, status) VALUES ('team', 'test', 'running')");
+    run(["register", "coder-1", "coder", "sess-coder"]);
+  });
+
+  test("exits 0 silently when agent is stopped", () => {
+    new Database(dbFile).run("UPDATE agents SET status='stopped' WHERE window_name='coder-1'");
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r.exitCode).toBe(0);
+    expect(tmuxLogContents()).toBe("");
+  });
+
+  test("exits 0 silently when agent is not in DB", () => {
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "nonexistent", SYNAPSE_RUN_ID: "1" });
+    expect(r.exitCode).toBe(0);
+    expect(tmuxLogContents()).toBe("");
+  });
+
+  test("exits 0 with stderr message when DB is missing", () => {
+    const r = run(["hook-stop"], {
+      SYNAPSE_AGENT: "coder-1",
+      SYNAPSE_RUN_ID: "1",
+      SYNAPSE_DB: join(dir, "nonexistent", "synapse.db"),
+    });
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toContain("hook-stop");
+  });
 });

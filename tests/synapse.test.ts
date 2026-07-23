@@ -145,6 +145,57 @@ describe("init", () => {
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("newer than this binary supports");
   });
+
+  test("fresh DB has sendback_nudged_at column in agents table", () => {
+    run(["init"]);
+    const db = openDb();
+    const cols = db.query("PRAGMA table_info(agents)").all() as any[];
+    const names = cols.map((c) => c.name);
+    expect(names).toContain("sendback_nudged_at");
+  });
+
+  test("migrates v12 DB by adding sendback_nudged_at column", () => {
+    // Build a v12 DB without sendback_nudged_at
+    const db12 = openDbWritable();
+    db12.exec(`
+      CREATE TABLE agents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        window_name TEXT NOT NULL, run_id INTEGER NOT NULL, role TEXT NOT NULL,
+        model TEXT, session_id TEXT,
+        status TEXT NOT NULL DEFAULT 'unknown', last_seen_at TEXT,
+        context_tokens INTEGER,
+        UNIQUE(window_name, run_id)
+      );
+      CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER, from_agent TEXT NOT NULL, to_agent TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'REPLY', ref_id INTEGER, body TEXT NOT NULL,
+        title TEXT, options TEXT, status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), delivered_at TEXT,
+        retry_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT);
+      CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent TEXT NOT NULL, type TEXT NOT NULL, summary TEXT NOT NULL,
+        run_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session TEXT NOT NULL, goal TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ended_at TEXT, session_killed_at TEXT);
+      PRAGMA user_version=12;
+    `);
+    db12.run("INSERT INTO agents (window_name, run_id, role, status) VALUES ('old-agent', 0, 'operator', 'idle')");
+    db12.close();
+
+    const r = run(["init"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("migrated");
+
+    const after = openDb();
+    const cols = after.query("PRAGMA table_info(agents)").all() as any[];
+    expect(cols.map((c: any) => c.name)).toContain("sendback_nudged_at");
+    // Existing rows have NULL
+    const row = after.query("SELECT sendback_nudged_at FROM agents WHERE window_name='old-agent'").get() as any;
+    expect(row.sendback_nudged_at).toBeNull();
+  });
 });
 
 describe("register", () => {

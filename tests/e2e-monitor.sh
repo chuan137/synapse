@@ -24,7 +24,7 @@ setup() {
 
 teardown() { rm -rf "$DIR"; }
 
-run() { "$SYNAPSE" "$@" 2>&1 || true; }
+run() { env -u SYNAPSE_AGENT "$SYNAPSE" "$@" 2>&1 || true; }
 
 write_transcript() {
   local session=$1 stop_reason=$2 age_secs=${3:-0}
@@ -59,6 +59,7 @@ assert() {
 section1() {
   echo "[1] Init & Register"
   run init > /dev/null
+  sqlite3 "$SYNAPSE_DB" "INSERT INTO runs (id, session, goal, status) VALUES (1, 'team', 'e2e test', 'running')"
   run register manager manager sess-manager > /dev/null
   run register coder-1 coder   sess-coder  > /dev/null
   local out; out=$(run status)
@@ -93,7 +94,7 @@ section4() {
   assert "message still pending before agent pull" "$(run pending)" "implement feature X"
   assert "tmux pending nudge sent" "$(cat "$TMUX_LOG")" "send-keys -t team:coder-1 -l -- synapse pending coder-1"
   assert "tmux Enter sent"    "$(cat "$TMUX_LOG")" "send-keys -t team:coder-1 Enter"
-  SYNAPSE_AGENT=coder-1 run pending coder-1 > /dev/null
+  SYNAPSE_AGENT=coder-1 "$SYNAPSE" pending coder-1 > /dev/null
   assert "agent pull marks read" \
     "$(sqlite3 "$SYNAPSE_DB" "SELECT status FROM messages WHERE body='implement feature X'")" "read"
 }

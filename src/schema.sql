@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS agents (
   status      TEXT NOT NULL DEFAULT 'unknown',  -- idle | busy | stopped | unknown
   last_seen_at TEXT,
   context_tokens  INTEGER,  -- last known total input context tokens, null if unknown
+  sendback_nudged_at TEXT,  -- ISO timestamp of last send-back reminder; NULL = never nudged
   UNIQUE(window_name, run_id)
 );
 

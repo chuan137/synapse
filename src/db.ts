@@ -14,7 +14,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v9 added title column to messages (optional short title for QUESTION cards).
 // v11 added model column to agents.
 // v12 added context_tokens column to agents.
-export const SCHEMA_VERSION = 12;
+// v13 added sendback_nudged_at column to agents.
+export const SCHEMA_VERSION = 13;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -160,6 +161,15 @@ export function initDb() {
       db.close();
       currentVersion = 12;
       console.log(`synapse: migrated ${path} from schema v11 to v12`);
+    }
+    if (hasTables && currentVersion === 12) {
+      // Migrate v12 → v13: add sendback_nudged_at column to agents (non-destructive).
+      const db = connect(true);
+      db.exec(`ALTER TABLE agents ADD COLUMN sendback_nudged_at TEXT;`);
+      db.exec(`PRAGMA user_version=13;`);
+      db.close();
+      currentVersion = 13;
+      console.log(`synapse: migrated ${path} from schema v12 to v13`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that
