@@ -25,17 +25,21 @@ skill; for your standing responsibilities, see `templates/role-manager.md`.
 
 ## The three artifacts
 
-Write all three to the current run's directory before delegating:
+Write all three before delegating, with `synapse handoff` — it puts each file
+at its canonical path (you never spell out or guess the run folder) and prints
+where it landed:
 
-```
-.synapse/artifacts/<run-name>/<root-id>-spec.md        # what & why
-.synapse/artifacts/<run-name>/<root-id>-plan.md        # how, as tasks/subtasks
-.synapse/artifacts/<run-name>/<root-id>-testplan.md    # how we prove it
+```bash
+synapse handoff spec     <root-id> --body-file - < spec.md       # what & why
+synapse handoff plan     <root-id> --body-file - < plan.md       # how, as tasks/subtasks
+synapse handoff testplan <root-id> --body-file - < testplan.md   # how we prove it
+# each lands at .synapse/artifacts/run-<id>/<root-id>-<kind>.md
 ```
 
-`<root-id>` is the id of the root `TASK` from operator; `<run-name>` is the
-active run's directory (the one already holding its `task.yml`). Keep the
-three as separate files so each can be reviewed and revised on its own.
+`<root-id>` is the id of the root `TASK` from operator. Keep the three as
+separate files so each can be reviewed and revised on its own — re-running the
+same `handoff` overwrites in place. Reference the printed path from the
+`QUESTION`/`TASK`s that follow.
 
 ### 1. Spec — `<root-id>-spec.md`
 

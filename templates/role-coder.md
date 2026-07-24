@@ -71,7 +71,10 @@ merged). All of these share one `--ref-id <task_msg_id>` — the id of the
 
 - Don't break existing functionality outside the scope of your task.
 - If the project has a build/test command, run it before sending `REPLY`.
-- Never leave an unmerged worktree after reporting done.
+- Never leave an unmerged worktree after reporting done — ff-merge your
+  `task-<id>` branch into `main` and remove the worktree. This is enforced:
+  the manager's `synapse done` gate blocks on a leftover `task-<id>` worktree
+  or an unmerged `task-<id>` branch, so an un-merged subtask keeps the run open.
 - If your `TASK` body just points at a handoff file
-  (`.synapse/artifacts/<run-name>/<id>-*.md`), read it fully before starting, and write
+  (`.synapse/artifacts/run-<id>/<id>-*.md`), read it fully before starting, and write
   your own results to the sibling file the task names if one is expected.

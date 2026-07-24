@@ -782,8 +782,8 @@ describe("start: full agent launch against task.yml", () => {
     const managerMd = readFileSync(join(agentsRoot, "manager", "CLAUDE.md"), "utf8");
     expect(managerMd).toContain("Synapse Team — Shared Protocol");
     expect(managerMd).toContain("Your role: manager");
-    expect(managerMd).toContain("A coder subtask isn't complete until reviewed");
-    expect(managerMd).toContain("confirm the same `ref_id` chain has");
+    expect(managerMd).toContain("The run as a state machine");
+    expect(managerMd).toContain("refuses to close while one is");
 
     // Stop hook injected into manager's .claude/settings.json (V-7)
     const settingsPath = join(agentsRoot, "manager", ".claude", "settings.json");

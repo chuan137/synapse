@@ -30,7 +30,12 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   delivered_at TEXT,
   retry_count  INTEGER NOT NULL DEFAULT 0,
-  next_retry_at TEXT
+  next_retry_at TEXT,
+  -- Structured subtask flags on a manager -> coder TASK, read by the
+  -- `synapse done` completion gate (parsing intent from body text would be
+  -- unreliable). NULL on every non-subtask message.
+  review_waived INTEGER,   -- 1 = manager waived review for this subtask
+  test_required INTEGER    -- 1 = this subtask needs a tester pass before done
 );
 
 CREATE TABLE IF NOT EXISTS events (

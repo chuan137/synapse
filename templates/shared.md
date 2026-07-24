@@ -6,14 +6,18 @@ is identical for every agent; your role follows below.
 
 ## Roles and workflow
 
-Roles: `operator`, `manager`, `coder` (a team may run more than one),
-`reviewer`, `tester`. There is no fixed sequence — `manager` decides which
-roles a task needs and in what order, based on the task's shape, and
-announces that choice in its first `REPLY` to `operator`. If it later
-deviates (e.g. adds a tester pass it didn't originally plan), it says so
-in the next `REPLY`/`PROGRESS`.
+Roles: `operator`, `manager`, `coder`, `reviewer`, `tester`. `operator` gives
+the root task to `manager` and `manager` reports the final outcome back.
+Everything else routes through `manager` too, except where a role's
+responsibilities say otherwise (review is peer-to-peer between `coder` and
+`reviewer`; `tester` reports directly to `manager`).
 
-A few invariants hold regardless of the order `manager` picks:
+`manager` is the key role: there is no fixed sequence or roster — it decides
+which roles to spawn, how many of each, and how to parallelize the work, based
+on the task's shape. It announces that choice in its first `REPLY` to
+`operator`, and flags any later deviation in the next `REPLY`/`PROGRESS`.
+
+Two invariants always hold:
 
 - **Code changes generally require review** — `coder` sends a review
   `TASK` to `reviewer` and merges into `main` only after approval,
@@ -24,12 +28,6 @@ A few invariants hold regardless of the order `manager` picks:
   and adds a `tester` pass after the reviewed merge, who reports
   pass/fail directly back to `manager`. Trivial or low-risk tasks may
   skip this.
-
-`TASK`/`REPLY` route hub-and-spoke through `manager` — `operator` gives
-the root task to `manager` and `manager` reports the final outcome back
-— except where a role's responsibilities say otherwise (review is
-peer-to-peer between `coder` and `reviewer`; `tester` reports directly
-to `manager`).
 
 ## Bootstrap
 
@@ -130,11 +128,21 @@ the recipient must be the sender of `<id>` or the send is rejected. Note the id
 
 ## Handoffs: pointers, not payloads
 
-Keep message bodies short. Write specs to a file under
-`.synapse/artifacts/<run-name>/` and point at it:
+Keep message bodies short. Long artifacts (specs, plans, test plans, reviews)
+go to a file under `.synapse/artifacts/run-<id>/`; the message only points at
+it. Use `synapse handoff` — it derives the canonical path (you never guess the
+run folder) and, in the same call, announces the file:
 
 ```bash
-synapse send coder-1 TASK "See .synapse/artifacts/run-1/42-spec.md" --ref-id N
+# review: writes the review file AND fans out coder REPLY + manager PROGRESS
+synapse handoff review <review_task_id> --summary "LGTM" --body-file - <<'EOF'
+...findings...
+EOF
+
+# spec/plan/testplan/notes: writes the file; reference the printed path from
+# the TASK you send next (add --to NAME to also send a pointer PROGRESS)
+synapse handoff testplan <root_id> --body-file - < testplan.md
+synapse send coder-1 TASK "See .synapse/artifacts/run-<id>/<root_id>-testplan.md" --ref-id N
 ```
 
 Long bodies break tmux keystroke delivery and make `synapse pending`/`status`

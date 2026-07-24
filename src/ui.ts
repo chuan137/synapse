@@ -1,6 +1,8 @@
 import { readFileSync, watch } from "fs";
 import { dirname, resolve } from "path";
-import { connect, disbandTeam, MESSAGE_TYPES, nowIso } from "./commands";
+import { MESSAGE_TYPES, nowIso } from "./commands";
+import { connect } from "./db";
+import { disbandTeam } from "./monitor";
 import PUBLIC_INDEX_HTML from "./public/index.html" with { type: "text" };
 
 // ---------- ui ----------

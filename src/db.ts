@@ -15,7 +15,9 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v11 added model column to agents.
 // v12 added context_tokens column to agents.
 // v13 added sendback_nudged_at column to agents.
-export const SCHEMA_VERSION = 13;
+// v14 added review_waived and test_required columns to messages (structured
+//     subtask flags for the `synapse done` completion gate).
+export const SCHEMA_VERSION = 14;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -170,6 +172,17 @@ export function initDb() {
       db.close();
       currentVersion = 13;
       console.log(`synapse: migrated ${path} from schema v12 to v13`);
+    }
+    if (hasTables && currentVersion === 13) {
+      // Migrate v13 → v14: add review_waived and test_required columns to
+      // messages (non-destructive) for the done completion gate.
+      const db = connect(true);
+      db.exec(`ALTER TABLE messages ADD COLUMN review_waived INTEGER;`);
+      db.exec(`ALTER TABLE messages ADD COLUMN test_required INTEGER;`);
+      db.exec(`PRAGMA user_version=14;`);
+      db.close();
+      currentVersion = 14;
+      console.log(`synapse: migrated ${path} from schema v13 to v14`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

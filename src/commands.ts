@@ -157,6 +157,8 @@ export function cmdSend(
   runId?: number | null,
   options?: string[] | null,
   title?: string | null,
+  reviewWaived?: boolean,
+  testRequired?: boolean,
 ) {
   if (!MESSAGE_TYPES.has(type)) {
     fail(`type must be one of ${[...MESSAGE_TYPES].sort()}, got '${type}'`);
@@ -221,9 +223,13 @@ export function cmdSend(
   }
   const optionsJson = options && options.length > 0 ? JSON.stringify(options) : null;
   const result = db.run(
-    `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body, options, title)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [resolvedRunId, frm, to, type, refId, body, optionsJson, title ?? null],
+    `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body, options, title, review_waived, test_required)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      resolvedRunId, frm, to, type, refId, body, optionsJson, title ?? null,
+      reviewWaived ? 1 : null,
+      testRequired ? 1 : null,
+    ],
   );
   console.log(
     `synapse: message ${result.lastInsertRowid} queued (${frm} -> ${to}, ${type}${
@@ -255,6 +261,116 @@ export function cmdReply(
     );
   }
   cmdSend(ref!.from_agent, "REPLY", body, from, refId, resolvedRunId);
+}
+
+// Close out a review in one step. The reviewer used to send two messages with
+// two *different* ref_ids by hand — a REPLY to the requesting coder on the
+// review-TASK id, and a PROGRESS to manager on that review TASK's own ref_id
+// (the parent coder subtask). Both are derivable from the DB, so nothing is
+// typed here but the review-TASK id and the verdict body.
+export function cmdVerdict(
+  reviewTaskId: number,
+  body: string,
+  from: string | null,
+  runId?: number | null,
+) {
+  const db = connect();
+  const resolvedRunId = runId !== undefined && runId !== null
+    ? runId
+    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
+
+  const review = replyTargetFor(db, reviewTaskId, resolvedRunId) as
+    | { from_agent: string; type: string }
+    | null;
+  const full = review
+    ? (resolvedRunId !== null
+        ? db.query("SELECT ref_id FROM messages WHERE id=? AND run_id=?").get(reviewTaskId, resolvedRunId)
+        : db.query("SELECT ref_id FROM messages WHERE id=?").get(reviewTaskId)) as any
+    : null;
+
+  if (!review || !review.from_agent) {
+    fail(
+      `no message #${reviewTaskId}${resolvedRunId ? ` in run ${resolvedRunId}` : ""} to close. ` +
+        `Check the id — 'synapse pending' lists open review TASKs and their ids.`,
+    );
+  }
+  if (review!.type !== "TASK") {
+    fail(`#${reviewTaskId} is a ${review!.type}, not a review TASK — 'synapse verdict' closes a review request.`);
+  }
+  const me = resolveFrom(from);
+  const parentRefId = full?.ref_id ?? null;
+
+  // 1) REPLY to the requesting coder (recipient resolved to review's sender).
+  cmdReply(reviewTaskId, body, me, resolvedRunId);
+
+  // 2) One-line PROGRESS to manager on the PARENT ref_id (the coder subtask
+  // this review belongs to), so manager's chain tracking sees the verdict.
+  // If the review request carried no parent ref_id, skip the manager relay
+  // rather than sending it on a wrong/null chain.
+  if (parentRefId !== null) {
+    const oneLine = body.split("\n")[0]!.trim();
+    cmdSend("manager", "PROGRESS", oneLine, me, parentRefId, resolvedRunId);
+  } else {
+    console.error(
+      `synapse: note — #${reviewTaskId} had no parent ref_id; sent the coder REPLY but skipped the manager PROGRESS relay.`,
+    );
+  }
+}
+
+export const HANDOFF_KINDS = new Set(["spec", "plan", "testplan", "review", "notes"]);
+
+// Write a handoff artifact to its canonical path AND announce it in one call.
+// Agents used to hand-compute `.synapse/artifacts/<run-name>/<id>-<kind>.md`
+// (a guessed run-name) and then separately message a pointer at it — two
+// error-prone steps. `handoff` owns the path (derived from runId, never
+// guessed) and folds the pointer message in:
+//   - review → the full verdict fan-out (coder REPLY + manager PROGRESS).
+//   - other kinds → an optional PROGRESS to --to; otherwise just the file,
+//     which the agent then references from the TASK it sends anyway.
+// Content comes from stdin/file via the caller; `content` is that text.
+export function cmdHandoff(
+  kind: string,
+  refId: number,
+  content: string,
+  opts: {
+    summary?: string | null;
+    to?: string | null;
+    as?: string | null;
+    from?: string | null;
+    runId?: number | null;
+  },
+) {
+  if (!HANDOFF_KINDS.has(kind)) {
+    fail(`kind must be one of ${[...HANDOFF_KINDS].sort().join(", ")}, got '${kind}'`);
+  }
+  const runId = opts.runId !== undefined && opts.runId !== null
+    ? opts.runId
+    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
+  if (runId === null || Number.isNaN(runId)) {
+    fail("handoff needs a run id to place the file — set SYNAPSE_RUN_ID or pass --run-id N.");
+  }
+  if (!content || !content.trim()) {
+    fail("handoff needs file content — pass --body-file - (stdin) or --file PATH.");
+  }
+
+  const dataDir = dirname(dbPath());
+  const relPath = join(".synapse", "artifacts", `run-${runId}`, `${refId}-${kind}.md`);
+  const absPath = join(dataDir, "artifacts", `run-${runId}`, `${refId}-${kind}.md`);
+  mkdirSync(dirname(absPath), { recursive: true });
+  writeFileSync(absPath, content.endsWith("\n") ? content : content + "\n");
+  console.log(`synapse: wrote ${relPath}`);
+
+  // Notify.
+  if (kind === "review") {
+    const verdict = opts.summary?.trim() || "review complete";
+    cmdVerdict(refId, `${verdict} — ${relPath}`, opts.from ?? null, runId);
+    return;
+  }
+  if (opts.to) {
+    const type = (opts.as ?? "PROGRESS").toUpperCase();
+    const body = `${opts.summary?.trim() || kind} — ${relPath}`;
+    cmdSend(opts.to, type, body, opts.from ?? null, refId, runId);
+  }
 }
 
 export function cmdStatus() {
@@ -472,7 +588,14 @@ export function cmdPending(agent: string | null, all?: boolean) {
     // Print the exact command so the agent never has to name a recipient (and so
     // can't misroute it) — it only needs this id, shown here.
     if (targetAgent && r.to_agent === targetAgent && (r.type === "TASK" || r.type === "QUESTION")) {
-      console.log(`      ${c.dim}↳ reply with: synapse reply ${r.id} "<result>"${c.reset}`);
+      // A review TASK (to a reviewer, carrying the coder subtask as ref_id) is
+      // closed with `synapse verdict`, which fans out to both the coder and
+      // manager on the right ids — print that instead of the plain reply line.
+      if (r.type === "TASK" && targetAgent.startsWith("reviewer") && r.ref_id) {
+        console.log(`      ${c.dim}↳ close with: synapse verdict ${r.id} "LGTM|issues found — <review path>"${c.reset}`);
+      } else {
+        console.log(`      ${c.dim}↳ reply with: synapse reply ${r.id} "<result>"${c.reset}`);
+      }
     }
     console.log();
   }
@@ -795,7 +918,9 @@ export function cmdStart(flags: Record<string, string>) {
   console.log();
   console.log(`  Attach: tmux attach -t ${tmuxSession}`);
   console.log(`  Status: synapse status`);
-  console.log(`  Finish: SYNAPSE_RUN_ID=${runId} synapse done --status done "<summary>"`);
+  // The manager owns run closure (calls `synapse done` itself once every
+  // subtask chain is terminal). This is only an operator-side override.
+  console.log(`  Force-close (override): SYNAPSE_AGENT=operator SYNAPSE_RUN_ID=${runId} synapse done --status done --force --reason "<why>"`);
 }
 
 
@@ -844,12 +969,103 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
 // (bootstrap-spec.md #8/#13). Writes the run's terminal state and sends the
 // final REPLY back to operator. The monitor stays alive after terminal state
 // and keeps dispatching operator follow-ups until the tmux session is killed.
+// A subtask (manager -> coder TASK, keyed by its own id S once the coder
+// replies) is "open" until it is both reported done and — unless review was
+// waived — reviewed. This is the state machine `role-manager.md` used to ask
+// the manager to walk by hand; computing it here lets `synapse done` refuse to
+// close a run with unfinished work instead of trusting the manager to notice.
+// Test coverage isn't gated here yet: testers are currently dispatched on the
+// root task id, so there's no clean per-subtask link (see
+// docs/proposals/harness-enforcement-spec.md, "Not tested").
+export function openChains(
+  db: ReturnType<typeof connect>,
+  runId: number | null,
+): { subtaskId: number; reason: string }[] {
+  const subtasks = (runId !== null
+    ? db.query(
+        `SELECT id, review_waived FROM messages
+         WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%' AND run_id=?`,
+      ).all(runId)
+    : db.query(
+        `SELECT id, review_waived FROM messages
+         WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%'`,
+      ).all()) as any[];
+
+  const open: { subtaskId: number; reason: string }[] = [];
+  for (const s of subtasks) {
+    const reportedDone = !!db.query(
+      `SELECT 1 FROM messages WHERE ref_id=? AND type='REPLY' AND to_agent='manager' LIMIT 1`,
+    ).get(s.id);
+    if (!reportedDone) {
+      open.push({ subtaskId: s.id, reason: "coder has not reported done (no REPLY to manager)" });
+      continue;
+    }
+    if (s.review_waived) continue;
+    const reviewedByProgress = !!db.query(
+      `SELECT 1 FROM messages WHERE ref_id=? AND from_agent LIKE 'reviewer%' LIMIT 1`,
+    ).get(s.id);
+    const reviewedByReplyPair = !!db.query(
+      `SELECT 1 FROM messages rt JOIN messages rr ON rr.ref_id=rt.id
+       WHERE rt.ref_id=? AND rt.type='TASK' AND rt.to_agent LIKE 'reviewer%'
+         AND rr.type='REPLY' AND rr.from_agent LIKE 'reviewer%' LIMIT 1`,
+    ).get(s.id);
+    if (!reviewedByProgress && !reviewedByReplyPair) {
+      open.push({ subtaskId: s.id, reason: "not reviewed (no reviewer verdict; pass --no-review on the TASK to waive)" });
+    }
+  }
+  return open;
+}
+
+// Git-side evidence that each coder subtask was actually merged and cleaned
+// up. The coder names its worktree/branch `task-<S>` after the subtask id and,
+// after review, ff-merges into `main` and removes both. A leftover worktree or
+// an unmerged `task-<S>` branch means "done" was reported without the merge —
+// so the gate holds on it, same as an unreviewed chain (evidence, not trust).
+// Skips silently when the project isn't a git repo or has no `main` branch —
+// there's nothing to verify against.
+export function worktreeIssues(
+  db: ReturnType<typeof connect>,
+  runId: number | null,
+): { subtaskId: number; reason: string }[] {
+  const projectRoot = dirname(dirname(dbPath()));
+  const git = (args: string[]) => Bun.spawnSync({ cmd: ["git", "-C", projectRoot, ...args] });
+  if (git(["rev-parse", "--git-dir"]).exitCode !== 0) return [];
+  if (git(["rev-parse", "--verify", "--quiet", "refs/heads/main"]).exitCode !== 0) return [];
+
+  const subtasks = (runId !== null
+    ? db.query(`SELECT id FROM messages WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%' AND run_id=?`).all(runId)
+    : db.query(`SELECT id FROM messages WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%'`).all()) as any[];
+  if (subtasks.length === 0) return [];
+
+  const mergedOut = git(["branch", "--merged", "main"]);
+  const merged = new Set(
+    mergedOut.exitCode === 0
+      ? mergedOut.stdout.toString().split("\n").map((l) => l.replace(/^[*+ ]+/, "").trim()).filter(Boolean)
+      : [],
+  );
+
+  const issues: { subtaskId: number; reason: string }[] = [];
+  for (const s of subtasks) {
+    const branch = `task-${s.id}`;
+    if (existsSync(join(projectRoot, ".worktrees", branch))) {
+      issues.push({ subtaskId: s.id, reason: `worktree .worktrees/${branch} not removed (merge + cleanup incomplete)` });
+      continue;
+    }
+    const branchExists = git(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]).exitCode === 0;
+    if (branchExists && !merged.has(branch)) {
+      issues.push({ subtaskId: s.id, reason: `branch ${branch} exists but is not merged into main` });
+    }
+  }
+  return issues;
+}
+
 export function cmdDone(
   status: string,
   summary: string | null,
   from: string | null,
   refIdFlag: number | null,
   runIdFlag: number | null,
+  force?: boolean,
 ) {
   const agent = resolveFrom(from);
   const resolvedSummary = summary || "Run marked done.";
@@ -857,6 +1073,41 @@ export function cmdDone(
 
   const db = connect();
   const runId = runIdFlag ?? (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
+
+  // Completion gate: refuse to close a still-open run unless failing or forced.
+  // Only meaningful when we can scope to a run and are marking it done.
+  if (dbStatus === "completed" && runId !== null && !Number.isNaN(runId)) {
+    const chains = openChains(db, runId);
+    // Add git-side merge evidence, but don't double-report a subtask already
+    // flagged for an incomplete chain (fix the chain first, re-run, and the
+    // worktree issue surfaces then if still present).
+    const flagged = new Set(chains.map((c) => c.subtaskId));
+    const open = [...chains, ...worktreeIssues(db, runId).filter((w) => !flagged.has(w.subtaskId))];
+    if (open.length > 0) {
+      if (!force) {
+        fail(
+          `run ${runId} has ${open.length} open subtask chain(s) — not closing:\n` +
+            open.map((o) => `  #${o.subtaskId}: ${o.reason}`).join("\n") +
+            `\nRelay/close them, or re-run with --force --reason "<why>" to override.`,
+        );
+      }
+      // Forced past open chains — record it so the override is auditable.
+      db.run(
+        `INSERT INTO events (agent, type, summary, run_id) VALUES (?, 'decision', ?, ?)`,
+        [
+          agent,
+          `forced done past ${open.length} open chain(s): ` +
+            open.map((o) => `#${o.subtaskId} (${o.reason})`).join("; ") +
+            (summary ? ` — reason: ${summary}` : ""),
+          runId,
+        ],
+      );
+      console.error(
+        `synapse: warning — forcing done past ${open.length} open chain(s); logged to events.`,
+      );
+    }
+  }
+
   if (runId === null || Number.isNaN(runId)) {
     console.error(
       "synapse: warning — no run id (SYNAPSE_RUN_ID not set and --run-id not passed); runs table not updated",

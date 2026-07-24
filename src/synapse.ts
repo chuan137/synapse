@@ -33,7 +33,9 @@ import {
   cmdRegister,
   cmdReply,
   cmdRuns,
+  cmdHandoff,
   cmdSend,
+  cmdVerdict,
   cmdSetGoal,
   cmdSpawn,
   cmdStart,
@@ -43,7 +45,7 @@ import {
   fail,
 } from "./commands";
 import { cmdMonitor } from "./monitor";
-import { startUi } from "./ui";
+import { cmdUi } from "./ui";
 
 // Injected at compile time via `bun build --define SYNAPSE_VERSION=...`
 // (see Makefile). The identifier doesn't exist when running uncompiled
@@ -159,7 +161,7 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "send",
-    usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...] [--title \"Short title\"] [--body-file PATH]",
+    usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...] [--title \"Short title\"] [--body-file PATH] [--no-review] [--test-required]",
     summary: "Queue a message for an agent.",
     help: [
       {
@@ -179,6 +181,8 @@ const COMMANDS: CommandSpec[] = [
           "--options a,b,c       Choice labels for QUESTION messages.",
           "--title TEXT          Short title shown above the body in QUESTION cards.",
           "--body-file PATH      Read body from file (use - for stdin). Avoids shell interpolation of backticks.",
+          "--no-review           On a manager -> coder TASK: waive review for this subtask (the done gate won't require a reviewer verdict).",
+          "--test-required       On a manager -> coder TASK: mark this subtask as needing a tester pass.",
         ],
       },
     ],
@@ -202,7 +206,9 @@ const COMMANDS: CommandSpec[] = [
         ? flags["options"].split(",").map(s => s.trim()).filter(Boolean)
         : null;
       const title = flags["title"] ?? null;
-      return cmdSend(to, type, body, flags["from"] ?? null, refId, runId, options, title);
+      const reviewWaived = !!flags["no-review"];
+      const testRequired = !!flags["test-required"];
+      return cmdSend(to, type, body, flags["from"] ?? null, refId, runId, options, title, reviewWaived, testRequired);
     },
   },
   {
@@ -242,6 +248,89 @@ const COMMANDS: CommandSpec[] = [
       if (isNaN(refId)) fail(`synapse reply: invalid ref-id '${refIdStr}'`);
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
       return cmdReply(refId, body, flags["from"] ?? null, runId);
+    },
+  },
+  {
+    name: "verdict",
+    usage: "synapse verdict <review-task-id> <body> [--from NAME] [--run-id N] [--body-file PATH]",
+    summary: "Close a review in one step: REPLY to the requesting coder and PROGRESS to manager, on the right ids.",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "review-task-id  Id of the review TASK a coder sent you (shown by 'synapse pending').",
+          "body            One-line verdict + review-file path, e.g. \"LGTM — .synapse/artifacts/run-1/42-review.md\".",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
+          "--run-id N        Operate within a specific run.",
+          "--body-file PATH  Read body from file (use - for stdin).",
+        ],
+      },
+    ],
+    run: async (context) => {
+      const { positional, flags } = context;
+      const [refIdStr] = positional;
+      let body: string;
+      if (flags["body-file"]) {
+        const src = flags["body-file"];
+        body = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
+        body = body.trimEnd();
+      } else {
+        body = positional[1];
+      }
+      requireArgs(context, !!refIdStr && !!body);
+      const refId = parseInt(refIdStr, 10);
+      if (isNaN(refId)) fail(`synapse verdict: invalid review-task-id '${refIdStr}'`);
+      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
+      return cmdVerdict(refId, body, flags["from"] ?? null, runId);
+    },
+  },
+  {
+    name: "handoff",
+    usage: "synapse handoff <kind> <ref-id> --body-file - [--summary \"line\"] [--to NAME] [--as PROGRESS|REPLY] [--from NAME] [--run-id N]",
+    summary: "Write an artifact to its canonical path and announce it in one step (review = full verdict fan-out).",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "kind    One of: spec, plan, testplan, review, notes.",
+          "ref-id  Message id this artifact belongs to (for review: the review TASK id; for a plan: the root TASK id).",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--body-file PATH  File content, from a path or - for stdin (required).",
+          "--file PATH       Alias for --body-file.",
+          "--summary TEXT    One-line pointer/verdict (for review: LGTM or issues found).",
+          "--to NAME         Non-review kinds: also send a pointer message to this agent.",
+          "--as TYPE         Message type for --to (default PROGRESS).",
+          "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
+          "--run-id N        Run whose artifacts/run-N folder receives the file.",
+        ],
+      },
+    ],
+    run: async (context) => {
+      const { positional, flags } = context;
+      const [kind, refIdStr] = positional;
+      requireArgs(context, !!kind && !!refIdStr);
+      const refId = parseInt(refIdStr, 10);
+      if (isNaN(refId)) fail(`synapse handoff: invalid ref-id '${refIdStr}'`);
+      const src = flags["body-file"] ?? flags["file"];
+      if (!src) fail("synapse handoff: --body-file - (or --file PATH) is required for the artifact content.");
+      const content = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
+      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
+      return cmdHandoff(kind, refId, content, {
+        summary: flags["summary"] ?? null,
+        to: flags["to"] ?? null,
+        as: flags["as"] ?? null,
+        from: flags["from"] ?? null,
+        runId,
+      });
     },
   },
   {
@@ -392,22 +481,16 @@ const COMMANDS: CommandSpec[] = [
       },
     ],
     run: ({ flags }) => {
-      const port = flags["port"] !== undefined
-        ? parseInt(flags["port"], 10)
-        : DEFAULT_UI_PORT;
-      if (!Number.isInteger(port) || port < 0 || port > 65535) {
-        console.error("synapse: --port must be an integer from 0 to 65535");
-        process.exit(1);
-      }
-      const dev = "dev" in flags;
+      // cmdUi validates --port itself and reads --dev from SYNAPSE_DEV.
+      if ("dev" in flags) process.env.SYNAPSE_DEV = "1";
       cmdInit();
-      return startUi(port, dev);
+      return cmdUi(flags);
     },
   },
   {
     name: "done",
-    usage: 'synapse done [run-id] [--reason "<text>"] [--status done|failed] [--ref-id N]',
-    summary: "Mark the active run done or failed.",
+    usage: 'synapse done [run-id] [--reason "<text>"] [--status done|failed] [--ref-id N] [--force]',
+    summary: "Mark the active run done or failed (manager owns this; blocks on open subtask chains unless --force).",
     help: [
       {
         title: "Arguments",
@@ -421,6 +504,7 @@ const COMMANDS: CommandSpec[] = [
           "--reason TEXT         Summary text for the final reply. Defaults to \"Run marked done.\"",
           "--status done|failed  Terminal status to write. Defaults to done.",
           "--ref-id N            Root task message id this closes.",
+          "--force               Close even with open (unreported/unreviewed) subtask chains; requires --reason and is logged to events.",
         ],
       },
     ],
@@ -433,7 +517,9 @@ const COMMANDS: CommandSpec[] = [
       }
       const summary = flags["reason"] ?? null;
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
-      return cmdDone(flags["status"] ?? "done", summary, null, refId, runId);
+      const force = !!flags["force"];
+      if (force && !summary) fail("synapse done --force requires --reason \"<why>\" so the override is auditable.");
+      return cmdDone(flags["status"] ?? "done", summary, null, refId, runId, force);
     },
   },
   {
