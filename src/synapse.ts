@@ -162,13 +162,13 @@ const COMMANDS: CommandSpec[] = [
   {
     name: "send",
     usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...] [--title \"Short title\"] [--body-file PATH] [--no-review] [--test-required]",
-    summary: "Queue a message for an agent.",
+    summary: "Queue a message for an agent. (For REPLY, use 'synapse reply'.)",
     help: [
       {
         title: "Arguments",
         lines: [
           "to    Recipient agent name or operator.",
-          "type  Message type: TASK, QUESTION, PROGRESS, or REPLY.",
+          "type  Message type: TASK, QUESTION, or PROGRESS. (REPLY: use 'synapse reply'.)",
           "body  Message body (omit when --body-file is used).",
         ],
       },
@@ -176,7 +176,7 @@ const COMMANDS: CommandSpec[] = [
         title: "Options",
         lines: [
           "--from NAME           Sender name. Defaults to $SYNAPSE_AGENT.",
-          "--ref-id N            Message id this message replies to or closes.",
+          "--ref-id N            Message id this message references (e.g. a PROGRESS relay or review TASK).",
           "--run-id N            Store the message on a specific run.",
           "--options a,b,c       Choice labels for QUESTION messages.",
           "--title TEXT          Short title shown above the body in QUESTION cards.",
@@ -200,6 +200,12 @@ const COMMANDS: CommandSpec[] = [
         body = rawBody;
       }
       requireArgs(context, !!to && !!type && !!body);
+      if (type === "REPLY") {
+        fail(
+          "REPLY is not sent via 'synapse send'. Use 'synapse reply <id> \"<body>\"' — " +
+            "it resolves the recipient to the sender of message <id>, so a REPLY can't be misrouted.",
+        );
+      }
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
       const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
       const options = flags["options"]

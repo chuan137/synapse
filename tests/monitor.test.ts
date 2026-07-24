@@ -230,7 +230,7 @@ describe("monitor: pull nudges", () => {
 
     writeTranscript("sess-coder", "tool_use");
     run(["monitor", "--once", "--debounce", "0"]);
-    run(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", String(task.id)]);
+    run(["reply", String(task.id), "done", "--from", "coder-1"]);
     writeTranscript("sess-manager", "end_turn", 5000);
 
     r = run(["monitor", "--once", "--debounce", "100"]);
@@ -662,7 +662,7 @@ describe("monitor: terminal run handling", () => {
 
   test("--once leaves the team alive and still nudges messages once the run is terminal", () => {
     const runId = insertRun("completed");
-    run(["send", "manager", "REPLY", "follow up", "--from", "operator", "--run-id", String(runId)]);
+    run(["send", "manager", "TASK", "follow up", "--from", "operator", "--run-id", String(runId)]);
     writeTranscript("sess-manager", "end_turn", 5000);
 
     const r = run(["monitor", "--once", "--session", "team", "--run-id", String(runId)]);

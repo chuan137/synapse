@@ -206,21 +206,11 @@ export function cmdSend(
       `synapse: warning — '${to}' not in agents registry yet (sending anyway)`,
     );
   }
-  // Routing invariant: a REPLY closes the message named by --ref-id, so it must
-  // go back to that message's sender (protocol Rule 1). Enforced here, at the
-  // single point every send flows through, so it holds no matter how `send` is
-  // invoked. Fails open when the referenced message can't be found (unknown id,
-  // other run) — that's a wrong-ref-id problem, not a routing one.
-  if (type === "REPLY" && refId !== null) {
-    const ref = replyTargetFor(db, refId, resolvedRunId);
-    if (ref && ref.from_agent && ref.from_agent !== to) {
-      fail(
-        `REPLY misrouted: #${refId} (${ref.type}) was sent by ${ref.from_agent}, not ${to}. ` +
-          `A REPLY goes back to the sender of the message its --ref-id names. ` +
-          `Use 'synapse reply ${refId} "<result>"' — it fills in ${ref.from_agent} for you.`,
-      );
-    }
-  }
+  // Routing invariant: a REPLY closes the message named by ref-id and must go
+  // back to that message's sender (protocol Rule 1). REPLYs can no longer be
+  // sent via `synapse send` at all — the CLI rejects them — so every REPLY now
+  // originates from cmdReply/cmdVerdict/cmdHandoff, which resolve the recipient
+  // from the DB and cannot misroute. No routing guard is needed at this layer.
   const optionsJson = options && options.length > 0 ? JSON.stringify(options) : null;
   const result = db.run(
     `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body, options, title, review_waived, test_required)

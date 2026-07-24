@@ -230,15 +230,26 @@ describe("send", () => {
   // Regression test: MESSAGE_TYPES was referenced but never defined, so
   // every `synapse send` crashed with a ReferenceError before it could
   // validate or insert anything.
-  test("queues a message for each valid type without crashing", () => {
-    for (const type of ["TASK", "QUESTION", "PROGRESS", "REPLY"]) {
+  test("queues a message for each valid send type without crashing", () => {
+    // REPLY is intentionally excluded: it is not sent via `synapse send`
+    // (use `synapse reply`), and the send command rejects it.
+    for (const type of ["TASK", "QUESTION", "PROGRESS"]) {
       const r = run(["send", "coder-1", type, `a ${type} message`, "--from", "manager"]);
       expect(r.exitCode).toBe(0);
       expect(r.stderr).toBe("");
     }
     const db = openDb();
     const count = (db.query("SELECT COUNT(*) AS n FROM messages").get() as any).n;
-    expect(count).toBe(4);
+    expect(count).toBe(3);
+  });
+
+  test("rejects REPLY via `synapse send` and points to `synapse reply`", () => {
+    const r = run(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", "1"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("synapse reply");
+    const db = openDb();
+    const count = (db.query("SELECT COUNT(*) AS n FROM messages WHERE type='REPLY'").get() as any).n;
+    expect(count).toBe(0);
   });
 
   test("rejects an unrecognized type instead of crashing", () => {
@@ -255,7 +266,7 @@ describe("send", () => {
   });
 
   test("warns but still sends to an unregistered recipient", () => {
-    const r = run(["send", "nobody", "REPLY", "hi", "--from", "manager"]);
+    const r = run(["send", "nobody", "TASK", "hi", "--from", "manager"]);
     expect(r.exitCode).toBe(0);
     expect(r.stderr).toContain("not in agents registry");
     const db = openDb();
@@ -266,9 +277,9 @@ describe("send", () => {
   test("stores ref_id when --ref-id is passed", () => {
     run(["send", "coder-1", "TASK", "do the thing", "--from", "manager"]);
     const taskId = (openDb().query("SELECT id FROM messages ORDER BY id DESC LIMIT 1").get() as any).id;
-    run(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", String(taskId)]);
+    run(["send", "operator", "PROGRESS", "relaying", "--from", "manager", "--ref-id", String(taskId)]);
     const status = openDb()
-      .query("SELECT * FROM messages WHERE type='REPLY'")
+      .query("SELECT * FROM messages WHERE type='PROGRESS'")
       .get() as any;
     expect(status.ref_id).toBe(taskId);
   });
@@ -308,7 +319,7 @@ describe("send", () => {
 
   test("rejects a long body with an enumerated list crammed onto one line", () => {
     const r = run([
-      "send", "operator", "REPLY",
+      "send", "coder-1", "TASK",
       "完成。src/commands.ts 变更：(1) 新增 import TASK_EXAMPLE_YML from templates；" +
         "(2) cmdStart 在 configPath 等于默认路径且文件不存在时回退到打包内容，自定义路径不存在时仍明确报错。",
       "--from", "manager",
@@ -317,13 +328,13 @@ describe("send", () => {
     expect(r.stderr).toContain("(1)");
     expect(r.stderr).toContain("line breaks");
     const db = openDb();
-    const msg = db.query("SELECT * FROM messages WHERE type='REPLY'").get() as any;
+    const msg = db.query("SELECT * FROM messages WHERE type='TASK'").get() as any;
     expect(msg).toBeFalsy();
   });
 
   test("accepts the same content once split across real newlines", () => {
     const r = run([
-      "send", "operator", "REPLY",
+      "send", "coder-1", "TASK",
       "完成。src/commands.ts 变更：\n" +
         "(1) 新增 import TASK_EXAMPLE_YML from templates\n" +
         "(2) cmdStart 在 configPath 等于默认路径且文件不存在时回退到打包内容",
@@ -331,13 +342,13 @@ describe("send", () => {
     ]);
     expect(r.exitCode).toBe(0);
     const db = openDb();
-    const msg = db.query("SELECT * FROM messages WHERE type='REPLY'").get() as any;
+    const msg = db.query("SELECT * FROM messages WHERE type='TASK'").get() as any;
     expect(msg).toBeTruthy();
   });
 
   test("does not flag a short body with only one enumeration marker", () => {
     const r = run([
-      "send", "operator", "REPLY", "Approved (1) go ahead",
+      "send", "coder-1", "TASK", "Approved (1) go ahead",
       "--from", "manager",
     ]);
     expect(r.exitCode).toBe(0);
@@ -345,7 +356,7 @@ describe("send", () => {
 
   test("rejects a long body with circled-digit markers crammed onto one line", () => {
     const r = run([
-      "send", "operator", "REPLY",
+      "send", "coder-1", "TASK",
       "完成任务，包含以下改动：①修改了配置文件的默认路径读取逻辑；②新增了单元测试覆盖边界情况；③更新了相关文档说明。",
       "--from", "manager",
     ]);
@@ -354,7 +365,7 @@ describe("send", () => {
   });
 
   test("rejects broadcast recipients", () => {
-    const r = run(["send", "broadcast", "REPLY", "hi everyone", "--from", "manager"]);
+    const r = run(["send", "broadcast", "TASK", "hi everyone", "--from", "manager"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("broadcast messages are no longer supported");
     const db = openDb();
@@ -556,12 +567,12 @@ describe("ref_id chain", () => {
     expect(review.ref_id).toBe(subTask.id);
 
     // reviewer -> coder-1: REPLY on review
-    run(["send", "coder-1", "REPLY", "LGTM", "--from", "reviewer", "--ref-id", String(review.id)]);
+    run(["reply", String(review.id), "LGTM", "--from", "reviewer"]);
     const reviewReply = openDb().query("SELECT ref_id FROM messages WHERE type='REPLY' AND from_agent='reviewer'").get() as any;
     expect(reviewReply.ref_id).toBe(review.id);
 
     // coder-1 -> manager: final REPLY
-    run(["send", "manager", "REPLY", "Feature X done", "--from", "coder-1", "--ref-id", String(subTask.id)]);
+    run(["reply", String(subTask.id), "Feature X done", "--from", "coder-1"]);
     const finalReply = openDb().query("SELECT ref_id FROM messages WHERE type='REPLY' AND from_agent='coder-1'").get() as any;
     expect(finalReply.ref_id).toBe(subTask.id);
   });
@@ -648,7 +659,7 @@ describe("done", () => {
   });
 });
 
-describe("REPLY routing enforcement (cmdSend)", () => {
+describe("REPLY is not accepted by `synapse send`", () => {
   // Seeds a TASK from `fromAgent` to `toAgent` and returns its message id.
   function seedTask(fromAgent: string, toAgent: string): number {
     const db = openDbWritable();
@@ -663,44 +674,25 @@ describe("REPLY routing enforcement (cmdSend)", () => {
     run(["init"]);
   });
 
-  test("rejects a REPLY routed to someone other than the sender", () => {
+  // REPLY has one entry point — `synapse reply` — which resolves the recipient
+  // from the ref-id and cannot misroute. `synapse send` rejects REPLY outright,
+  // even when the recipient happens to be correct, so no misroute is possible.
+  test("rejects a REPLY sent via `synapse send`, even to the right recipient", () => {
     const id = seedTask("coder-1", "reviewer");
-    const r = run(["send", "coder-2", "REPLY", "issues found: x.md", "--ref-id", String(id)], {
+    const r = run(["send", "coder-1", "REPLY", "issues found: x.md", "--ref-id", String(id)], {
       SYNAPSE_AGENT: "reviewer",
     });
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr).toContain("misrouted");
-    expect(r.stderr).toContain("coder-1"); // names the correct recipient
-    // and no message was written
+    expect(r.stderr).toContain("synapse reply");
     const count = openDb()
       .query("SELECT COUNT(*) AS n FROM messages WHERE type='REPLY'")
       .get() as any;
     expect(count.n).toBe(0);
   });
 
-  test("allows a REPLY routed back to the sender", () => {
-    const id = seedTask("coder-1", "reviewer");
-    const r = run(["send", "coder-1", "REPLY", "issues found: x.md", "--ref-id", String(id)], {
-      SYNAPSE_AGENT: "reviewer",
-    });
-    expect(r.exitCode).toBe(0);
-    const msg = openDb()
-      .query("SELECT to_agent, ref_id FROM messages WHERE type='REPLY'")
-      .get() as any;
-    expect(msg.to_agent).toBe("coder-1");
-    expect(msg.ref_id).toBe(id);
-  });
-
   test("does not constrain PROGRESS carrying a ref-id", () => {
     const id = seedTask("coder-1", "reviewer");
     const r = run(["send", "manager", "PROGRESS", "LGTM: x.md", "--ref-id", String(id)], {
-      SYNAPSE_AGENT: "reviewer",
-    });
-    expect(r.exitCode).toBe(0);
-  });
-
-  test("fails open when the referenced message does not exist (wrong-id, not misroute)", () => {
-    const r = run(["send", "coder-2", "REPLY", "done", "--ref-id", "999"], {
       SYNAPSE_AGENT: "reviewer",
     });
     expect(r.exitCode).toBe(0);
@@ -827,7 +819,7 @@ describe("synapse verdict (review fan-out)", () => {
   test("rejects a ref-id that isn't a TASK", () => {
     run(["send", "coder-1", "TASK", "x", "--from", "manager"]);
     const S = subtaskId();
-    run(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", String(S)]);
+    run(["reply", String(S), "done", "--from", "coder-1"]);
     const replyId = (openDb().query("SELECT id FROM messages WHERE type='REPLY'").get() as any).id;
     const r = run(["verdict", String(replyId), "LGTM"], { SYNAPSE_AGENT: "reviewer" });
     expect(r.exitCode).not.toBe(0);
@@ -915,7 +907,7 @@ describe("done completion gate", () => {
   test("blocks closing while a reported subtask is unreviewed", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
     const S = subtaskId();
-    run(["send", "manager", "REPLY", "done, merged", "--from", "coder-1", "--ref-id", String(S)]);
+    run(["reply", String(S), "done, merged", "--from", "coder-1"]);
     const r = run(["done", "1", "--reason", "shipit", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("not reviewed");
@@ -924,7 +916,7 @@ describe("done completion gate", () => {
   test("--no-review lets a reported subtask close without a reviewer", () => {
     run(["send", "coder-1", "TASK", "trivial", "--from", "manager", "--no-review"]);
     const S = subtaskId();
-    run(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", String(S)]);
+    run(["reply", String(S), "done", "--from", "coder-1"]);
     const r = run(["done", "1", "--reason", "shipit", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
     expect((openDb().query("SELECT status FROM runs WHERE id=1").get() as any).status).toBe("completed");
@@ -933,7 +925,7 @@ describe("done completion gate", () => {
   test("closes once the chain is reported and reviewed via handoff", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
     const S = subtaskId();
-    run(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", String(S)]);
+    run(["reply", String(S), "done", "--from", "coder-1"]);
     run(["send", "reviewer", "TASK", "review", "--from", "coder-1", "--ref-id", String(S)]);
     const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
     const cf = join(dir, "rev.md");
@@ -992,7 +984,7 @@ describe("done gate: worktree merge evidence", () => {
     prun(["send", "coder-1", "TASK", "work", "--from", "manager"]);
     const S = (new Database(pdb, { readonly: true })
       .query("SELECT id FROM messages WHERE to_agent='coder-1' AND type='TASK'").get() as any).id;
-    prun(["send", "manager", "REPLY", "done", "--from", "coder-1", "--ref-id", String(S)]);
+    prun(["reply", String(S), "done", "--from", "coder-1"]);
     prun(["send", "reviewer", "TASK", "rev", "--from", "coder-1", "--ref-id", String(S)]);
     const R = (new Database(pdb, { readonly: true })
       .query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;

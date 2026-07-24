@@ -113,7 +113,7 @@ section5() {
 section6() {
   echo "[6] Full TASK -> REPLY round trip"
   local task_id; task_id=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE type='TASK' LIMIT 1")
-  run send manager REPLY "feature X done" --from coder-1 --ref-id "$task_id" > /dev/null
+  run reply "$task_id" "feature X done" --from coder-1 > /dev/null
   write_transcript sess-manager end_turn 5
   rm -f "$TMUX_LOG"
   # coder-1 must be idle to not block; backdate its transcript too

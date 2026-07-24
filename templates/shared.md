@@ -56,7 +56,7 @@ synapse pending $SYNAPSE_AGENT   # pull what's waiting; run once on launch, or w
 - **`TASK`** — work assignment; sender expects a `REPLY` when done.
 - **`QUESTION`** — blocking question from `manager` to `operator`; halts sender until answered. Always include `--title`.
 - **`PROGRESS`** — one-way UI signal; no reply expected. Covers short activity markers ("started") and relayed verdicts from a subordinate (reviewer/tester outcome, a workflow deviation).
-- **`REPLY`** — everything else: done reports, answers, verdicts. Closes a TASK or QUESTION. Send it with `synapse reply <id> "<body>"` — that resolves the recipient to the sender of message `<id>` for you, so it can't be misrouted. (A raw `send ... REPLY --ref-id <id>` still works but is rejected if its recipient isn't that sender.)
+- **`REPLY`** — everything else: done reports, answers, verdicts. Closes a TASK or QUESTION. Send it with `synapse reply <id> "<body>"` — the only way to send a REPLY. It resolves the recipient to the sender of message `<id>` for you, so it can't be misrouted. (`synapse send ... REPLY` is rejected; use `reply`.)
 
 > **`REPLY` vs `PROGRESS`:** if the recipient needs to read it to act, it is a `REPLY`. If it only signals activity, it is `PROGRESS`.
 
@@ -117,14 +117,14 @@ inspection; it is not a substitute for `synapse send`.
 
 ## ref_id
 
-Every reply closes exactly one message: the one whose id you pass. Prefer
+Every reply closes exactly one message: the one whose id you pass. Send it with
 `synapse reply <id> "<body>"` — it looks up message `<id>`, sends the `REPLY`
 back to that message's sender, and needs no recipient from you, so it cannot
 go to the wrong agent. (`synapse pending` prints the ready-to-run `reply` line
-for each open item.) If you use a raw `send ... REPLY --ref-id <id>` instead,
-the recipient must be the sender of `<id>` or the send is rejected. Note the id
-`synapse send` prints when you send a `TASK`. Track open work by querying
-`ref_id` chains in the DB, not by holding state in context.
+for each open item.) `synapse send ... REPLY` is rejected — `reply` is the only
+way to send a `REPLY`. Note the id `synapse send` prints when you send a `TASK`.
+Track open work by querying `ref_id` chains in the DB, not by holding state in
+context.
 
 ## Handoffs: pointers, not payloads
 

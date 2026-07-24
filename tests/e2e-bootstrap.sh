@@ -209,8 +209,8 @@ section6() {
   run send reviewer TASK   "Please review PR #42"  --from coder-1  --ref-id "$SUB_ID"  > /dev/null
   REV_ID=$(sqlite3 "$SYNAPSE_DB" "SELECT id FROM messages WHERE type='TASK' AND to_agent='reviewer' LIMIT 1")
 
-  run send coder-1  REPLY "LGTM"                  --from reviewer --ref-id "$REV_ID"  > /dev/null
-  run send manager  REPLY "Feature X done"         --from coder-1  --ref-id "$SUB_ID"  > /dev/null
+  run reply "$REV_ID" "LGTM"           --from reviewer > /dev/null
+  run reply "$SUB_ID" "Feature X done" --from coder-1  > /dev/null
 
   local rows; rows=$(sqlite3 "$SYNAPSE_DB" "SELECT id||'|'||from_agent||'|'||to_agent||'|'||type||'|'||coalesce(ref_id,'NULL') FROM messages ORDER BY id")
   assert "msg1 operator->manager TASK no ref"   "$rows" "1|operator|manager|TASK|NULL"
