@@ -339,12 +339,18 @@ export function newestOpenInboundWork(
 }
 
 export function sendBackReminderBody(agentName: string, msg: any): string {
-  return [
+  const lines = [
     `Harness enforcement: ${msg.type} #${msg.id} from ${msg.from_agent} is still awaiting your REPLY.`,
     `Reply to ${msg.from_agent} on msg #${msg.id} before doing anything else:`,
     `synapse reply ${msg.id} "<result: done, blocked, or issues found; include key files/tests>"`,
     `You are ${agentName}; do not start another task until this send-back is complete.`,
-  ].join(" ");
+  ];
+  if (msg.type === "TASK" && agentName.startsWith("coder")) {
+    lines.push(
+      `Before replying done: confirm you created a worktree (git worktree add .worktrees/task-${msg.id} -b task-${msg.id}), implemented inside it, and merged it into main (git merge --ff-only task-${msg.id} && git worktree remove .worktrees/task-${msg.id} && git branch -d task-${msg.id}).`,
+    );
+  }
+  return lines.join(" ");
 }
 
 function nudgeForMissingStatusBeforeMoreWork(
