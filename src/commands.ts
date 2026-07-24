@@ -759,7 +759,7 @@ function launchAgentWindow(
   const quotedArgs = claudeArgs.map((a) => `'${a}'`).join(" ");
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' ${quotedArgs}
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' SYNAPSE_PROJECT_ROOT='${projectRoot}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' ${quotedArgs}
   `;
 
   if (process.env.SYNAPSE_DEBUG) {

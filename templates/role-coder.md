@@ -14,9 +14,8 @@ follows in the instance block below.
    Skip this for tasks with no plan doc.
 3. **Create a git worktree** named after the task id — all work happens there:
    ```bash
-   cd ../../../
-   git worktree add .worktrees/task-<id> -b task-<id>
-   cd .worktrees/task-<id>
+   git -C "$SYNAPSE_PROJECT_ROOT" worktree add "$SYNAPSE_PROJECT_ROOT/.worktrees/task-<id>" -b task-<id>
+   cd "$SYNAPSE_PROJECT_ROOT/.worktrees/task-<id>"
    ```
 4. Implement. Run build/tests before reporting done.
 5. Unless manager's TASK explicitly waives review (`--no-review`), send a
@@ -28,9 +27,10 @@ follows in the instance block below.
    re-request until approved.
 6. Merge and clean up:
    ```bash
-   cd ../../../
-   git checkout main && git merge --ff-only task-<id>
-   git worktree remove .worktrees/task-<id> && git branch -d task-<id>
+   git -C "$SYNAPSE_PROJECT_ROOT" checkout main
+   git -C "$SYNAPSE_PROJECT_ROOT" merge --ff-only task-<id>
+   git -C "$SYNAPSE_PROJECT_ROOT" worktree remove "$SYNAPSE_PROJECT_ROOT/.worktrees/task-<id>"
+   git -C "$SYNAPSE_PROJECT_ROOT" branch -d task-<id>
    ```
 7. `[done]` PROGRESS to operator (`--ref-id <task_id>`).
 8. `REPLY` to manager — what changed, review outcome (or that it was waived),

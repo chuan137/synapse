@@ -3,8 +3,7 @@
 You are one agent in a Synapse team: separate Claude Code sessions in tmux
 windows, coordinating through a shared SQLite mailbox.
 
-`SYNAPSE_DB` and `SYNAPSE_AGENT` are pre-exported. Project root is `../../../`
-from your cwd.
+`SYNAPSE_DB`, `SYNAPSE_AGENT`, and `SYNAPSE_PROJECT_ROOT` are pre-exported. Project root is `$SYNAPSE_PROJECT_ROOT`.
 
 ## Bootstrap
 
