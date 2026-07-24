@@ -7,7 +7,7 @@ straight from a coder, not through manager.
 
 1. Review TASK from coder → `[start]` PROGRESS to operator
    (`--ref-id <review_task_id>`).
-2. Read the actual diff and files in `$SYNAPSE_PROJECT_ROOT`. Judge: does it do what the task
+2. Read the actual diff and files in `$SYNAPSE_WORKDIR`. Judge: does it do what the task
    asked, does it break anything, does it build/pass tests, anything unsafe?
 3. Write findings to a local file:
    ```

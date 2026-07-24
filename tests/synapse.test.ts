@@ -197,6 +197,73 @@ describe("init", () => {
     const row = after.query("SELECT sendback_nudged_at FROM agents WHERE window_name='old-agent'").get() as any;
     expect(row.sendback_nudged_at).toBeNull();
   });
+
+  test("fresh DB has workdir column in runs table", () => {
+    run(["init"]);
+    const cols = openDb().query("PRAGMA table_info(runs)").all() as any[];
+    expect(cols.map((c: any) => c.name)).toContain("workdir");
+  });
+
+  test("migrates v15 DB by adding workdir column to runs", () => {
+    const db15 = openDbWritable();
+    db15.exec(`
+      CREATE TABLE agents (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        window_name TEXT NOT NULL, run_id INTEGER NOT NULL, role TEXT NOT NULL,
+        model TEXT, session_id TEXT, status TEXT NOT NULL DEFAULT 'unknown',
+        last_seen_at TEXT, context_tokens INTEGER, sendback_nudged_at TEXT,
+        last_notified_at TEXT, UNIQUE(window_name, run_id));
+      CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER, from_agent TEXT NOT NULL, to_agent TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'REPLY', ref_id INTEGER, body TEXT NOT NULL,
+        title TEXT, options TEXT, status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), delivered_at TEXT,
+        retry_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT,
+        review_waived INTEGER, test_required INTEGER);
+      CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent TEXT NOT NULL, type TEXT NOT NULL, summary TEXT NOT NULL,
+        run_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session TEXT NOT NULL, goal TEXT, status TEXT NOT NULL DEFAULT 'running',
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ended_at TEXT, session_killed_at TEXT);
+      CREATE TABLE plan_steps (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL, root_msg_id INTEGER NOT NULL,
+        step_index INTEGER NOT NULL, label TEXT NOT NULL,
+        completed_at TEXT, update_text TEXT,
+        UNIQUE(run_id, root_msg_id, step_index));
+      INSERT INTO runs (session, goal, status) VALUES ('t', 'g', 'running');
+    `);
+    db15.exec(`PRAGMA user_version=15;`);
+    db15.close();
+
+    run(["init"]);
+    const after = openDb();
+    const cols = after.query("PRAGMA table_info(runs)").all() as any[];
+    expect(cols.map((c: any) => c.name)).toContain("workdir");
+    // Existing rows get NULL workdir
+    const row = after.query("SELECT workdir FROM runs WHERE id=1").get() as any;
+    expect(row.workdir).toBeNull();
+  });
+});
+
+describe("workdir stored in runs", () => {
+  beforeEach(() => run(["init"]));
+
+  test("runs.workdir is NULL when not set (defaults applied at agent launch, not stored)", () => {
+    // synapse start spawns tmux so we can't run it in tests; directly insert a run
+    // the way cmdStart does and verify the schema accepts workdir.
+    const db = openDbWritable();
+    db.run(`INSERT INTO runs (session, goal, workdir, status) VALUES ('t', 'goal', '/tmp/myrepo', 'running')`);
+    const row = db.query("SELECT workdir FROM runs WHERE session='t'").get() as any;
+    expect(row.workdir).toBe("/tmp/myrepo");
+  });
+
+  test("runs.workdir accepts NULL (no --workdir passed)", () => {
+    const db = openDbWritable();
+    db.run(`INSERT INTO runs (session, goal, workdir, status) VALUES ('t', 'goal', NULL, 'running')`);
+    const row = db.query("SELECT workdir FROM runs WHERE session='t'").get() as any;
+    expect(row.workdir).toBeNull();
+  });
 });
 
 describe("register", () => {

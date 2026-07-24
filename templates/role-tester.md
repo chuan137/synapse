@@ -9,7 +9,7 @@ the coder's reviewed merge.
    commit).
 2. `[start]` PROGRESS to operator (`--ref-id <task_id>`).
 3. Read the test plan in full before doing anything.
-4. Execute each test case against `$SYNAPSE_PROJECT_ROOT`. Run the
+4. Execute each test case against `$SYNAPSE_WORKDIR`. Run the
    project's build/test command if one exists.
 5. `[done]` PROGRESS to operator (`--ref-id <task_id>`).
 6. `REPLY` to manager:

@@ -744,6 +744,7 @@ function launchAgentWindow(
   sessionId: string,
   runId: number,
   projectRoot: string,
+  workdir: string,
 ): void {
   const absCwd = resolve(defaultAgentDir(taskName, agent.name));
   presetClaudeTrust(absCwd);
@@ -759,7 +760,7 @@ function launchAgentWindow(
   const quotedArgs = claudeArgs.map((a) => `'${a}'`).join(" ");
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' SYNAPSE_PROJECT_ROOT='${projectRoot}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' ${quotedArgs}
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' SYNAPSE_PROJECT_ROOT='${projectRoot}' SYNAPSE_WORKDIR='${workdir}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' ${quotedArgs}
   `;
 
   if (process.env.SYNAPSE_DEBUG) {
@@ -808,11 +809,15 @@ export function cmdStart(flags: Record<string, string>) {
   const db = connect();
 
   const projectRoot = dirname(dirname(dbFile));
+  const workdir = flags["workdir"] ? resolve(flags["workdir"]) : projectRoot;
+  if (flags["workdir"] && !existsSync(workdir)) {
+    fail(`--workdir '${workdir}' does not exist`);
+  }
   const projectSlug = basename(projectRoot).slice(0, 3).toLowerCase().replace(/[^a-z0-9]/g, "x");
 
   const runResult = db.run(
-    `INSERT INTO runs (session, goal, status) VALUES ('', ?, 'pending')`,
-    [goal],
+    `INSERT INTO runs (session, goal, workdir, status) VALUES ('', ?, ?, 'pending')`,
+    [goal, workdir],
   );
   const runId = Number(runResult.lastInsertRowid);
   const pathHash = Bun.hash(projectRoot).toString(16).slice(0, 4);
@@ -881,7 +886,7 @@ export function cmdStart(flags: Record<string, string>) {
   const absCwd = resolve(defaultAgentDir(runFolderName, "manager"));
   writeAgentClaudeMd(absCwd, manager);
   console.log(`synapse: launching window 'manager' in ${absCwd}`);
-  launchAgentWindow(tmuxSession, runFolderName, manager, dbFile, claudePath, sessionId, runId, projectRoot);
+  launchAgentWindow(tmuxSession, runFolderName, manager, dbFile, claudePath, sessionId, runId, projectRoot, workdir);
   cmdRegister("manager", "manager", sessionId, runId, managerModel);
 
   if (!noMonitor) {
@@ -934,6 +939,7 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
 
   const dbFile = dbPath();
   const projectRoot = dirname(dirname(dbFile));
+  const workdir = (run.workdir as string | null) ?? projectRoot;
 
   const claudeWhich = Bun.spawnSync(["which", "claude"]);
   const claudePath = claudeWhich.exitCode === 0 ? claudeWhich.stdout.toString().trim() : "claude";
@@ -946,7 +952,7 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
   const absCwd = resolve(defaultAgentDir(runFolderName, name));
   writeAgentClaudeMd(absCwd, agent);
 
-  launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, run.id, projectRoot);
+  launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, run.id, projectRoot, workdir);
   cmdRegister(name, role, sessionId, run.id, effectiveModel ?? null);
 
   console.log(`synapse: spawned '${name}' (${role}) in run #${run.id}, window '${tmuxSession}:${name}'`);

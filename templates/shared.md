@@ -3,7 +3,10 @@
 You are one agent in a Synapse team: separate Claude Code sessions in tmux
 windows, coordinating through a shared SQLite mailbox.
 
-`SYNAPSE_DB`, `SYNAPSE_AGENT`, and `SYNAPSE_PROJECT_ROOT` are pre-exported. Project root is `$SYNAPSE_PROJECT_ROOT`.
+`SYNAPSE_DB`, `SYNAPSE_AGENT`, `SYNAPSE_PROJECT_ROOT`, and `SYNAPSE_WORKDIR` are pre-exported.
+
+- `SYNAPSE_PROJECT_ROOT` — the directory containing `.synapse/` (synapse home).
+- `SYNAPSE_WORKDIR` — the code repo to work in. **Always use this for git operations, worktrees, builds, and tests.** It equals `SYNAPSE_PROJECT_ROOT` unless `--workdir` was passed to `synapse start`.
 
 ## Bootstrap
 

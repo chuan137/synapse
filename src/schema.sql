@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session    TEXT NOT NULL,
   goal       TEXT,
+  workdir    TEXT,              -- absolute path to the code repo being worked on; defaults to project root
   status     TEXT NOT NULL DEFAULT 'running', -- running|completed|failed|aborted
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
   ended_at   TEXT,

@@ -18,7 +18,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v14 added review_waived and test_required columns to messages (structured
 //     subtask flags for the `synapse done` completion gate).
 // v15 added plan_steps table and last_notified_at column to agents.
-export const SCHEMA_VERSION = 15;
+// v16 added workdir column to runs (absolute path to code repo, separate from synapse project root).
+export const SCHEMA_VERSION = 16;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -206,6 +207,15 @@ export function initDb() {
       db.close();
       currentVersion = 15;
       console.log(`synapse: migrated ${path} from schema v14 to v15`);
+    }
+    if (hasTables && currentVersion === 15) {
+      // Migrate v15 → v16: add workdir column to runs (non-destructive).
+      const db = connect(true);
+      db.exec(`ALTER TABLE runs ADD COLUMN workdir TEXT;`);
+      db.exec(`PRAGMA user_version=16;`);
+      db.close();
+      currentVersion = 16;
+      console.log(`synapse: migrated ${path} from schema v15 to v16`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

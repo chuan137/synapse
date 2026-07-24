@@ -587,13 +587,14 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "start",
-    usage: 'synapse start --goal "text" [--manager-model MODEL] [--no-monitor]',
+    usage: 'synapse start --goal "text" [--workdir PATH] [--manager-model MODEL] [--no-monitor]',
     summary: "Start a new run: launch manager with the given goal.",
     help: [
       {
         title: "Options",
         lines: [
           '--goal text             Goal to send to manager as the root TASK (required).',
+          '--workdir PATH          Absolute path to the code repo agents will work in. Defaults to the synapse project root. Use when the code lives somewhere other than the directory containing .synapse/ (e.g. synapse is in ~/tasks/ but the repo is in ~/repos/myproject).',
           `--manager-model MODEL   Model for the manager agent (default: "${DEFAULT_MANAGER_MODEL}").`,
           "--no-monitor            Create the team without starting the monitor.",
         ],
@@ -638,8 +639,7 @@ const COMMANDS: CommandSpec[] = [
         lines: [
           "--model MODEL   Model override for the new agent.",
           '--focus text    Focus text appended to the agent\'s CLAUDE.md instance block.',
-          "--run-id N      Target a specific run (default: most recent running run).",
-        ],
+          "--run-id N      Target a specific run (default: most recent running run).",        ],
       },
     ],
     run(context) {
