@@ -6,28 +6,34 @@ follows in the instance block below.
 ### Flow
 
 1. `[start]` PROGRESS to operator (`--ref-id <task_id>`), before touching anything.
-2. **Create a git worktree** named after the task id — all work happens there:
+2. If the TASK points at a plan doc, read it fully. As you complete each step:
+   ```bash
+   synapse step <root-id> <n> "What actually happened at this step"
+   ```
+   `root-id` is the ref-id in the plan file path; `n` is the 1-based step index.
+   Skip this for tasks with no plan doc.
+3. **Create a git worktree** named after the task id — all work happens there:
    ```bash
    cd ../../../
    git worktree add .worktrees/task-<id> -b task-<id>
    cd .worktrees/task-<id>
    ```
-3. Implement. Run build/tests before reporting done.
-4. Unless manager's TASK explicitly waives review (`--no-review`), send a
+4. Implement. Run build/tests before reporting done.
+5. Unless manager's TASK explicitly waives review (`--no-review`), send a
    review TASK to reviewer:
    ```bash
    synapse task reviewer "…" --ref-id <task_id>
    ```
    Wait for their REPLY, read the artifact it points at, address any issues,
    re-request until approved.
-5. Merge and clean up:
+6. Merge and clean up:
    ```bash
    cd ../../../
    git checkout main && git merge --ff-only task-<id>
    git worktree remove .worktrees/task-<id> && git branch -d task-<id>
    ```
-6. `[done]` PROGRESS to operator (`--ref-id <task_id>`).
-7. `REPLY` to manager — what changed, review outcome (or that it was waived),
+7. `[done]` PROGRESS to operator (`--ref-id <task_id>`).
+8. `REPLY` to manager — what changed, review outcome (or that it was waived),
    worktree merged and removed.
 
 ### Gotchas

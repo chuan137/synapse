@@ -17,7 +17,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v13 added sendback_nudged_at column to agents.
 // v14 added review_waived and test_required columns to messages (structured
 //     subtask flags for the `synapse done` completion gate).
-export const SCHEMA_VERSION = 14;
+// v15 added plan_steps table and last_notified_at column to agents.
+export const SCHEMA_VERSION = 15;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -183,6 +184,28 @@ export function initDb() {
       db.close();
       currentVersion = 14;
       console.log(`synapse: migrated ${path} from schema v13 to v14`);
+    }
+    if (hasTables && currentVersion === 14) {
+      // Migrate v14 → v15: add plan_steps table and last_notified_at to agents.
+      const db = connect(true);
+      db.exec(`ALTER TABLE agents ADD COLUMN last_notified_at TEXT;`);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS plan_steps (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_id      INTEGER NOT NULL,
+          root_msg_id INTEGER NOT NULL,
+          step_index  INTEGER NOT NULL,
+          label       TEXT NOT NULL,
+          completed_at TEXT,
+          update_text TEXT,
+          UNIQUE(run_id, root_msg_id, step_index)
+        );
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_plan_steps_root ON plan_steps(run_id, root_msg_id);`);
+      db.exec(`PRAGMA user_version=15;`);
+      db.close();
+      currentVersion = 15;
+      console.log(`synapse: migrated ${path} from schema v14 to v15`);
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

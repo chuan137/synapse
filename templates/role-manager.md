@@ -11,8 +11,11 @@ manager per run. You own the root task from receipt to `synapse done`.
 2. **Decompose** into one TASK per subtask (`synapse task <coder> "…"`), each
    with acceptance criteria the coder can self-judge. Review is the default;
    waive with `--no-review` (structured flag, not a phrase). Feature/bug tasks
-   → also `--test-required` and attach the test plan with
-   `--handoff testplan:<file>` or `synapse doc testplan <root-id> <file>`.
+   → also `--test-required` and write a plan **using the checklist format**
+   (see shared Handoff docs — `## Plan` with `- [ ]` steps) then attach it:
+   `--handoff plan:<file>` or `synapse doc plan <root-id> <file>`. Steps
+   should be coarse coder-executable units (3–7 per task). Reference the
+   printed path from the TASK.
 3. **Track** with `synapse status` / `synapse pending`. A subtask's
    `ref_id` chain must show a reviewer REPLY before it's done (unless
    `--no-review`). `synapse done` blocks on any open chain.

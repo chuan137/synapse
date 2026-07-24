@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { parsePlanSteps } from "../src/commands";
 import { buildClaudeArgs } from "../src/launch-args";
 import { basename, dirname, join } from "path";
 
@@ -1174,5 +1175,177 @@ describe("done gate: worktree merge evidence", () => {
     const r = prun(["done", "1", "--status", "done", "--force", "--reason", "override"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
     expect(pquery("SELECT status FROM runs WHERE id=1").status).toBe("completed");
+  });
+});
+
+describe("parsePlanSteps (unit)", () => {
+  test("extracts steps from ## Plan checklist", () => {
+    const md = `## Plan\n\n- [ ] Step one\n- [ ] Step two\n- [ ] Step three\n`;
+    const steps = parsePlanSteps(md);
+    expect(steps).toEqual([
+      { index: 1, label: "Step one" },
+      { index: 2, label: "Step two" },
+      { index: 3, label: "Step three" },
+    ]);
+  });
+
+  test("stops at the next ## heading", () => {
+    const md = `## Plan\n\n- [ ] Only step\n\n## Notes\n\n- [ ] Not a step\n`;
+    expect(parsePlanSteps(md)).toHaveLength(1);
+  });
+
+  test("returns empty array when ## Plan section is absent", () => {
+    expect(parsePlanSteps("## Notes\n\n- [ ] irrelevant\n")).toEqual([]);
+  });
+
+  test("accepts already-checked items (- [x]) and counts them", () => {
+    const md = `## Plan\n\n- [x] Done already\n- [ ] Not yet\n`;
+    const steps = parsePlanSteps(md);
+    expect(steps).toHaveLength(2);
+    expect(steps[0].label).toBe("Done already");
+  });
+
+  test("ignores plain list items without checkbox", () => {
+    const md = `## Plan\n\n- regular bullet\n- [ ] real step\n`;
+    const steps = parsePlanSteps(md);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].label).toBe("real step");
+  });
+});
+
+describe("synapse doc plan (step parsing + DB population)", () => {
+  beforeEach(() => {
+    run(["init"]);
+    seedRun();
+  });
+
+  test("populates plan_steps rows from ## Plan checklist", () => {
+    const planFile = join(dir, "plan.md");
+    writeFileSync(planFile, `## Plan\n\n- [ ] Implement feature\n- [ ] Write tests\n- [ ] Update docs\n`);
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskId();
+    const r = run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
+    expect(r.exitCode).toBe(0);
+    const rows = openDb().query("SELECT * FROM plan_steps WHERE root_msg_id=? ORDER BY step_index").all(S) as any[];
+    expect(rows).toHaveLength(3);
+    expect(rows[0].label).toBe("Implement feature");
+    expect(rows[1].label).toBe("Write tests");
+    expect(rows[2].label).toBe("Update docs");
+    expect(rows.every((r: any) => r.completed_at === null)).toBe(true);
+  });
+
+  test("emits a warning but still writes the file when ## Plan is absent", () => {
+    const planFile = join(dir, "plan.md");
+    writeFileSync(planFile, `## Notes\n\nJust some notes.\n`);
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskId();
+    const r = run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
+    expect(r.exitCode).toBe(0);
+    expect(existsSync(join(dir, "artifacts", "run-1", `${S}-plan.md`))).toBe(true);
+    const rows = openDb().query("SELECT COUNT(*) n FROM plan_steps WHERE root_msg_id=?").get(S) as any;
+    expect(rows.n).toBe(0);
+  });
+});
+
+describe("synapse step", () => {
+  beforeEach(() => {
+    run(["init"]);
+    seedRun();
+  });
+
+  function seedPlan(): number {
+    const planFile = join(dir, "plan.md");
+    writeFileSync(planFile, `## Plan\n\n- [ ] Step one\n- [ ] Step two\n`);
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskId();
+    run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
+    return S;
+  }
+
+  test("marks a step done and prints progress", () => {
+    const S = seedPlan();
+    const r = run(["step", String(S), "1", "Extracted the module"], { SYNAPSE_AGENT: "coder-1" });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("step 1/2");
+    const row = openDb().query(
+      "SELECT * FROM plan_steps WHERE root_msg_id=? AND step_index=1"
+    ).get(S) as any;
+    expect(row.completed_at).not.toBeNull();
+    expect(row.update_text).toBe("Extracted the module");
+  });
+
+  test("emits a notification JSON line to stdout", () => {
+    const S = seedPlan();
+    const r = run(["step", String(S), "2", "Tests passing"], { SYNAPSE_AGENT: "coder-1" });
+    expect(r.exitCode).toBe(0);
+    const jsonLine = r.stdout.split("\n").find((l: string) => l.startsWith("{"));
+    expect(jsonLine).toBeTruthy();
+    const n = JSON.parse(jsonLine!);
+    expect(n.type).toBe("notification");
+    expect(n.message).toContain("step");
+    expect(n.message).toContain("Tests passing");
+  });
+
+  test("fails when step index does not exist", () => {
+    const S = seedPlan();
+    const r = run(["step", String(S), "9", "nope"], { SYNAPSE_AGENT: "coder-1" });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("no step 9");
+  });
+
+  test("fails when plan has no steps (no plan doc written)", () => {
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskId();
+    const r = run(["step", String(S), "1", "update"], { SYNAPSE_AGENT: "coder-1" });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("no step 1");
+  });
+});
+
+describe("hook-stop notification emit", () => {
+  beforeEach(() => {
+    run(["init"]);
+    run(["register", "manager", "manager", "sess-m"]);
+    run(["register", "coder-1", "coder", "sess-c"]);
+    seedRun();
+  });
+
+  test("emits notification JSON when agent sent messages since last_notified_at", () => {
+    // Seed a message from coder-1 in the DB
+    run(["send", "manager", "PROGRESS", "[done] finished", "--from", "coder-1"]);
+    // hook-stop with no last_notified_at → should emit notification
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r.exitCode).toBe(0);
+    const jsonLine = r.stdout.split("\n").find((l: string) => l.startsWith("{"));
+    expect(jsonLine).toBeTruthy();
+    const n = JSON.parse(jsonLine!);
+    expect(n.type).toBe("notification");
+    expect(n.message).toContain("PROGRESS");
+    expect(n.message).toContain("manager");
+  });
+
+  test("does not emit notification when no messages sent since last_notified_at", () => {
+    // Set last_notified_at to future so nothing qualifies
+    openDbWritable().run(
+      "UPDATE agents SET last_notified_at=datetime('now', '+1 hour') WHERE window_name='coder-1'"
+    );
+    run(["send", "manager", "PROGRESS", "[done] finished", "--from", "coder-1"]);
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r.exitCode).toBe(0);
+    const jsonLine = r.stdout.split("\n").find((l: string) => l.startsWith("{"));
+    expect(jsonLine).toBeUndefined();
+  });
+
+  test("updates last_notified_at after emitting", () => {
+    run(["send", "manager", "PROGRESS", "[done] finished", "--from", "coder-1"]);
+    const before = (openDb().query(
+      "SELECT last_notified_at FROM agents WHERE window_name='coder-1'"
+    ).get() as any).last_notified_at;
+    expect(before).toBeNull();
+    run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    const after = (openDb().query(
+      "SELECT last_notified_at FROM agents WHERE window_name='coder-1'"
+    ).get() as any).last_notified_at;
+    expect(after).not.toBeNull();
   });
 });

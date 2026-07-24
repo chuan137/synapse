@@ -31,6 +31,13 @@ import { DEFAULT_TMUX_SESSION, fail, nowIso } from "./utils";
 
 export { DEFAULT_TMUX_SESSION, fail, nowIso };
 
+// Emit a Claude Code Stop-hook push notification by writing JSON to stdout.
+// The hook contract: exit 0, print {"type":"notification","title":"…","message":"…"}.
+// Only called from hook-stop context (the Stop hook reads stdout).
+export function emitNotification(message: string, title = "Synapse"): void {
+  process.stdout.write(JSON.stringify({ type: "notification", title, message }) + "\n");
+}
+
 const ROLE_TEMPLATES: Record<string, string> = {
   manager: ROLE_MANAGER_MD,
   coder: ROLE_CODER_MD,
@@ -272,7 +279,84 @@ export function writeArtifact(
   const absPath = join(dataDir, "artifacts", `run-${runId}`, `${refId}-${kind}.md`);
   mkdirSync(dirname(absPath), { recursive: true });
   writeFileSync(absPath, content.endsWith("\n") ? content : content + "\n");
+  if (kind === "plan") {
+    storePlanSteps(refId, content, runId);
+  }
   return relPath;
+}
+
+// Parse the ## Plan checklist from a plan doc and upsert rows into plan_steps.
+// Lines matching `- [ ] <text>` under the `## Plan` heading are steps; order
+// is their 1-based position in that section.
+export function storePlanSteps(rootMsgId: number, content: string, runId: number): void {
+  const db = connect();
+  const steps = parsePlanSteps(content);
+  if (steps.length === 0) {
+    process.stderr.write(`synapse: plan doc has no '- [ ]' steps under ## Plan — plan_steps not populated\n`);
+    return;
+  }
+  const insert = db.prepare(
+    `INSERT INTO plan_steps (run_id, root_msg_id, step_index, label)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(run_id, root_msg_id, step_index) DO UPDATE SET label=excluded.label`
+  );
+  for (const { index, label } of steps) {
+    insert.run(runId, rootMsgId, index, label);
+  }
+}
+
+export function parsePlanSteps(content: string): { index: number; label: string }[] {
+  const lines = content.split("\n");
+  let inPlanSection = false;
+  const steps: { index: number; label: string }[] = [];
+  for (const line of lines) {
+    if (/^##\s+Plan\s*$/.test(line.trim())) { inPlanSection = true; continue; }
+    if (inPlanSection && /^##\s/.test(line)) break;
+    if (inPlanSection) {
+      const m = line.match(/^[-*]\s+\[\s*[ x]?\s*\]\s+(.+)$/);
+      if (m) steps.push({ index: steps.length + 1, label: m[1].trim() });
+    }
+  }
+  return steps;
+}
+
+// Tick a plan step done and emit a progress notification.
+export function cmdStep(
+  rootMsgId: number,
+  stepIndex: number,
+  updateText: string,
+  from: string | null,
+  runId: number | null,
+): void {
+  const db = connect();
+  const resolvedRunId = runId ?? (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
+  if (resolvedRunId === null || Number.isNaN(resolvedRunId)) {
+    fail("step needs a run id — set SYNAPSE_RUN_ID or pass --run-id N.");
+  }
+  const step = db.query(
+    "SELECT * FROM plan_steps WHERE run_id=? AND root_msg_id=? AND step_index=?"
+  ).get(resolvedRunId, rootMsgId, stepIndex) as any;
+  if (!step) {
+    fail(
+      `no step ${stepIndex} for root-id ${rootMsgId} in run ${resolvedRunId}. ` +
+      `Check the index — steps are 1-based and only exist if the plan was written with 'synapse doc plan'.`
+    );
+  }
+  const now = nowIso();
+  db.run(
+    "UPDATE plan_steps SET completed_at=?, update_text=? WHERE run_id=? AND root_msg_id=? AND step_index=?",
+    [now, updateText, resolvedRunId, rootMsgId, stepIndex]
+  );
+  const total = (db.query(
+    "SELECT COUNT(*) AS n FROM plan_steps WHERE run_id=? AND root_msg_id=?"
+  ).get(resolvedRunId, rootMsgId) as any).n;
+  const done = (db.query(
+    "SELECT COUNT(*) AS n FROM plan_steps WHERE run_id=? AND root_msg_id=? AND completed_at IS NOT NULL"
+  ).get(resolvedRunId, rootMsgId) as any).n;
+  const agent = from ?? process.env.SYNAPSE_AGENT ?? "agent";
+  console.log(`synapse: step ${stepIndex}/${total} marked done`);
+  // Emit the Claude Code push-notification JSON that the Stop hook contract reads from stdout.
+  emitNotification(`[${agent} · step ${done}/${total}] ${updateText}`);
 }
 
 
@@ -1159,6 +1243,24 @@ export function cmdHookStop(agentName: string, runId: number): void {
       db.run("UPDATE agents SET sendback_nudged_at=? WHERE window_name=? AND run_id=?",
         [nowIso(), agentName, runId]);
       return;
+    }
+
+    // Notify operator about messages this agent sent since last notification.
+    // Only fires on end_turn turns (the hook only reaches here when the agent
+    // is idle), so tool-use mid-task turns are already excluded.
+    const since = agent.last_notified_at ?? "1970-01-01T00:00:00";
+    const newMsgs = db.query(
+      `SELECT type, to_agent, body FROM messages
+       WHERE from_agent=? AND run_id=? AND created_at > ? ORDER BY created_at`
+    ).all(agentName, runId, since) as { type: string; to_agent: string; body: string }[];
+    if (newMsgs.length > 0) {
+      const lines = newMsgs.map((m) => {
+        const preview = m.body.split("\n")[0].slice(0, 80);
+        return `${m.type} → ${m.to_agent}: ${preview}`;
+      });
+      emitNotification(lines.join("\n"), `[${agentName}]`);
+      db.run("UPDATE agents SET last_notified_at=? WHERE window_name=? AND run_id=?",
+        [nowIso(), agentName, runId]);
     }
 
     // Check for pending messages

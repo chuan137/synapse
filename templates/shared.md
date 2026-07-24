@@ -51,20 +51,49 @@ synapse task coder-1 "Build per the plan" --ref-id <root_id> --handoff plan:./pl
 synapse doc testplan <root_id> ./testplan.md
 ```
 
+### Plan doc format
+
+The plan doc **must** use this checklist format — `synapse doc plan` parses
+the `## Plan` section to populate step records, which `synapse step` ticks:
+
+```markdown
+## Plan
+
+- [ ] Step one description
+- [ ] Step two description
+- [ ] Step three description
+
+## Notes
+
+Optional free-text: constraints, risks, decisions worth recording.
+```
+
+Steps are coarse units a coder can tick off — aim for 3–7 per task, not one
+per file edit and not one for the whole task.
+
+### Reporting step progress
+
+```bash
+# Tick step N done and emit a notification to operator:
+synapse step <root-id> <n> "What actually happened at this step"
+```
+
+`root-id` is the same ref-id used when the plan was written. Steps only exist
+if the plan was written with `synapse doc plan` or `--handoff plan:<file>`.
+For unplanned tasks, `[start]`/`[done]` are the only notifications.
+
 ## Direct PROGRESS to operator (coder / reviewer / tester only)
 
 Send `PROGRESS` straight to `operator` — bypassing manager — only as lifecycle
 markers. Body must start with one of these tags:
 
 - `[start]` — once, right after accepting a TASK
-- `[step]` — at major phase boundaries (after reading spec, after writing core
-  change, after tests pass); one per phase, not per file or command
 - `[done]` — once, right before the REPLY that closes it out
 - `[blocked]` — if stalled on something not yet a QUESTION
 
 The harness rejects a direct-to-operator PROGRESS from a non-manager agent
-with any other tag. Everything else (judgment, verdicts, blockers) routes to
-your supervisor.
+with any other tag. Mid-task progress is reported via `synapse step` (see
+Handoff docs) when a plan exists — not as ad-hoc PROGRESS messages.
 
 ## QUESTION rules
 

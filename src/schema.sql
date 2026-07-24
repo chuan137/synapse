@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS agents (
   last_seen_at TEXT,
   context_tokens  INTEGER,  -- last known total input context tokens, null if unknown
   sendback_nudged_at TEXT,  -- ISO timestamp of last send-back reminder; NULL = never nudged
+  last_notified_at TEXT,    -- ISO timestamp of last hook-stop notification; NULL = never notified
   UNIQUE(window_name, run_id)
 );
 
@@ -66,3 +67,17 @@ CREATE INDEX IF NOT EXISTS idx_messages_ref ON messages(ref_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent);
 CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+
+-- Plan steps parsed from the ## Plan checklist of a plan artifact.
+-- Populated by `synapse doc plan` / `--handoff plan:…`; ticked by `synapse step`.
+CREATE TABLE IF NOT EXISTS plan_steps (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id      INTEGER NOT NULL,
+  root_msg_id INTEGER NOT NULL,   -- ref-id used when writing the plan artifact
+  step_index  INTEGER NOT NULL,   -- 1-based, positional order in the ## Plan checklist
+  label       TEXT NOT NULL,      -- text of the checklist item
+  completed_at TEXT,              -- ISO timestamp when ticked; NULL = not yet done
+  update_text TEXT,               -- free-text from `synapse step … "<update>"`
+  UNIQUE(run_id, root_msg_id, step_index)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_steps_root ON plan_steps(run_id, root_msg_id);

@@ -38,6 +38,7 @@ import {
   cmdSpawn,
   cmdStart,
   cmdStatus,
+  cmdStep,
   cmdStop,
   DEFAULT_MANAGER_MODEL,
   fail,
@@ -488,6 +489,47 @@ const COMMANDS: CommandSpec[] = [
       if (!content.trim()) fail(`synapse doc: file '${file}' is empty.`);
       const relPath = writeArtifact(kind, refId, content, runId!);
       console.log(`synapse: wrote ${relPath}`);
+    },
+  },
+  {
+    name: "step",
+    usage: "synapse step <root-id> <step-index> \"<update>\" [--from NAME] [--run-id N]",
+    summary: "Tick a plan step done and emit a progress notification.",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "root-id      The ref-id used when the plan doc was written (same id passed to 'synapse doc plan').",
+          "step-index   1-based position of the step in the ## Plan checklist.",
+          "update       One-line description of what actually happened at this step.",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--from NAME  Sender name for the notification label. Defaults to $SYNAPSE_AGENT.",
+          "--run-id N   Run to look up plan steps in. Defaults to $SYNAPSE_RUN_ID.",
+        ],
+      },
+      {
+        title: "Note",
+        lines: [
+          "Plan steps only exist if the plan was written with 'synapse doc plan' or",
+          "--handoff plan:<file>. Step index matches the order of '- [ ]' lines under",
+          "the '## Plan' heading in the plan doc.",
+        ],
+      },
+    ],
+    run: async (context) => {
+      const { positional, flags } = context;
+      const [rootIdStr, stepIdxStr, update] = positional;
+      requireArgs(context, !!rootIdStr && !!stepIdxStr && !!update);
+      const rootId = parseInt(rootIdStr, 10);
+      const stepIdx = parseInt(stepIdxStr, 10);
+      if (isNaN(rootId)) fail(`synapse step: invalid root-id '${rootIdStr}'`);
+      if (isNaN(stepIdx) || stepIdx < 1) fail(`synapse step: step-index must be a positive integer`);
+      const runId = resolveRunId(flags);
+      return cmdStep(rootId, stepIdx, update, flags["from"] ?? null, runId);
     },
   },
   {
