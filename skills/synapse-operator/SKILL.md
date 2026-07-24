@@ -31,7 +31,7 @@ Resolved in order: explicit flag → env var → default. Set once per shell.
 |---|---|---|
 | `SYNAPSE_DB` | which SQLite file to talk to | `./.synapse/synapse.db` from cwd — **run from the project root**, or you silently hit the wrong DB |
 | `SYNAPSE_RUN_ID` | which run `status`/`pending`/`spawn`/`stop`/`set-goal` act on | latest `running` run |
-| `SYNAPSE_AGENT` | sender identity for `send`/`reply`/`done` | none — from an ordinary shell, pass `--from operator` or `export SYNAPSE_AGENT=operator` |
+| `SYNAPSE_AGENT` | sender identity for `task`/`ask`/`progress`/`reply`/`send`/`done` | none — from an ordinary shell, pass `--from operator` or `export SYNAPSE_AGENT=operator` |
 
 ## Command reference (operator-facing)
 
@@ -42,7 +42,7 @@ Resolved in order: explicit flag → env var → default. Set once per shell.
 | `synapse status` | Roster for the active run: window, role, model, idle/busy, last-seen, pending count. Flags subtasks whose review chain is still open. |
 | `synapse pending [agent] [--all]` | Show pending messages (active run; `--all` = every run). Only marks read if `$SYNAPSE_AGENT` matches the queried agent — safe to inspect anyone read-only. |
 | `synapse reply <id> "<body>" [--from operator]` | Answer a message by id; recipient is resolved to its sender. This is how you answer a manager `QUESTION`. |
-| `synapse send manager TASK "<text>" --from operator` | Send a follow-up task into a running team. Always to `manager`, never straight to a coder — `manager` owns `ref_id` tracking. |
+| `synapse task manager "<text>" --from operator` | Send a follow-up task into a running team. Always to `manager`, never straight to a coder — `manager` owns `ref_id` tracking. (Low-level: `synapse send manager TASK "…"`.) |
 | `synapse spawn <role> [--model M] [--focus "text"] [--run-id N]` | Add an agent to a running team; auto-numbers (`coder-2`, …). |
 | `synapse stop <name> [--run-id N]` | Mark an agent stopped and close its tmux window. |
 | `synapse set-goal "<text>" [--run-id N]` | Update the running run's recorded goal. |
@@ -50,9 +50,13 @@ Resolved in order: explicit flag → env var → default. Set once per shell.
 | `synapse done --force --reason "<why>"` | **Override only** — see Gotchas; normally the manager closes the run itself. |
 | `synapse init` | Create/migrate the DB. Rarely needed by hand — `start`/`ui` call it. |
 
-`register`, `monitor`, and the agent-side commands (`send TASK`/`verdict`/
-`handoff`) are driven by `start`/`spawn` or by the agents themselves — you
-don't run them as operator; they're documented in the role templates.
+The everyday message verbs are `synapse task` / `ask` / `progress` / `reply`
+(each carries only that type's flags — including `--handoff <kind>:<file>` to
+attach an artifact; `synapse send <to> <type>` is the low-level escape hatch
+that still sends any of them). `register`, `monitor`, and the agent-side
+commands (`task`/`doc`/`--handoff`) are driven by `start`/`spawn`
+or by the agents themselves — you don't run them as operator; they're
+documented in the role templates.
 
 ## Gotchas
 
@@ -67,8 +71,8 @@ don't run them as operator; they're documented in the role templates.
 - **Answer a `QUESTION` with `reply`, not `send`** — `synapse reply
   <question_id> "<choice or free text>" --from operator` routes back to whoever
   asked. The UI's "Chat about this" free-text arrives as the reply body.
-- **No unbroken numbered-list bodies** — `send` rejects two-plus `(1)`/`(2)`
-  markers with no line breaks. Use `-` bullets, real newlines, or `--body-file`.
+- **No unbroken numbered-list bodies** — the message commands reject two-plus
+  `(1)`/`(2)` markers with no line breaks. Use `-` bullets, real newlines, or `--body-file`.
 - **`broadcast` isn't a recipient** — address a specific agent.
 - **Long or backtick-heavy bodies** — use `--body-file -` (stdin) to dodge
   shell interpolation.

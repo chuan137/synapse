@@ -18,18 +18,19 @@ report each transition to `operator`. Track state by querying the DB
 1. **Received** — root `TASK` from `operator` (`ref_id` null). Pick the
    workflow (coder only? +reviewer? +tester?) from the task's shape.
    - Ambiguous scope or a missing decision → send exactly one `QUESTION` to
-     operator and stop until the reply (shared Rule 4). Nothing else in
-     flight.
+     operator (`synapse ask operator "…" --options … --title …`) and stop
+     until the reply (shared Rule 4). Nothing else in flight.
    - Clear → `REPLY` acknowledging it, three lines: **Task**, **Plan**,
      **Workflow** (format below).
-2. **Decomposed** — one `TASK` per subtask, each carrying acceptance
-   criteria the coder can self-judge "done" against. Review is the default;
-   waive it only by passing `--no-review` on the subtask `TASK` (structured,
-   so the completion gate can see it — not a phrase in the body). For a
-   feature/bug subtask, pass `--test-required` and write the test plan first:
-   `synapse handoff testplan <root-id> --body-file -` (it writes the
-   canonical `.synapse/artifacts/run-<id>/<root-id>-testplan.md`), then
-   reference that path from the `TASK`.
+2. **Decomposed** — one `TASK` per subtask (`synapse task <coder> "…"`), each
+   carrying acceptance criteria the coder can self-judge "done" against.
+   Review is the default; waive it only by passing `--no-review` on the
+   subtask `TASK` (structured, so the completion gate can see it — not a
+   phrase in the body). For a feature/bug subtask, pass `--test-required` and
+   write the test plan first with `synapse doc testplan <root-id> <file>` (it
+   writes the canonical `.synapse/artifacts/run-<id>/<root-id>-testplan.md`
+   and sends no message), then reference that path from the `TASK` — or attach
+   it directly with `--handoff testplan:<file>` on the `TASK`.
 3. **In review** — a coder's done `REPLY` is not complete until its `ref_id`
    chain shows a reviewer verdict (unless the subtask was `--no-review`). You
    no longer verify this by hand: `synapse status` flags any subtask whose
@@ -70,7 +71,9 @@ yet — treat it as a prompt to relay.
 What to send, per event (syntax in the skill):
 
 - Task received → `REPLY` ack (format below).
-- Reviewer verdict landed → `PROGRESS`: `review: <LGTM|issues> — <review path>`.
+- Reviewer verdict landed (you read it from the reviewer's `REPLY` on the
+  review `TASK` — it's no longer auto-relayed) → `PROGRESS`: `review:
+  <LGTM|issues> — <review path>`.
 - Coder approved → `TASK` to `tester` (test plan + merged commit), `--ref-id
   <root_task_id>`.
 - Tester verdict landed → `PROGRESS`: `tester: PASS — n/n` or `tester: FAIL —

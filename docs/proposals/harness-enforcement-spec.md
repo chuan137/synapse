@@ -6,6 +6,15 @@ with code + verifiable evidence, keep prompts to gotchas). It's now implemented
 and unit-tested; this doc records what landed and the one known gap. References
 are to `src/commands.ts` unless noted.
 
+> **Superseded (later change):** `synapse verdict` and `synapse handoff` were
+> since folded into the message verbs. Artifact write + announce is now
+> `--handoff <kind>:<file>` on `task`/`ask`/`progress`/`reply`; write-only is
+> `synapse doc <kind> <ref-id> <file>`. The reviewer closes out with `synapse
+> reply <review_task_id> "<verdict>" --handoff review:<file>` — the automatic
+> manager `PROGRESS` fan-out was dropped (the completion gate still passes via
+> the reviewer's reply-pair on the review `TASK`). The sections below describe
+> the original `verdict`/`handoff` design for historical context.
+
 ## What shipped
 
 **`synapse verdict <review_task_id> "<body>"`** — closes a review in one call.

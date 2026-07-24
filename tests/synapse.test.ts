@@ -236,7 +236,9 @@ describe("send", () => {
     for (const type of ["TASK", "QUESTION", "PROGRESS"]) {
       const r = run(["send", "coder-1", type, `a ${type} message`, "--from", "manager"]);
       expect(r.exitCode).toBe(0);
-      expect(r.stderr).toBe("");
+      // `send` still works for every type, but now nudges toward the intent
+      // verb on stderr — so stderr is non-empty by design, not an error.
+      expect(r.stderr).not.toContain("ReferenceError");
     }
     const db = openDb();
     const count = (db.query("SELECT COUNT(*) AS n FROM messages").get() as any).n;
@@ -372,6 +374,115 @@ describe("send", () => {
     const count = (db.query("SELECT COUNT(*) AS n FROM messages WHERE to_agent='broadcast'").get() as any).n;
     expect(count).toBe(0);
   });
+
+  test("nudges toward the intent verb on stderr but still queues the message", () => {
+    const r = run(["send", "coder-1", "TASK", "do it", "--from", "manager"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toContain("synapse task");
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg).toBeTruthy();
+    expect(msg.body).toBe("do it");
+  });
+});
+
+// The intent verbs (task/ask/progress/reply) are thin wrappers over the same
+// cmdSend path `send` uses, so they inherit its validation. These tests pin the
+// per-verb ergonomics: correct type, verb-specific flags, and shared guards.
+describe("intent verbs", () => {
+  beforeEach(() => {
+    run(["init"]);
+    run(["register", "manager", "manager", "sess-p"]);
+    run(["register", "coder-1", "coder", "sess-c"]);
+  });
+
+  test("task queues a TASK with no stderr nudge", () => {
+    const r = run(["task", "coder-1", "implement X", "--from", "manager"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toBe("");
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg.body).toBe("implement X");
+    expect(msg.to_agent).toBe("coder-1");
+    expect(msg.from_agent).toBe("manager");
+  });
+
+  test("task carries --no-review and --test-required onto the row", () => {
+    const r = run([
+      "task", "coder-1", "implement Y", "--from", "manager",
+      "--no-review", "--test-required",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg.review_waived).toBe(1);
+    expect(msg.test_required).toBe(1);
+  });
+
+  test("ask queues a QUESTION and stores --options as JSON + --title", () => {
+    const r = run([
+      "ask", "operator", "Approve the plan?", "--from", "manager",
+      "--options", "yes,no,revise", "--title", "Plan approval",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='QUESTION'").get() as any;
+    expect(msg.body).toBe("Approve the plan?");
+    expect(msg.to_agent).toBe("operator");
+    expect(msg.title).toBe("Plan approval");
+    expect(JSON.parse(msg.options)).toEqual(["yes", "no", "revise"]);
+  });
+
+  test("ask to operator without --options is rejected", () => {
+    const r = run(["ask", "operator", "Any thoughts?", "--from", "manager"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("--options");
+    const msg = openDb().query("SELECT * FROM messages WHERE type='QUESTION'").get() as any;
+    expect(msg).toBeFalsy();
+  });
+
+  test("question is an alias for ask", () => {
+    const r = run([
+      "question", "operator", "Ship it?", "--from", "manager",
+      "--options", "ship,hold",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='QUESTION'").get() as any;
+    expect(msg.body).toBe("Ship it?");
+    expect(JSON.parse(msg.options)).toEqual(["ship", "hold"]);
+  });
+
+  test("progress queues a PROGRESS and enforces the direct-to-operator prefix", () => {
+    // A coder's direct-to-operator PROGRESS must lead with a lifecycle marker.
+    const ok = run(["progress", "operator", "[start] on it", "--from", "coder-1"]);
+    expect(ok.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='PROGRESS'").get() as any;
+    expect(msg.body).toBe("[start] on it");
+
+    const bad = run(["progress", "operator", "just chatting", "--from", "coder-1"]);
+    expect(bad.exitCode).toBe(1);
+    expect(bad.stderr).toContain("[start]");
+  });
+
+  test("verbs read the body from --body-file - (stdin)", () => {
+    const result = Bun.spawnSync(
+      [process.execPath, SYNAPSE_CLI, "task", "coder-1", "--from", "manager", "--body-file", "-"],
+      {
+        cwd: import.meta.dir,
+        env: { ...process.env, SYNAPSE_DB: dbFile, SYNAPSE_RUN_ID: "1", SYNAPSE_AGENT: undefined },
+        stdin: Buffer.from("body from stdin"),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg.body).toBe("body from stdin");
+  });
+
+  test("task inherits the crammed-numbered-list guard from cmdSend", () => {
+    const r = run([
+      "task", "coder-1",
+      "完成任务，包含以下改动：①修改了配置文件的默认路径读取逻辑；②新增了单元测试覆盖边界情况；③更新了相关文档说明。",
+      "--from", "manager",
+    ]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("line breaks");
+  });
 });
 
 describe("status", () => {
@@ -482,7 +593,7 @@ describe("help", () => {
     const r = run(["help", "send"]);
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain("Usage: synapse send <to> <type> <body>");
-    expect(r.stdout).toContain("Queue a message");
+    expect(r.stdout).toContain("escape hatch");
   });
 
   test("command --help prints command usage without touching the DB", () => {
@@ -790,100 +901,119 @@ function subtaskId(): number {
     .get() as any).id;
 }
 
-describe("synapse verdict (review fan-out)", () => {
+describe("reply --handoff review (reviewer close-out)", () => {
   beforeEach(() => {
     run(["init"]);
     seedRun();
   });
 
-  test("fans out a REPLY to the coder and a PROGRESS to manager on the parent ref_id", () => {
+  test("writes the canonical review file, replies to the coder with the path, sends NO manager PROGRESS", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
     const S = subtaskId();
     run(["send", "reviewer", "TASK", "please review", "--from", "coder-1", "--ref-id", String(S)]);
     const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
 
-    const r = run(["verdict", String(R), "LGTM — .synapse/artifacts/run-1/" + S + "-review.md"], {
+    const reviewFile = join(dir, "review.md");
+    writeFileSync(reviewFile, "## Review\nverdict: LGTM\nissues: none\n");
+    const r = run(["reply", String(R), "LGTM", "--handoff", `review:${reviewFile}`], {
       SYNAPSE_AGENT: "reviewer",
     });
     expect(r.exitCode).toBe(0);
 
-    const db = openDb();
-    const reply = db.query("SELECT to_agent, ref_id FROM messages WHERE type='REPLY' AND from_agent='reviewer'").get() as any;
-    expect(reply.to_agent).toBe("coder-1"); // never named on the command line
-    expect(reply.ref_id).toBe(R);
-    const prog = db.query("SELECT to_agent, ref_id FROM messages WHERE type='PROGRESS' AND from_agent='reviewer'").get() as any;
-    expect(prog.to_agent).toBe("manager");
-    expect(prog.ref_id).toBe(S); // parent subtask, NOT the review-TASK id
-  });
-
-  test("rejects a ref-id that isn't a TASK", () => {
-    run(["send", "coder-1", "TASK", "x", "--from", "manager"]);
-    const S = subtaskId();
-    run(["reply", String(S), "done", "--from", "coder-1"]);
-    const replyId = (openDb().query("SELECT id FROM messages WHERE type='REPLY'").get() as any).id;
-    const r = run(["verdict", String(replyId), "LGTM"], { SYNAPSE_AGENT: "reviewer" });
-    expect(r.exitCode).not.toBe(0);
-    expect(r.stderr).toContain("not a review TASK");
-  });
-});
-
-describe("synapse handoff (write + notify)", () => {
-  beforeEach(() => {
-    run(["init"]);
-    seedRun();
-  });
-
-  test("review: writes the canonical file and fans out coder REPLY + manager PROGRESS", () => {
-    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
-    const S = subtaskId();
-    run(["send", "reviewer", "TASK", "review", "--from", "coder-1", "--ref-id", String(S)]);
-    const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
-
-    const contentFile = join(dir, "review-body.md");
-    writeFileSync(contentFile, "## Review\nverdict: LGTM\nissues: none\n");
-    const r = run(["handoff", "review", String(R), "--summary", "LGTM", "--body-file", contentFile], {
-      SYNAPSE_AGENT: "reviewer",
-    });
-    expect(r.exitCode).toBe(0);
-
+    // The doc landed at the canonical, derived path.
     const artifact = join(dir, "artifacts", "run-1", `${R}-review.md`);
     expect(existsSync(artifact)).toBe(true);
     expect(readFileSync(artifact, "utf8")).toContain("verdict: LGTM");
 
     const db = openDb();
+    // Exactly one REPLY, to the coder (recipient resolved, never named), path in body.
     const reply = db.query("SELECT to_agent, ref_id, body FROM messages WHERE type='REPLY' AND from_agent='reviewer'").get() as any;
     expect(reply.to_agent).toBe("coder-1");
     expect(reply.ref_id).toBe(R);
     expect(reply.body).toContain(".synapse/artifacts/run-1/" + R + "-review.md");
-    const prog = db.query("SELECT to_agent, ref_id FROM messages WHERE type='PROGRESS' AND from_agent='reviewer'").get() as any;
-    expect(prog.ref_id).toBe(S);
+    // The manager fan-out was dropped: no reviewer PROGRESS.
+    const prog = db.query("SELECT COUNT(*) AS n FROM messages WHERE type='PROGRESS' AND from_agent='reviewer'").get() as any;
+    expect(prog.n).toBe(0);
   });
 
-  test("testplan: writes the file and sends no message by default", () => {
-    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+  test("rejects an unknown --handoff kind", () => {
+    run(["send", "coder-1", "TASK", "x", "--from", "manager"]);
     const S = subtaskId();
-    const before = (openDb().query("SELECT COUNT(*) n FROM messages").get() as any).n;
-    const contentFile = join(dir, "tp.md");
-    writeFileSync(contentFile, "case 1: happy path\n");
-    const r = run(["handoff", "testplan", String(S), "--body-file", contentFile], { SYNAPSE_AGENT: "manager" });
-    expect(r.exitCode).toBe(0);
-    expect(existsSync(join(dir, "artifacts", "run-1", `${S}-testplan.md`))).toBe(true);
-    const after = (openDb().query("SELECT COUNT(*) n FROM messages").get() as any).n;
-    expect(after).toBe(before); // no pointer message unless --to is given
-  });
-
-  test("rejects an unknown kind", () => {
-    const contentFile = join(dir, "x.md");
-    writeFileSync(contentFile, "x\n");
-    const r = run(["handoff", "bogus", "1", "--body-file", contentFile], { SYNAPSE_AGENT: "manager" });
+    run(["send", "reviewer", "TASK", "review", "--from", "coder-1", "--ref-id", String(S)]);
+    const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
+    const f = join(dir, "r.md");
+    writeFileSync(f, "x\n");
+    const r = run(["reply", String(R), "LGTM", "--handoff", `bogus:${f}`], { SYNAPSE_AGENT: "reviewer" });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("kind must be one of");
   });
 
-  test("requires content", () => {
-    const r = run(["handoff", "spec", "1"], { SYNAPSE_AGENT: "manager" });
+  test("rejects --handoff with a missing file", () => {
+    run(["send", "coder-1", "TASK", "x", "--from", "manager"]);
+    const S = subtaskId();
+    run(["send", "reviewer", "TASK", "review", "--from", "coder-1", "--ref-id", String(S)]);
+    const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
+    const r = run(["reply", String(R), "LGTM", "--handoff", `review:${join(dir, "nope.md")}`], { SYNAPSE_AGENT: "reviewer" });
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr).toContain("--body-file");
+    expect(r.stderr).toContain("cannot read file");
+  });
+
+  test("rejects a malformed --handoff (no kind:path)", () => {
+    run(["send", "coder-1", "TASK", "x", "--from", "manager"]);
+    const S = subtaskId();
+    const r = run(["reply", String(S), "hi", "--handoff", "reviewonly"], { SYNAPSE_AGENT: "coder-1" });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("<kind>:<path>");
+  });
+});
+
+describe("synapse doc (write-only artifact)", () => {
+  beforeEach(() => {
+    run(["init"]);
+    seedRun();
+  });
+
+  test("writes the canonical file and sends no message", () => {
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskId();
+    const before = (openDb().query("SELECT COUNT(*) n FROM messages").get() as any).n;
+    const tp = join(dir, "tp.md");
+    writeFileSync(tp, "case 1: happy path\n");
+    const r = run(["doc", "testplan", String(S), tp], { SYNAPSE_AGENT: "manager" });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain(".synapse/artifacts/run-1/" + S + "-testplan.md");
+    expect(existsSync(join(dir, "artifacts", "run-1", `${S}-testplan.md`))).toBe(true);
+    const after = (openDb().query("SELECT COUNT(*) n FROM messages").get() as any).n;
+    expect(after).toBe(before);
+  });
+
+  test("reads doc content from stdin with -", () => {
+    const result = Bun.spawnSync(
+      [process.execPath, SYNAPSE_CLI, "doc", "plan", "7", "-"],
+      {
+        cwd: import.meta.dir,
+        env: { ...process.env, SYNAPSE_DB: dbFile, SYNAPSE_RUN_ID: "1", SYNAPSE_AGENT: "manager" },
+        stdin: Buffer.from("the plan\n"),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(join(dir, "artifacts", "run-1", "7-plan.md"), "utf8")).toContain("the plan");
+  });
+
+  test("rejects an unknown kind", () => {
+    const f = join(dir, "x.md");
+    writeFileSync(f, "x\n");
+    const r = run(["doc", "bogus", "1", f], { SYNAPSE_AGENT: "manager" });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("kind must be one of");
+  });
+
+  test("rejects an empty file", () => {
+    const f = join(dir, "empty.md");
+    writeFileSync(f, "   \n");
+    const r = run(["doc", "spec", "1", f], { SYNAPSE_AGENT: "manager" });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("empty");
   });
 });
 
@@ -922,7 +1052,7 @@ describe("done completion gate", () => {
     expect((openDb().query("SELECT status FROM runs WHERE id=1").get() as any).status).toBe("completed");
   });
 
-  test("closes once the chain is reported and reviewed via handoff", () => {
+  test("closes once the chain is reported and reviewed via reply --handoff review:", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
     const S = subtaskId();
     run(["reply", String(S), "done", "--from", "coder-1"]);
@@ -930,7 +1060,9 @@ describe("done completion gate", () => {
     const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
     const cf = join(dir, "rev.md");
     writeFileSync(cf, "LGTM\n");
-    run(["handoff", "review", String(R), "--summary", "LGTM", "--body-file", cf], { SYNAPSE_AGENT: "reviewer" });
+    // No manager fan-out anymore; the reviewer's REPLY on the review TASK is the
+    // reply-pair the gate accepts (hasOpenChains: reviewedByReplyPair).
+    run(["reply", String(R), "LGTM", "--handoff", `review:${cf}`], { SYNAPSE_AGENT: "reviewer" });
     const r = run(["done", "1", "--reason", "shipit", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
     expect((openDb().query("SELECT status FROM runs WHERE id=1").get() as any).status).toBe("completed");
@@ -988,7 +1120,8 @@ describe("done gate: worktree merge evidence", () => {
     prun(["send", "reviewer", "TASK", "rev", "--from", "coder-1", "--ref-id", String(S)]);
     const R = (new Database(pdb, { readonly: true })
       .query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
-    prun(["verdict", String(R), "LGTM", "--from", "reviewer"]);
+    prun(["reply", String(R), "LGTM", "--from", "reviewer"], { SYNAPSE_RUN_ID: "1" });
+    prun(["send", "manager", "PROGRESS", "LGTM", "--from", "reviewer", "--ref-id", String(S)], { SYNAPSE_RUN_ID: "1" });
     return S;
   }
 

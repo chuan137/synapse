@@ -209,8 +209,8 @@ export function cmdSend(
   // Routing invariant: a REPLY closes the message named by ref-id and must go
   // back to that message's sender (protocol Rule 1). REPLYs can no longer be
   // sent via `synapse send` at all — the CLI rejects them — so every REPLY now
-  // originates from cmdReply/cmdVerdict/cmdHandoff, which resolve the recipient
-  // from the DB and cannot misroute. No routing guard is needed at this layer.
+  // originates from cmdReply, which resolves the recipient from the DB and
+  // cannot misroute. No routing guard is needed at this layer.
   const optionsJson = options && options.length > 0 ? JSON.stringify(options) : null;
   const result = db.run(
     `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body, options, title, review_waived, test_required)
@@ -253,115 +253,28 @@ export function cmdReply(
   cmdSend(ref!.from_agent, "REPLY", body, from, refId, resolvedRunId);
 }
 
-// Close out a review in one step. The reviewer used to send two messages with
-// two *different* ref_ids by hand — a REPLY to the requesting coder on the
-// review-TASK id, and a PROGRESS to manager on that review TASK's own ref_id
-// (the parent coder subtask). Both are derivable from the DB, so nothing is
-// typed here but the review-TASK id and the verdict body.
-export function cmdVerdict(
-  reviewTaskId: number,
-  body: string,
-  from: string | null,
-  runId?: number | null,
-) {
-  const db = connect();
-  const resolvedRunId = runId !== undefined && runId !== null
-    ? runId
-    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
-
-  const review = replyTargetFor(db, reviewTaskId, resolvedRunId) as
-    | { from_agent: string; type: string }
-    | null;
-  const full = review
-    ? (resolvedRunId !== null
-        ? db.query("SELECT ref_id FROM messages WHERE id=? AND run_id=?").get(reviewTaskId, resolvedRunId)
-        : db.query("SELECT ref_id FROM messages WHERE id=?").get(reviewTaskId)) as any
-    : null;
-
-  if (!review || !review.from_agent) {
-    fail(
-      `no message #${reviewTaskId}${resolvedRunId ? ` in run ${resolvedRunId}` : ""} to close. ` +
-        `Check the id — 'synapse pending' lists open review TASKs and their ids.`,
-    );
-  }
-  if (review!.type !== "TASK") {
-    fail(`#${reviewTaskId} is a ${review!.type}, not a review TASK — 'synapse verdict' closes a review request.`);
-  }
-  const me = resolveFrom(from);
-  const parentRefId = full?.ref_id ?? null;
-
-  // 1) REPLY to the requesting coder (recipient resolved to review's sender).
-  cmdReply(reviewTaskId, body, me, resolvedRunId);
-
-  // 2) One-line PROGRESS to manager on the PARENT ref_id (the coder subtask
-  // this review belongs to), so manager's chain tracking sees the verdict.
-  // If the review request carried no parent ref_id, skip the manager relay
-  // rather than sending it on a wrong/null chain.
-  if (parentRefId !== null) {
-    const oneLine = body.split("\n")[0]!.trim();
-    cmdSend("manager", "PROGRESS", oneLine, me, parentRefId, resolvedRunId);
-  } else {
-    console.error(
-      `synapse: note — #${reviewTaskId} had no parent ref_id; sent the coder REPLY but skipped the manager PROGRESS relay.`,
-    );
-  }
-}
-
 export const HANDOFF_KINDS = new Set(["spec", "plan", "testplan", "review", "notes"]);
 
-// Write a handoff artifact to its canonical path AND announce it in one call.
-// Agents used to hand-compute `.synapse/artifacts/<run-name>/<id>-<kind>.md`
-// (a guessed run-name) and then separately message a pointer at it — two
-// error-prone steps. `handoff` owns the path (derived from runId, never
-// guessed) and folds the pointer message in:
-//   - review → the full verdict fan-out (coder REPLY + manager PROGRESS).
-//   - other kinds → an optional PROGRESS to --to; otherwise just the file,
-//     which the agent then references from the TASK it sends anyway.
-// Content comes from stdin/file via the caller; `content` is that text.
-export function cmdHandoff(
+// Write handoff/doc content to its canonical artifact path and return the
+// repo-relative path (for folding into a message body). The run folder is
+// derived from runId, never guessed — this is the whole reason artifact
+// placement is owned here rather than hand-computed by agents. Shared by the
+// `--handoff <kind>:<file>` flag on the message verbs and the write-only
+// `synapse doc` command.
+export function writeArtifact(
   kind: string,
   refId: number,
   content: string,
-  opts: {
-    summary?: string | null;
-    to?: string | null;
-    as?: string | null;
-    from?: string | null;
-    runId?: number | null;
-  },
-) {
-  if (!HANDOFF_KINDS.has(kind)) {
-    fail(`kind must be one of ${[...HANDOFF_KINDS].sort().join(", ")}, got '${kind}'`);
-  }
-  const runId = opts.runId !== undefined && opts.runId !== null
-    ? opts.runId
-    : (process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null);
-  if (runId === null || Number.isNaN(runId)) {
-    fail("handoff needs a run id to place the file — set SYNAPSE_RUN_ID or pass --run-id N.");
-  }
-  if (!content || !content.trim()) {
-    fail("handoff needs file content — pass --body-file - (stdin) or --file PATH.");
-  }
-
+  runId: number,
+): string {
   const dataDir = dirname(dbPath());
   const relPath = join(".synapse", "artifacts", `run-${runId}`, `${refId}-${kind}.md`);
   const absPath = join(dataDir, "artifacts", `run-${runId}`, `${refId}-${kind}.md`);
   mkdirSync(dirname(absPath), { recursive: true });
   writeFileSync(absPath, content.endsWith("\n") ? content : content + "\n");
-  console.log(`synapse: wrote ${relPath}`);
-
-  // Notify.
-  if (kind === "review") {
-    const verdict = opts.summary?.trim() || "review complete";
-    cmdVerdict(refId, `${verdict} — ${relPath}`, opts.from ?? null, runId);
-    return;
-  }
-  if (opts.to) {
-    const type = (opts.as ?? "PROGRESS").toUpperCase();
-    const body = `${opts.summary?.trim() || kind} — ${relPath}`;
-    cmdSend(opts.to, type, body, opts.from ?? null, refId, runId);
-  }
+  return relPath;
 }
+
 
 export function cmdStatus() {
   const db = connect();
@@ -579,10 +492,10 @@ export function cmdPending(agent: string | null, all?: boolean) {
     // can't misroute it) — it only needs this id, shown here.
     if (targetAgent && r.to_agent === targetAgent && (r.type === "TASK" || r.type === "QUESTION")) {
       // A review TASK (to a reviewer, carrying the coder subtask as ref_id) is
-      // closed with `synapse verdict`, which fans out to both the coder and
-      // manager on the right ids — print that instead of the plain reply line.
+      // closed with a REPLY that attaches the review doc — the reply-pair on
+      // this id is what the completion gate looks for.
       if (r.type === "TASK" && targetAgent.startsWith("reviewer") && r.ref_id) {
-        console.log(`      ${c.dim}↳ close with: synapse verdict ${r.id} "LGTM|issues found — <review path>"${c.reset}`);
+        console.log(`      ${c.dim}↳ close with: synapse reply ${r.id} "LGTM|issues found" --handoff review:<file>${c.reset}`);
       } else {
         console.log(`      ${c.dim}↳ reply with: synapse reply ${r.id} "<result>"${c.reset}`);
       }

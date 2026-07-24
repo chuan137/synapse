@@ -11,7 +11,7 @@ and only then decompose into `TASK`s for coders. No implementation `TASK`
 goes out before the operator has approved the plan.
 
 This skill covers **what to write and the approval loop**. For the exact
-`synapse send` / `--options` / `--ref-id` syntax, see the `synapse-operator`
+`synapse ask` / `--options` / `--ref-id` syntax, see the `synapse-operator`
 skill; for your standing responsibilities, see `templates/role-manager.md`.
 
 ## When to plan vs. skip
@@ -25,14 +25,15 @@ skill; for your standing responsibilities, see `templates/role-manager.md`.
 
 ## The three artifacts
 
-Write all three before delegating, with `synapse handoff` — it puts each file
-at its canonical path (you never spell out or guess the run folder) and prints
-where it landed:
+Write all three before delegating, with `synapse doc` — it puts each file
+at its canonical path (you never spell out or guess the run folder), prints
+where it landed, and sends no message (you reference the paths from the
+approval `QUESTION` and the `TASK`s that follow):
 
 ```bash
-synapse handoff spec     <root-id> --body-file - < spec.md       # what & why
-synapse handoff plan     <root-id> --body-file - < plan.md       # how, as tasks/subtasks
-synapse handoff testplan <root-id> --body-file - < testplan.md   # how we prove it
+synapse doc spec     <root-id> spec.md       # what & why
+synapse doc plan     <root-id> plan.md       # how, as tasks/subtasks
+synapse doc testplan <root-id> testplan.md   # how we prove it
 # each lands at .synapse/artifacts/run-<id>/<root-id>-<kind>.md
 ```
 
@@ -111,8 +112,9 @@ picks them up.
 Planning is not done until the operator approves. Iterate:
 
 1. **Write** the three artifacts to the run directory.
-2. **Present** — send the operator a `QUESTION` (blocking; `--options`
-   required) that points to the three files and asks for a decision.
+2. **Present** — send the operator a `QUESTION` (`synapse ask operator "…"
+   --options … --title …`; blocking; `--options` required) that points to the
+   three files and asks for a decision.
    Summarize each artifact in a line or two in the body; don't make the
    operator open files to grasp the gist. Options should be real choices,
    e.g. `Approve as-is, Approve with changes, Revise scope`. Then **stop** —
@@ -140,7 +142,7 @@ pass on the affected artifacts — re-approve before new code goes out.
 
 ## See also
 
-- `synapse-operator` — the CLI reference for `send`/`pending`/`QUESTION`
+- `synapse-operator` — the CLI reference for `ask`/`pending`/`QUESTION`
   syntax used throughout the approval loop.
 - `templates/role-manager.md` — the manager's full standing role, including
   the test-plan and reporting obligations this skill's planning phase feeds.

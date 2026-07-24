@@ -33,9 +33,7 @@ import {
   cmdRegister,
   cmdReply,
   cmdRuns,
-  cmdHandoff,
   cmdSend,
-  cmdVerdict,
   cmdSetGoal,
   cmdSpawn,
   cmdStart,
@@ -43,6 +41,8 @@ import {
   cmdStop,
   DEFAULT_MANAGER_MODEL,
   fail,
+  HANDOFF_KINDS,
+  writeArtifact,
 } from "./commands";
 import { cmdMonitor } from "./monitor";
 import { cmdUi } from "./ui";
@@ -99,6 +99,67 @@ interface CommandSpec {
 
 function requireArgs(context: CommandContext, ok: boolean): void {
   if (!ok) fail(`usage: ${context.command.usage}`);
+}
+
+// Resolve a message body from --body-file (path or - for stdin) if present,
+// else from the positional at `rawIndex`. Shared by every message verb
+// (send/task/ask/progress/reply) so the stdin/file handling lives in one place.
+async function resolveBody(
+  context: CommandContext,
+  rawIndex: number,
+): Promise<string> {
+  const src = context.flags["body-file"];
+  if (!src) return context.positional[rawIndex];
+  const text = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
+  return text.trimEnd();
+}
+
+// Resolve which run a command acts on: explicit --run-id → SYNAPSE_RUN_ID → null.
+function resolveRunId(flags: Record<string, string>): number | null {
+  if (flags["run-id"]) return parseInt(flags["run-id"], 10);
+  return process.env.SYNAPSE_RUN_ID ? parseInt(process.env.SYNAPSE_RUN_ID, 10) : null;
+}
+
+// Handle the --handoff <kind>:<path> flag shared by the message verbs. Reads
+// the file at <path>, writes it to its canonical artifact path (keyed on refId
+// + kind), and returns the repo-relative path to fold into the message body.
+// Returns null when the flag is absent. Fails on a bad kind, an unresolvable
+// run, or a missing/empty file.
+async function resolveHandoff(
+  context: CommandContext,
+  refId: number | null,
+  runId: number | null,
+): Promise<string | null> {
+  const raw = context.flags["handoff"];
+  if (!raw) return null;
+  const idx = raw.indexOf(":");
+  if (idx <= 0 || idx === raw.length - 1) {
+    fail(`--handoff must be <kind>:<path>, e.g. --handoff review:./review.md (got '${raw}')`);
+  }
+  const kind = raw.slice(0, idx);
+  const path = raw.slice(idx + 1);
+  if (!HANDOFF_KINDS.has(kind)) {
+    fail(`--handoff kind must be one of ${[...HANDOFF_KINDS].sort().join(", ")}, got '${kind}'`);
+  }
+  if (refId === null || Number.isNaN(refId)) {
+    fail("--handoff needs a ref-id to name the artifact — pass --ref-id N (or, for reply, the ref-id positional).");
+  }
+  if (runId === null || Number.isNaN(runId)) {
+    fail("--handoff needs a run id to place the file — set SYNAPSE_RUN_ID or pass --run-id N.");
+  }
+  const content = await Bun.file(path).text().catch(() => {
+    fail(`--handoff: cannot read file '${path}'.`);
+    return "";
+  });
+  if (!content.trim()) fail(`--handoff: file '${path}' is empty.`);
+  return writeArtifact(kind, refId, content, runId);
+}
+
+// Fold a handoff artifact path into a message body: "<body> — <path>", or just
+// the path when the body is empty.
+function withHandoffPath(body: string, relPath: string | null): string {
+  if (!relPath) return body;
+  return body ? `${body} — ${relPath}` : relPath;
 }
 
 const COMMANDS: CommandSpec[] = [
@@ -162,7 +223,7 @@ const COMMANDS: CommandSpec[] = [
   {
     name: "send",
     usage: "synapse send <to> <type> <body> [--from NAME] [--ref-id N] [--run-id N] [--options opt1,opt2,...] [--title \"Short title\"] [--body-file PATH] [--no-review] [--test-required]",
-    summary: "Queue a message for an agent. (For REPLY, use 'synapse reply'.)",
+    summary: "Low-level escape hatch: queue any message type. Prefer the intent verbs — 'task', 'ask', 'progress', 'reply'.",
     help: [
       {
         title: "Arguments",
@@ -185,25 +246,37 @@ const COMMANDS: CommandSpec[] = [
           "--test-required       On a manager -> coder TASK: mark this subtask as needing a tester pass.",
         ],
       },
+      {
+        title: "Note",
+        lines: [
+          "This is the general form. For everyday use prefer the intent verbs, which",
+          "carry only each type's relevant flags: 'synapse task', 'synapse ask',",
+          "'synapse progress', 'synapse reply'. 'send' still works for all of them.",
+        ],
+      },
     ],
     run: async (context) => {
       const { positional, flags } = context;
-      const [to, type, rawBody] = positional;
-      let body: string;
-      if (flags["body-file"]) {
-        const src = flags["body-file"];
-        body = src === "-"
-          ? await Bun.stdin.text()
-          : await Bun.file(src).text();
-        body = body.trimEnd();
-      } else {
-        body = rawBody;
-      }
+      const [to, type] = positional;
+      const body = await resolveBody(context, 2);
       requireArgs(context, !!to && !!type && !!body);
       if (type === "REPLY") {
         fail(
           "REPLY is not sent via 'synapse send'. Use 'synapse reply <id> \"<body>\"' — " +
             "it resolves the recipient to the sender of message <id>, so a REPLY can't be misrouted.",
+        );
+      }
+      // Steer toward the intent verb without breaking the send (in-flight
+      // agents may still emit `send`). The verb carries only that type's flags.
+      const PREFERRED_VERB: Record<string, string> = {
+        TASK: "task",
+        QUESTION: "ask",
+        PROGRESS: "progress",
+      };
+      const verb = PREFERRED_VERB[type];
+      if (verb) {
+        console.error(
+          `synapse: note — 'synapse ${verb} <to> "…"' is the preferred spelling for ${type}; 'send' still works.`,
         );
       }
       const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
@@ -218,8 +291,124 @@ const COMMANDS: CommandSpec[] = [
     },
   },
   {
+    name: "task",
+    usage: "synapse task <to> <body> [--from NAME] [--ref-id N] [--run-id N] [--body-file PATH] [--handoff kind:path] [--no-review] [--test-required]",
+    summary: "Assign a TASK to an agent. The recipient replies when done.",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "to    Recipient agent name (e.g. coder-1).",
+          "body  Task description (omit when --body-file is used).",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--from NAME        Sender name. Defaults to $SYNAPSE_AGENT.",
+          "--ref-id N         Parent message id this task belongs under (e.g. a review TASK on a coder subtask).",
+          "--run-id N         Store the message on a specific run.",
+          "--body-file PATH   Read body from file (use - for stdin). Avoids shell interpolation of backticks.",
+          "--handoff kind:path  Attach an artifact: write <path> to its canonical .synapse/artifacts path (kind: spec/plan/testplan/review/notes) and append that path to the body.",
+          "--no-review        Manager -> coder: waive review for this subtask (the done gate won't require a reviewer verdict).",
+          "--test-required    Manager -> coder: mark this subtask as needing a tester pass.",
+        ],
+      },
+    ],
+    run: async (context) => {
+      const { positional, flags } = context;
+      const [to] = positional;
+      let body = await resolveBody(context, 1);
+      const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
+      const runId = resolveRunId(flags);
+      const handoffPath = await resolveHandoff(context, refId, runId);
+      body = withHandoffPath(body, handoffPath);
+      requireArgs(context, !!to && !!body);
+      return cmdSend(
+        to, "TASK", body, flags["from"] ?? null, refId, runId, null, null,
+        !!flags["no-review"], !!flags["test-required"],
+      );
+    },
+  },
+  {
+    name: "ask",
+    aliases: ["question"],
+    usage: "synapse ask <to> <body> --options a,b,c [--title \"Short title\"] [--from NAME] [--ref-id N] [--run-id N] [--body-file PATH] [--handoff kind:path]",
+    summary: "Ask a blocking QUESTION (to operator, --options required — they become the clickable choices).",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "to    Recipient (usually operator).",
+          "body  The question (omit when --body-file is used).",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--options a,b,c   Choice labels shown as buttons. Required for a QUESTION to operator — pass 2-4 short, specific labels.",
+          "--title TEXT      Short header shown above the body in the QUESTION card.",
+          "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
+          "--ref-id N        Message id this question references.",
+          "--run-id N        Store the message on a specific run.",
+          "--body-file PATH  Read body from file (use - for stdin).",
+          "--handoff kind:path  Attach an artifact (see 'synapse task') and append its path to the body — e.g. point the operator at the plan you're asking them to approve.",
+        ],
+      },
+    ],
+    run: async (context) => {
+      const { positional, flags } = context;
+      const [to] = positional;
+      let body = await resolveBody(context, 1);
+      const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
+      const runId = resolveRunId(flags);
+      const handoffPath = await resolveHandoff(context, refId, runId);
+      body = withHandoffPath(body, handoffPath);
+      requireArgs(context, !!to && !!body);
+      const options = flags["options"]
+        ? flags["options"].split(",").map(s => s.trim()).filter(Boolean)
+        : null;
+      return cmdSend(to, "QUESTION", body, flags["from"] ?? null, refId, runId, options, flags["title"] ?? null);
+    },
+  },
+  {
+    name: "progress",
+    usage: "synapse progress <to> <body> [--from NAME] [--ref-id N] [--run-id N] [--body-file PATH] [--handoff kind:path]",
+    summary: "Send a one-way PROGRESS signal (no reply expected). Direct-to-operator bodies must lead with [start]/[done]/[blocked]/[step].",
+    help: [
+      {
+        title: "Arguments",
+        lines: [
+          "to    Recipient (manager, or operator for a lifecycle marker).",
+          "body  One-line signal (omit when --body-file is used).",
+        ],
+      },
+      {
+        title: "Options",
+        lines: [
+          "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
+          "--ref-id N        Message id this signal relates to (e.g. the TASK it marks progress on).",
+          "--run-id N        Store the message on a specific run.",
+          "--body-file PATH  Read body from file (use - for stdin).",
+          "--handoff kind:path  Attach an artifact (see 'synapse task') and append its path to the body.",
+        ],
+      },
+    ],
+    run: async (context) => {
+      const { positional, flags } = context;
+      const [to] = positional;
+      let body = await resolveBody(context, 1);
+      const refId = flags["ref-id"] ? parseInt(flags["ref-id"], 10) : null;
+      const runId = resolveRunId(flags);
+      const handoffPath = await resolveHandoff(context, refId, runId);
+      body = withHandoffPath(body, handoffPath);
+      requireArgs(context, !!to && !!body);
+      return cmdSend(to, "PROGRESS", body, flags["from"] ?? null, refId, runId);
+    },
+  },
+  {
     name: "reply",
-    usage: "synapse reply <ref-id> <body> [--from NAME] [--run-id N] [--body-file PATH]",
+    usage: "synapse reply <ref-id> <body> [--from NAME] [--run-id N] [--body-file PATH] [--handoff kind:path]",
     summary: "Reply to a message by id; recipient is resolved to its sender, so it can't be misrouted.",
     help: [
       {
@@ -235,108 +424,70 @@ const COMMANDS: CommandSpec[] = [
           "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
           "--run-id N        Reply within a specific run.",
           "--body-file PATH  Read body from file (use - for stdin).",
+          "--handoff kind:path  Attach an artifact keyed on <ref-id>: write <path> to its canonical .synapse/artifacts path and append that path to the body. A reviewer closes out with --handoff review:<file>.",
         ],
       },
     ],
     run: async (context) => {
       const { positional, flags } = context;
       const [refIdStr] = positional;
-      let body: string;
-      if (flags["body-file"]) {
-        const src = flags["body-file"];
-        body = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
-        body = body.trimEnd();
-      } else {
-        body = positional[1];
-      }
-      requireArgs(context, !!refIdStr && !!body);
-      const refId = parseInt(refIdStr, 10);
-      if (isNaN(refId)) fail(`synapse reply: invalid ref-id '${refIdStr}'`);
-      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
+      let body = await resolveBody(context, 1);
+      const refId = parseInt(refIdStr ?? "", 10);
+      if (refIdStr && isNaN(refId)) fail(`synapse reply: invalid ref-id '${refIdStr}'`);
+      const runId = resolveRunId(flags);
+      const handoffPath = await resolveHandoff(context, isNaN(refId) ? null : refId, runId);
+      body = withHandoffPath(body, handoffPath);
+      requireArgs(context, !!refIdStr && !!body && !isNaN(refId));
       return cmdReply(refId, body, flags["from"] ?? null, runId);
     },
   },
   {
-    name: "verdict",
-    usage: "synapse verdict <review-task-id> <body> [--from NAME] [--run-id N] [--body-file PATH]",
-    summary: "Close a review in one step: REPLY to the requesting coder and PROGRESS to manager, on the right ids.",
-    help: [
-      {
-        title: "Arguments",
-        lines: [
-          "review-task-id  Id of the review TASK a coder sent you (shown by 'synapse pending').",
-          "body            One-line verdict + review-file path, e.g. \"LGTM — .synapse/artifacts/run-1/42-review.md\".",
-        ],
-      },
-      {
-        title: "Options",
-        lines: [
-          "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
-          "--run-id N        Operate within a specific run.",
-          "--body-file PATH  Read body from file (use - for stdin).",
-        ],
-      },
-    ],
-    run: async (context) => {
-      const { positional, flags } = context;
-      const [refIdStr] = positional;
-      let body: string;
-      if (flags["body-file"]) {
-        const src = flags["body-file"];
-        body = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
-        body = body.trimEnd();
-      } else {
-        body = positional[1];
-      }
-      requireArgs(context, !!refIdStr && !!body);
-      const refId = parseInt(refIdStr, 10);
-      if (isNaN(refId)) fail(`synapse verdict: invalid review-task-id '${refIdStr}'`);
-      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
-      return cmdVerdict(refId, body, flags["from"] ?? null, runId);
-    },
-  },
-  {
-    name: "handoff",
-    usage: "synapse handoff <kind> <ref-id> --body-file - [--summary \"line\"] [--to NAME] [--as PROGRESS|REPLY] [--from NAME] [--run-id N]",
-    summary: "Write an artifact to its canonical path and announce it in one step (review = full verdict fan-out).",
+    name: "doc",
+    usage: "synapse doc <kind> <ref-id> <file> [--run-id N]",
+    summary: "Write an artifact to its canonical path with no message (e.g. a manager's planning docs, referenced later).",
     help: [
       {
         title: "Arguments",
         lines: [
           "kind    One of: spec, plan, testplan, review, notes.",
-          "ref-id  Message id this artifact belongs to (for review: the review TASK id; for a plan: the root TASK id).",
+          "ref-id  Message id this artifact belongs to (e.g. the root TASK id for a plan).",
+          "file    Path to the doc content (use - for stdin).",
         ],
       },
       {
         title: "Options",
         lines: [
-          "--body-file PATH  File content, from a path or - for stdin (required).",
-          "--file PATH       Alias for --body-file.",
-          "--summary TEXT    One-line pointer/verdict (for review: LGTM or issues found).",
-          "--to NAME         Non-review kinds: also send a pointer message to this agent.",
-          "--as TYPE         Message type for --to (default PROGRESS).",
-          "--from NAME       Sender name. Defaults to $SYNAPSE_AGENT.",
-          "--run-id N        Run whose artifacts/run-N folder receives the file.",
+          "--run-id N  Run whose artifacts/run-N folder receives the file. Defaults to $SYNAPSE_RUN_ID.",
+        ],
+      },
+      {
+        title: "Note",
+        lines: [
+          "Writes the file only — sends no message. To announce an artifact as part",
+          "of a message, use --handoff kind:path on task/ask/progress/reply instead.",
         ],
       },
     ],
     run: async (context) => {
       const { positional, flags } = context;
-      const [kind, refIdStr] = positional;
-      requireArgs(context, !!kind && !!refIdStr);
+      const [kind, refIdStr, file] = positional;
+      requireArgs(context, !!kind && !!refIdStr && !!file);
+      if (!HANDOFF_KINDS.has(kind)) {
+        fail(`kind must be one of ${[...HANDOFF_KINDS].sort().join(", ")}, got '${kind}'`);
+      }
       const refId = parseInt(refIdStr, 10);
-      if (isNaN(refId)) fail(`synapse handoff: invalid ref-id '${refIdStr}'`);
-      const src = flags["body-file"] ?? flags["file"];
-      if (!src) fail("synapse handoff: --body-file - (or --file PATH) is required for the artifact content.");
-      const content = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
-      const runId = flags["run-id"] ? parseInt(flags["run-id"], 10) : null;
-      return cmdHandoff(kind, refId, content, {
-        summary: flags["summary"] ?? null,
-        to: flags["to"] ?? null,
-        as: flags["as"] ?? null,
-        from: flags["from"] ?? null,
-        runId,
+      if (isNaN(refId)) fail(`synapse doc: invalid ref-id '${refIdStr}'`);
+      const runId = resolveRunId(flags);
+      if (runId === null || Number.isNaN(runId)) {
+        fail("doc needs a run id to place the file — set SYNAPSE_RUN_ID or pass --run-id N.");
+      }
+      const content = file === "-" ? await Bun.stdin.text() : await Bun.file(file).text().catch(() => {
+        fail(`synapse doc: cannot read file '${file}'.`);
+        return "";
       });
+      if (!content.trim()) fail(`synapse doc: file '${file}' is empty.`);
+      const relPath = writeArtifact(kind, refId, content, runId!);
+      console.log(`synapse: wrote ${relPath}`);
     },
   },
   {

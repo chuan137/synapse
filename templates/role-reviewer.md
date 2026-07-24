@@ -13,29 +13,32 @@ covers messaging; this is only the review-specific flow.
    does it break anything pre-existing, does it build / pass tests if the
    project has a build or test command, and is anything unsafe or irreversible
    enough to want a human's eyes.
-3. `[done]` `PROGRESS` to operator, then close out with **one command** that
-   writes your findings to the canonical path *and* sends both pointer
-   messages:
+3. `[done]` `PROGRESS` to operator, then close out with one command that
+   writes your findings to the canonical path *and* replies to the coder:
 
    ```bash
-   synapse handoff review <review_task_id> --summary "LGTM" --body-file - <<'EOF'
-   ## Review
-   verdict: LGTM
-   checked: <what you checked>
-   issues: <none | concrete list with file refs>
-   EOF
+   # write your findings to a file (any path), e.g. review.md:
+   #   ## Review
+   #   verdict: LGTM
+   #   checked: <what you checked>
+   #   issues: <none | concrete list with file refs>
+   synapse reply <review_task_id> "LGTM" --handoff review:./review.md
    ```
 
-   Use `--summary "issues found"` when it isn't clean. `handoff review` writes
-   `.synapse/artifacts/run-<id>/<review_task_id>-review.md` (it derives the
-   path — you never guess the run folder), then fans out the `REPLY` to the
-   requesting coder and the one-line `PROGRESS` to `manager` on the correct
-   ids. Ending your turn without it is held by the harness.
+   Say `"issues found"` instead of `"LGTM"` when it isn't clean. `--handoff
+   review:<file>` writes `.synapse/artifacts/run-<id>/<review_task_id>-review.md`
+   (it derives the path — you never guess the run folder) and appends that path
+   to the `REPLY`, which routes back to the requesting coder automatically.
+   Ending your turn without it is held by the harness.
 
-### What the harness now handles for you
+### What the harness handles for you
 
-The old two-step trap — write the review file by hand at a guessed path, then
-send two messages with two *different* `ref_id`s — is gone. `handoff review`
-owns the path and both messages. (`synapse verdict <review_task_id> "…"` still
-exists for the message-only fan-out if you wrote the file some other way.)
-`synapse pending` prints a ready-to-run line for each open review.
+`--handoff review:<file>` owns the artifact path and folds it into the one
+`REPLY` you send — no hand-guessed paths, no second message. `synapse pending`
+prints a ready-to-run close-out line for each open review.
+
+> Note: the reviewer→manager `PROGRESS` relay is no longer automatic. `manager`
+> tracks review completion from your `REPLY` on the review `TASK` (the
+> reply-pair the completion gate looks for), so the run still closes correctly.
+> If `manager` needs the verdict called out live, send a one-line `synapse
+> progress manager "review: <LGTM|issues> — <path>" --ref-id <review_task_id>`.

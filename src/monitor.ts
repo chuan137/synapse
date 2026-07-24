@@ -341,8 +341,8 @@ export function newestOpenInboundWork(
 export function sendBackReminderBody(agentName: string, msg: any): string {
   return [
     `Harness enforcement: ${msg.type} #${msg.id} from ${msg.from_agent} is still awaiting your REPLY.`,
-    `Send a REPLY to ${msg.from_agent} referencing msg #${msg.id} before doing anything else:`,
-    `synapse send ${msg.from_agent} REPLY "<result: done, blocked, or issues found; include key files/tests>" --ref-id ${msg.id}`,
+    `Reply to ${msg.from_agent} on msg #${msg.id} before doing anything else:`,
+    `synapse reply ${msg.id} "<result: done, blocked, or issues found; include key files/tests>"`,
     `You are ${agentName}; do not start another task until this send-back is complete.`,
   ].join(" ");
 }

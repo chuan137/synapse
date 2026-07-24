@@ -51,14 +51,21 @@ loaded, because it's your literal first action on every launch:
 synapse pending $SYNAPSE_AGENT   # pull what's waiting; run once on launch, or when a new message may have arrived
 ```
 
-## Message types
+## Message commands
 
-- **`TASK`** — work assignment; sender expects a `REPLY` when done.
-- **`QUESTION`** — blocking question from `manager` to `operator`; halts sender until answered. Always include `--title`.
-- **`PROGRESS`** — one-way UI signal; no reply expected. Covers short activity markers ("started") and relayed verdicts from a subordinate (reviewer/tester outcome, a workflow deviation).
-- **`REPLY`** — everything else: done reports, answers, verdicts. Closes a TASK or QUESTION. Send it with `synapse reply <id> "<body>"` — the only way to send a REPLY. It resolves the recipient to the sender of message `<id>` for you, so it can't be misrouted. (`synapse send ... REPLY` is rejected; use `reply`.)
+Each message type has an **intent verb** — the everyday way to send it. Every
+verb funnels through the same code path, but carries only that type's flags, so
+you never hunt through the full `send` flag list:
 
-> **`REPLY` vs `PROGRESS`:** if the recipient needs to read it to act, it is a `REPLY`. If it only signals activity, it is `PROGRESS`.
+- **`synapse task <to> "<body>"`** — assign a `TASK` (work; sender expects a `REPLY` when done). Flags: `--ref-id`, `--no-review`, `--test-required`.
+- **`synapse ask <to> "<body>" --options a,b,c [--title "…"]`** — a blocking `QUESTION` (usually to `operator`; halts the sender until answered).
+- **`synapse progress <to> "<body>"`** — a one-way `PROGRESS` signal (no reply expected): short activity markers or relayed verdicts.
+- **`synapse reply <id> "<body>"`** — a `REPLY` (done reports, answers, verdicts; closes a `TASK` or `QUESTION`). Resolves the recipient to the sender of message `<id>`, so it can't be misrouted. This is the **only** way to send a `REPLY` (`synapse send ... REPLY` is rejected).
+
+`synapse send <to> <type> "<body>"` is the low-level escape hatch that still
+sends any type; prefer the verb (it nudges you toward it on stderr).
+
+> **`REPLY` vs `PROGRESS`:** if the recipient needs to read it to act, it is a `REPLY` (`synapse reply`). If it only signals activity, it is `PROGRESS` (`synapse progress`).
 
 Keep `PROGRESS` bodies to one line, pointing at evidence rather than
 restating content already visible elsewhere (e.g. a `TASK` you just sent
@@ -67,9 +74,9 @@ message).
 
 ### Direct PROGRESS to operator (coder/reviewer/tester)
 
-`TASK`/`QUESTION`/`REPLY` still route hub-and-spoke through `manager` — that
+`task`/`ask`/`reply` still route hub-and-spoke through `manager` — that
 does not change. `PROGRESS` is the one exception: `coder`, `reviewer`, and
-`tester` may each send `PROGRESS` straight to `operator`, bypassing `manager`,
+`tester` may each send `progress` straight to `operator`, bypassing `manager`,
 but only as a lifecycle marker, never as narration:
 
 - `[start]` — once, right after you accept a `TASK` (or a review `TASK`).
@@ -80,19 +87,19 @@ but only as a lifecycle marker, never as narration:
 - `[blocked]` — only if you are stalled on something not yet worth escalating
   to a `QUESTION`.
 
-The body must start with one of those four tags — `synapse send` rejects a
+The body must start with one of those four tags — `synapse progress` rejects a
 direct-to-operator `PROGRESS` from a non-manager agent otherwise. Nothing else
 goes to `operator` directly: process narration and anything requiring
-judgment still go to your supervisor only (`PROGRESS`/`REPLY` to `manager`, or
+judgment still go to your supervisor only (`progress`/`reply` to `manager`, or
 peer-to-peer per your role, unchanged). `manager` still relays anything that
 needs synthesis — a review verdict, a test result, a deviation — direct
 `PROGRESS` is a fact ("it happened"), not a substitute for that judgment.
 
 ### QUESTION options
 
-`--options` is required on every `QUESTION` to `operator` — the S-Deck
-card has no fallback without it, and `synapse send` rejects the message
-if it's missing.
+`--options` is required on every `ask` to `operator` — the S-Deck
+card has no fallback without it, and `synapse ask` rejects the message
+if it's missing. Pass `--title` for a short header.
 
 - Provide 2–4 real, distinct answers — not placeholders ("Yes", "OK") or deferrals ("describe in reply").
 - If the question has multiple independent sub-questions, split into multiple QUESTIONs rather than cramming them into one.
@@ -105,15 +112,15 @@ if it's missing.
 interactive tool to ask the operator a question.** Those tools render in
 the tmux pane only — the operator is watching the S-Deck UI, not the
 terminal. Questions asked that way are invisible to the operator in the
-UI and break the coordination model. Always ask via `synapse send operator
-QUESTION "..." --options ...` — the only path that creates a clickable card
+UI and break the coordination model. Always ask via `synapse ask operator
+"..." --options ...` — the only path that creates a clickable card
 in the S-Deck.
 
 **Do NOT use raw `tmux send-keys` (or the `tmux` skill, if it's available
 to you) to message another agent directly.** That bypasses the mailbox
 entirely — no `messages` row, no `ref_id`, invisible to `manager` and
 operator alike. The `tmux` skill is for a human operator's out-of-band pane
-inspection; it is not a substitute for `synapse send`.
+inspection; it is not a substitute for the message commands.
 
 ## ref_id
 
@@ -122,27 +129,30 @@ Every reply closes exactly one message: the one whose id you pass. Send it with
 back to that message's sender, and needs no recipient from you, so it cannot
 go to the wrong agent. (`synapse pending` prints the ready-to-run `reply` line
 for each open item.) `synapse send ... REPLY` is rejected — `reply` is the only
-way to send a `REPLY`. Note the id `synapse send` prints when you send a `TASK`.
-Track open work by querying `ref_id` chains in the DB, not by holding state in
-context.
+way to send a `REPLY`. Note the id printed when you send a `TASK` (via `synapse
+task`). Track open work by querying `ref_id` chains in the DB, not by holding
+state in context.
 
 ## Handoffs: pointers, not payloads
 
 Keep message bodies short. Long artifacts (specs, plans, test plans, reviews)
 go to a file under `.synapse/artifacts/run-<id>/`; the message only points at
-it. Use `synapse handoff` — it derives the canonical path (you never guess the
-run folder) and, in the same call, announces the file:
+it. Two ways to place a doc, both derive the canonical path so you never guess
+the run folder:
 
 ```bash
-# review: writes the review file AND fans out coder REPLY + manager PROGRESS
-synapse handoff review <review_task_id> --summary "LGTM" --body-file - <<'EOF'
-...findings...
-EOF
+# Attach a doc TO a message: --handoff <kind>:<file> on any message verb writes
+# the file to its canonical path and appends that path to the body.
+# kind ∈ spec | plan | testplan | review | notes
+# A reviewer closes out by attaching the review to the REPLY to the coder:
+synapse reply <review_task_id> "LGTM" --handoff review:./review.md
 
-# spec/plan/testplan/notes: writes the file; reference the printed path from
-# the TASK you send next (add --to NAME to also send a pointer PROGRESS)
-synapse handoff testplan <root_id> --body-file - < testplan.md
-synapse send coder-1 TASK "See .synapse/artifacts/run-<id>/<root_id>-testplan.md" --ref-id N
+# Attach the plan to the TASK that depends on it:
+synapse task coder-1 "Build per the plan" --ref-id <root_id> --handoff plan:./plan.md
+
+# Write a doc with NO message yet (e.g. planning docs you reference later):
+synapse doc testplan <root_id> ./testplan.md
+# ...then point at the printed path from the TASK you send next.
 ```
 
 Long bodies break tmux keystroke delivery and make `synapse pending`/`status`

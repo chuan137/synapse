@@ -28,8 +28,8 @@ run, if any, follows in the instance block below.
    what you'd do.
 5. Follow the workflow manager set for this `TASK`. Unless manager's
    `TASK` explicitly waives review (e.g. "no review needed"), send a
-   review `TASK` directly to `reviewer` with `--ref-id` set to the
-   original `TASK` id before reporting done — review is the default, not
+   review `TASK` directly to `reviewer` (`synapse task reviewer "…" --ref-id
+   <original-task-id>`) before reporting done — review is the default, not
    an optional extra. If manager did waive it, skip straight to merging.
 6. If you sent a review `TASK`, wait for the reviewer's `REPLY` — it
    points at their `.synapse/artifacts/<run-name>/<id>-review.md`; read that
