@@ -626,6 +626,7 @@
     }
     const run = state.runs.find(r => r.id === state.selectedRunId);
     for (const a of agents) {
+      if (a.window_name === 'operator') continue;
       const st = (a.status || 'unknown').toLowerCase();
       const dotState = ['idle','busy','stopped'].includes(st) ? st : 'unknown';
       const chip = document.createElement('span');

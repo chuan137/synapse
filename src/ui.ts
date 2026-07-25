@@ -1,674 +1,71 @@
-import { readFileSync, watch } from "fs";
-import { dirname, resolve } from "path";
-import { MESSAGE_TYPES, nowIso } from "./commands";
-import { connect } from "./db";
+import { mkdirSync, readFileSync, watch } from "fs";
+import { basename, dirname, join, relative, resolve } from "path";
+import { cmdDone, DEFAULT_TASK_TEMPLATE, MESSAGE_TYPES, nowIso } from "./commands";
+import { connect, dbPath } from "./db";
 import { disbandTeam } from "./monitor";
-import PUBLIC_INDEX_HTML from "./public/index.html" with { type: "text" };
+import BUNDLED_HTML from "../public/index.html" with { type: "text" };
+import BUNDLED_CSS from "../public/styles.css" with { type: "text" };
+import BUNDLED_JS from "../public/app.js" with { type: "text" };
 
 // ---------- ui ----------
 
-const FRONTEND_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Synapse</title>
-<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg:      #1c1c1e;
-    --surface: #242426;
-    --border:  #38383a;
-    --text:    #c8c8ca;
-    --muted:   #78787e;
-    --accent:  #7091f5;
-    --idle:    #4ade80;
-    --working: #facc15;
-    --error:   #f87171;
-    --p0:      #ef4444;
-    --p0-bg:   #2a1212;
-    --p0-text: #fca5a5;
-    --tooltip-bg: rgba(240,240,240,0.95);
-    --tooltip-text: #111;
-    --hover-soft: rgba(255,255,255,0.02);
-  }
-  html, body { height: 100%; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Menlo', monospace;
-    font-size: 13px;
-    line-height: 1.55;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* ── Header ── */
-  header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 16px;
-    height: 44px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    transition: border-color 0.3s;
-  }
-  header.disconnected { border-bottom-color: var(--error); }
-  .logo {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--text);
-    padding-right: 12px;
-    border-right: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  #conn-status {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    padding: 3px 8px;
-    border-radius: 4px;
-    border: 1px solid;
-    transition: color 0.3s, border-color 0.3s, background 0.3s;
-  }
-  #conn-status.connected {
-    color: var(--idle);
-    border-color: color-mix(in srgb, var(--idle) 40%, transparent);
-    background: color-mix(in srgb, var(--idle) 8%, transparent);
-  }
-  #conn-status.disconnected {
-    color: var(--error);
-    border-color: color-mix(in srgb, var(--error) 40%, transparent);
-    background: color-mix(in srgb, var(--error) 8%, transparent);
-  }
-  #msg-count-badge {
-    margin-left: auto;
-    font-size: 11px;
-    color: var(--muted);
-  }
-  #ack-run-btn {
-    display: none;
-    background: var(--error);
-    border: 1px solid color-mix(in srgb, var(--error) 70%, transparent);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 700;
-    border-radius: 4px;
-    padding: 3px 8px;
-    cursor: pointer;
-    line-height: 1;
-  }
-  #ack-run-btn.visible { display: inline-flex; }
-  #ack-run-btn:hover { opacity: 0.85; }
-  #ack-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-  /* ── Layout ── */
-  main {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  /* ── Agents panel ── */
-  #agents-panel {
-    border-right: 2px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--bg);
-  }
-  .panel-header {
-    height: 41px;
-    flex-shrink: 0;
-    padding: 0 14px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
-  #agents-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .agent-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 9px 11px;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .agent-card:hover {
-    background: color-mix(in srgb, var(--muted) 4%, var(--surface));
-  }
-  .agent-card.selected {
-    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-    border-left: 2px solid var(--accent);
-  }
-  .agent-card-header {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-  }
-  .agent-state-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--muted);
-  }
-  .agent-state-dot[data-state="idle"]    { background: var(--idle); }
-  .agent-state-dot[data-state="busy"]    { background: var(--working); animation: pulse 1.4s ease-in-out infinite; }
-  .agent-state-dot[data-state="stopped"] { background: var(--muted); }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.4; transform: scale(0.75); }
-  }
-  .agent-name {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-transform: capitalize;
-  }
-  .agent-role {
-    font-size: 10px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-  .agent-pending {
-    background: color-mix(in srgb, var(--working) 25%, transparent);
-    color: var(--working);
-    font-size: 9px;
-    font-weight: 700;
-    padding: 1px 5px;
-    border-radius: 3px;
-    flex-shrink: 0;
-  }
-  .empty-state {
-    color: var(--muted);
-    font-size: 12px;
-    text-align: center;
-    padding: 32px 12px;
-  }
-
-  /* ── Messages panel ── */
-  #messages-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--surface);
-  }
-  #messages-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  /* ── Message rows ── */
-  .message-row {
-    display: flex;
-    flex-direction: row;
-    gap: 10px;
-    align-items: flex-start;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border-left: 2px solid transparent;
-  }
-  .message-row.from-human {
-    background: rgba(112,145,245,0.07);
-    border-left-color: rgba(112,145,245,0.35);
-  }
-  .message-row.from-agent {
-    background: rgba(255,255,255,0.025);
-    transition: background 0.15s, border-left-color 0.15s;
-  }
-  .message-row.from-agent:hover {
-    background: rgba(255,255,255,0.055);
-    border-left-color: rgba(112,145,245,0.4);
-  }
-  .message-avatar {
-    width: 26px;
-    height: 26px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 700;
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-  .from-human .message-avatar { background: var(--accent); color: #fff; }
-  .from-agent .message-avatar { background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
-  .message-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-  .message-header { display: flex; align-items: baseline; gap: 8px; }
-  .message-sender { font-size: 11px; font-weight: 700; color: var(--text); }
-  .from-human .message-sender { color: var(--accent); }
-  .message-time { font-size: 10px; color: var(--muted); }
-  .msg-id-label {
-    font-size: 9px;
-    color: var(--muted);
-    opacity: 0;
-    transition: opacity 0.15s;
-    margin-left: auto;
-  }
-  .message-row:hover .msg-id-label { opacity: 0.45; }
-  .msg-type-badge {
-    display: inline-block;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    padding: 1px 5px;
-    border-radius: 3px;
-    text-transform: uppercase;
-  }
-  .msg-type-STATUS { background: color-mix(in srgb, var(--idle) 18%, transparent); color: var(--idle); }
-  .msg-type-REVIEW { background: color-mix(in srgb, var(--working) 18%, transparent); color: var(--working); }
-  .msg-type-ACK, .msg-type-INFO { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
-  .message-content {
-    font-size: 12px;
-    color: var(--text);
-    line-height: 1.55;
-    word-break: break-word;
-    white-space: normal;
-  }
-  .message-content > :first-child { margin-top: 0; }
-  .message-content > :last-child  { margin-bottom: 0; }
-  .message-content p { margin: 0 0 4px; }
-  .message-content code {
-    font-family: inherit;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 1px 4px;
-    font-size: 11px;
-    color: var(--accent);
-  }
-  .message-content pre {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 8px 10px;
-    margin: 4px 0;
-    overflow-x: auto;
-  }
-  .message-content pre code { background: none; border: none; padding: 0; white-space: pre; }
-  .message-content ul, .message-content ol { margin: 4px 0; padding-left: 20px; }
-  .message-content li { margin: 1px 0; }
-  .message-content blockquote {
-    margin: 4px 0; padding: 1px 10px;
-    border-left: 2px solid var(--border); color: var(--muted);
-  }
-  .message-content a { color: var(--accent); text-decoration: none; }
-  .message-content a:hover { text-decoration: underline; }
-  .message-content strong { font-weight: 700; color: var(--text); }
-
-  /* ── Compose ── */
-  #compose {
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .compose-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .compose-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
-  select, input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 12px;
-    border-radius: 4px;
-    padding: 5px 8px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  select:focus, input:focus { border-color: var(--accent); }
-  select option { background: var(--bg); }
-  #input-to { width: 130px; }
-  textarea#msg-input {
-    width: 100%;
-    resize: vertical;
-    min-height: 68px;
-    max-height: 180px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 12px;
-    border-radius: 4px;
-    padding: 8px 10px;
-    outline: none;
-    transition: border-color 0.15s;
-    line-height: 1.5;
-  }
-  textarea#msg-input:focus { border-color: var(--accent); }
-  textarea#msg-input:disabled { opacity: 0.4; cursor: not-allowed; }
-  .compose-bottom { display: flex; align-items: center; gap: 8px; }
-  #send-btn {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    padding: 6px 16px;
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.15s;
-    white-space: nowrap;
-  }
-  #send-btn:hover { opacity: 0.85; }
-  #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-  #send-feedback { font-size: 11px; }
-  #send-feedback.ok  { color: var(--idle); }
-  #send-feedback.err { color: var(--error); }
-
-  ::-webkit-scrollbar { width: 5px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(128,120,112,0.25); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(128,120,112,0.45); }
-</style>
-</head>
-<body>
-<header id="header">
-  <span class="logo">SYNAPSE</span>
-  <span id="conn-status" class="disconnected">● connecting</span>
-  <button id="ack-run-btn" title="Acknowledge finished task and stop the team">ACK end</button>
-  <span id="msg-count-badge"></span>
-</header>
-<main>
-  <div id="agents-panel">
-    <div class="panel-header"><span>Agents</span></div>
-    <div id="agents-list"><div class="empty-state">loading…</div></div>
-  </div>
-  <div id="messages-panel">
-    <div class="panel-header">
-      <span id="thread-title">Thread</span>
-    </div>
-    <div id="messages-list"><div class="empty-state" id="empty-msgs">No messages yet.</div></div>
-    <div id="compose">
-      <div class="compose-row">
-        <span class="compose-label">To:</span>
-        <select id="input-to"></select>
-        <span class="compose-label">Type:</span>
-        <select id="input-type">
-          <option>STATUS</option><option>REVIEW</option><option>ACK</option><option>INFO</option>
-        </select>
-      </div>
-      <textarea id="msg-input" placeholder="Message… (⌘↵ or Ctrl+↵ to send)"></textarea>
-      <div class="compose-bottom">
-        <button id="send-btn">Send</button>
-        <span id="send-feedback"></span>
-      </div>
-    </div>
-  </div>
-</main>
-<script>
-(function () {
-  const $ = id => document.getElementById(id);
-  const agentsList  = $('agents-list');
-  const msgList     = $('messages-list');
-  const header      = $('header');
-  const connStatus  = $('conn-status');
-  const inputTo     = $('input-to');
-  const inputType   = $('input-type');
-  const msgInput    = $('msg-input');
-  const sendBtn     = $('send-btn');
-  const feedback    = $('send-feedback');
-  const countBadge  = $('msg-count-badge');
-  const ackRunBtn   = $('ack-run-btn');
-
-  const seenIds = new Set();
-  let totalMsgs = 0;
-  let currentRun = null;
-
-  // Markdown: marked + DOMPurify (loaded from CDN in <head>)
-  function renderMd(raw) {
-    if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
-      return '<span class="message-content-plain"></span>';
-    }
-    const html = DOMPurify.sanitize(marked.parse(raw ?? ''));
-    const el = document.createElement('div');
-    el.className = 'message-content';
-    el.innerHTML = html;
-    return el.outerHTML;
-  }
-
-  function esc(s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  function fmtTime(ts) {
-    try {
-      const d = new Date(ts.endsWith('Z') ? ts : ts + 'Z');
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    } catch { return ts ?? ''; }
-  }
-
-  function initials(name) {
-    const parts = String(name ?? '').split(/[-_\s]+/).filter(Boolean);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return String(name ?? '??').slice(0, 2).toUpperCase();
-  }
-
-  function flash(msg, ok) {
-    feedback.className = ok ? 'ok' : 'err';
-    feedback.textContent = msg;
-    setTimeout(() => { feedback.textContent = ''; feedback.className = ''; }, 3000);
-  }
-
-  function renderAgents(agents) {
-    const cur = inputTo.value;
-    inputTo.innerHTML = agents.map(a => '<option value="' + esc(a.window_name) + '">' + esc(a.window_name) + '</option>').join('');
-    if (cur) inputTo.value = cur;
-
-    if (!agents.length) {
-      agentsList.innerHTML = '<div class="empty-state">No agents connected.</div>';
-      return;
-    }
-    agentsList.innerHTML = agents.map(a => {
-      const st = (a.status || 'unknown').toLowerCase();
-      const dotState = ['idle','busy','stopped'].includes(st) ? st : 'unknown';
-      const badge = a.pending_count > 0
-        ? '<span class="agent-pending">' + a.pending_count + '</span>' : '';
-      return '<div class="agent-card" data-name="' + esc(a.window_name) + '">' +
-        '<div class="agent-card-header">' +
-          '<span class="agent-state-dot" data-state="' + esc(dotState) + '"></span>' +
-          '<span class="agent-name" title="' + esc(a.window_name) + '">' + esc(a.window_name) + '</span>' +
-          '<span class="agent-role">' + esc(a.role || '') + '</span>' +
-          badge +
-        '</div>' +
-      '</div>';
-    }).join('');
-
-    // Click to select
-    agentsList.querySelectorAll('.agent-card').forEach(card => {
-      card.addEventListener('click', () => {
-        agentsList.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        const name = card.dataset.name;
-        if (inputTo) { inputTo.value = name; }
-      });
-    });
-  }
-
-  function buildMessageRow(msg) {
-    const isHuman = msg.from_agent === 'operator';
-    const direction = isHuman ? 'from-human' : 'from-agent';
-    const sender = isHuman ? msg.from_agent : msg.from_agent;
-    const avi = initials(sender);
-    const t = (msg.type || '').toUpperCase();
-    const typeBadge = t ? '<span class="msg-type-badge msg-type-' + esc(t) + '">' + esc(t) + '</span>' : '';
-    const route = isHuman
-      ? esc(msg.to_agent)
-      : esc(msg.from_agent) + ' <span style="color:var(--muted)">→</span> ' + esc(msg.to_agent);
-
-    const div = document.createElement('div');
-    div.className = 'message-row ' + direction;
-    div.dataset.msgId = msg.id;
-    div.innerHTML =
-      '<div class="message-avatar">' + esc(avi) + '</div>' +
-      '<div class="message-body">' +
-        '<div class="message-header">' +
-          '<span class="message-sender">' + route + '</span>' +
-          typeBadge +
-          '<span class="message-time">' + esc(fmtTime(msg.created_at || '')) + '</span>' +
-          '<span class="msg-id-label">#' + msg.id + '</span>' +
-        '</div>' +
-        renderMd(msg.body || '') +
-      '</div>';
-    return div;
-  }
-
-  function appendMessage(msg) {
-    if (seenIds.has(msg.id)) return;
-    seenIds.add(msg.id);
-    totalMsgs++;
-    countBadge.textContent = totalMsgs + ' messages';
-    const empty = $('empty-msgs');
-    if (empty) empty.remove();
-    // Newest at bottom
-    msgList.appendChild(buildMessageRow(msg));
-    msgList.scrollTop = msgList.scrollHeight;
-  }
-
-  function renderThread(payload) {
-    const messages = Array.isArray(payload) ? payload : (payload.messages || []);
-    const run = Array.isArray(payload) ? null : (payload.run || null);
-    currentRun = run;
-    if (ackRunBtn) {
-      const terminal = run && run.status && run.status !== 'running';
-      ackRunBtn.classList.toggle('visible', !!terminal);
-      ackRunBtn.textContent = terminal ? 'ACK ' + run.status : 'ACK end';
-      ackRunBtn.disabled = false;
-    }
-    const titleEl = $('thread-title');
-    if (titleEl) {
-      titleEl.textContent = run ? 'Thread  run #' + run.id : 'Thread';
-    }
-    msgList.innerHTML = '';
-    seenIds.clear();
-    totalMsgs = 0;
-    countBadge.textContent = '';
-    if (!messages.length) {
-      const d = document.createElement('div');
-      d.className = 'empty-state'; d.id = 'empty-msgs'; d.textContent = 'No messages yet.';
-      msgList.appendChild(d);
-      return;
-    }
-    for (const msg of messages) appendMessage(msg);
-  }
-
-  function setConnected(ok) {
-    connStatus.className = ok ? 'connected' : 'disconnected';
-    connStatus.textContent = ok ? '● live' : '● reconnecting';
-    header.classList.toggle('disconnected', !ok);
-  }
-
-  function connectSSE() {
-    const es = new EventSource('/events');
-    es.addEventListener('agent-status',   e => { try { renderAgents(JSON.parse(e.data)); } catch {} });
-    es.addEventListener('operator-thread',e => { try { renderThread(JSON.parse(e.data)); } catch {} });
-    es.addEventListener('message-stream', e => { try { appendMessage(JSON.parse(e.data)); } catch {} });
-    es.addEventListener('reload', () => { location.reload(); });
-    es.onopen  = () => setConnected(true);
-    es.onerror = () => { setConnected(false); es.close(); setTimeout(connectSSE, 2000); };
-  }
-  connectSSE();
-
-  async function sendMessage() {
-    const to   = inputTo.value.trim();
-    const type = inputType.value;
-    const body = msgInput.value.trim();
-    if (!to || !body) { flash('To and body required', false); return; }
-    sendBtn.disabled = true;
-    try {
-      const res  = await fetch('/send', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({to, type, body}),
-      });
-      const json = await res.json();
-      if (json.ok) { msgInput.value = ''; flash('sent #' + json.id, true); }
-      else flash(json.error || 'error', false);
-    } catch (err) { flash(String(err), false); }
-    finally { sendBtn.disabled = false; }
-  }
-
-  async function ackRun() {
-    if (!currentRun || currentRun.status === 'running') return;
-    ackRunBtn.disabled = true;
-    try {
-      const res = await fetch('/ack-run', { method: 'POST' });
-      const json = await res.json();
-      if (json.ok) flash('acked run #' + json.run_id, true);
-      else {
-        ackRunBtn.disabled = false;
-        flash(json.error || 'error', false);
-      }
-    } catch (err) {
-      ackRunBtn.disabled = false;
-      flash(String(err), false);
-    }
-  }
-
-  sendBtn.addEventListener('click', sendMessage);
-  ackRunBtn.addEventListener('click', ackRun);
-  msgInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
-  });
-})();
-</script>
-</body>
-</html>`;
-
 const DEFAULT_UI_PORT = 7700;
-// In dev mode (SYNAPSE_DEV=1), HTML is read from disk on every request.
+
+function raiseTerminal(): void {
+  const TERMINALS = ['iTerm2', 'Terminal', 'Ghostty', 'Warp', 'Alacritty', 'kitty'];
+  const script = `
+tell application "System Events"
+  set runningNames to name of every process whose background only is false
+end tell
+repeat with appName in {${['iTerm2', 'Terminal', 'Ghostty', 'Warp', 'Alacritty', 'kitty'].map(t => `"${t}"`).join(', ')}}
+  if runningNames contains appName then
+    set appStr to appName as text
+    tell application appStr
+      activate
+      reopen
+    end tell
+    return appStr
+  end if
+end repeat`;
+  try {
+    const result = Bun.spawnSync(["osascript", "-e", script]);
+    if (result.exitCode === 0) {
+      const raised = new TextDecoder().decode(result.stdout).trim();
+      if (raised) process.stderr.write(`[Synapse] raised ${raised}\n`);
+    }
+  } catch { /* AppleScript failed, not fatal */ }
+}
+
+function synapseCommand(): string[] {
+  if (process.execPath === process.argv[0]) {
+    return [process.execPath, process.argv[1]];
+  }
+  return [process.execPath];
+}
+
+// In dev mode (SYNAPSE_DEV=1), assets are read from disk on every request.
 // When running as a compiled binary, import.meta.filename is a virtual /$bunfs
 // path, so resolve relative to the real executable instead.
-function resolvePublicHtmlPath(): string {
+function resolvePublicAsset(file: string): string {
   const base = dirname(import.meta.filename);
   if (base.startsWith("/$bunfs")) {
-    // compiled binary: process.execPath is the real binary path
-    // binary lives at <project>/bin/synapse; HTML is at <project>/src/public/index.html
-    return resolve(dirname(process.execPath), "../src/public/index.html");
+    // binary lives at <project>/bin/synapse; assets at <project>/public/*
+    return resolve(dirname(process.execPath), "../public", file);
   }
-  return resolve(base, "public/index.html");
+  return resolve(base, "../public", file);
 }
-const PUBLIC_HTML_PATH = resolvePublicHtmlPath();
+
+const PUBLIC_ASSETS: Record<string, { path: string; bundled: string; contentType: string }> = {
+  "index.html": { path: resolvePublicAsset("index.html"), bundled: BUNDLED_HTML, contentType: "text/html; charset=utf-8" },
+  "styles.css":  { path: resolvePublicAsset("styles.css"),  bundled: BUNDLED_CSS,  contentType: "text/css; charset=utf-8" },
+  "app.js":      { path: resolvePublicAsset("app.js"),      bundled: BUNDLED_JS,   contentType: "application/javascript; charset=utf-8" },
+};
+
+function serveAsset(file: string, dev: boolean): Response {
+  const asset = PUBLIC_ASSETS[file];
+  const body = dev ? readFileSync(asset.path, "utf8") : asset.bundled;
+  return new Response(body, { headers: { "Content-Type": asset.contentType } });
+}
 
 export function cmdUi(flags: Record<string, string>) {
   const port = flags["port"] !== undefined ? parseInt(flags["port"], 10) : DEFAULT_UI_PORT;
@@ -709,7 +106,7 @@ export function cmdUi(flags: Record<string, string>) {
   function recentRuns() {
     return db
       .query(
-        `SELECT id, session, status, goal, started_at, ended_at
+        `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
          FROM runs
          ORDER BY id DESC
          LIMIT 20`,
@@ -720,7 +117,7 @@ export function cmdUi(flags: Record<string, string>) {
   function runningRuns() {
     return db
       .query(
-        `SELECT id, session, status, goal, started_at, ended_at
+        `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
          FROM runs
          WHERE status='running'
          ORDER BY id DESC
@@ -733,7 +130,7 @@ export function cmdUi(flags: Record<string, string>) {
     return (
       (db
         .query(
-          `SELECT id, session, status, goal, started_at, ended_at
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
            FROM runs
            WHERE id=?`,
         )
@@ -741,10 +138,38 @@ export function cmdUi(flags: Record<string, string>) {
     );
   }
 
+  function activeRun() {
+    return (
+      (db
+        .query(
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
+           FROM runs WHERE status='running' ORDER BY id DESC LIMIT 1`,
+        )
+        .get() as any) ??
+      (db
+        .query(
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at
+           FROM runs ORDER BY id DESC LIMIT 1`,
+        )
+        .get() as any) ??
+      null
+    );
+  }
+
+  function managerActivityForRun(runId: number | null): any[] {
+    if (!runId) return [];
+    return db.query(
+      `SELECT 'message' AS source, m.id, m.type, m.body, m.created_at, m.from_agent, m.to_agent
+       FROM messages m
+       WHERE m.from_agent = 'manager' AND m.to_agent != 'operator' AND m.run_id = ?
+       ORDER BY created_at`,
+    ).all(runId) as any[];
+  }
+
   function operatorThreadMessages(runId: number) {
     return db
       .query(
-        `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+        `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, title, options, status, created_at
          FROM messages
          WHERE (from_agent='operator' OR to_agent='operator')
            AND run_id = ?
@@ -757,7 +182,7 @@ export function cmdUi(flags: Record<string, string>) {
   function agentsForRun(runId: number) {
     return db
       .query(
-        `SELECT window_name, role, status, last_seen_at,
+        `SELECT window_name, role, status, model, context_tokens, last_seen_at,
                 (SELECT COUNT(*) FROM messages m
                  WHERE m.status='pending'
                    AND (m.to_agent=a.window_name OR m.to_agent='broadcast')
@@ -775,7 +200,8 @@ export function cmdUi(flags: Record<string, string>) {
 
   function pushOperatorThread(ctrl: ReadableStreamDefaultController, run: any) {
     const messages = operatorThreadMessages(run.id);
-    const chunk = `event: operator-thread\ndata: ${JSON.stringify({ run, messages })}\n\n`;
+    const managerActivity = managerActivityForRun(run.id);
+    const chunk = `event: operator-thread\ndata: ${JSON.stringify({ run, messages, managerActivity })}\n\n`;
     ctrl.enqueue(chunk);
   }
 
@@ -789,7 +215,7 @@ export function cmdUi(flags: Record<string, string>) {
       const lastMessageId = lastMessageIds.get(runId) ?? 0;
       const newMessages = db
         .query(
-          `SELECT id, run_id, from_agent, to_agent, type, body, status, created_at
+          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, title, options, status, created_at
            FROM messages
            WHERE id > ?
              AND (from_agent='operator' OR to_agent='operator')
@@ -812,7 +238,7 @@ export function cmdUi(flags: Record<string, string>) {
   let reloadDebounce: ReturnType<typeof setTimeout> | null = null;
   if (dev) {
     try {
-      const watcher = watch(PUBLIC_HTML_PATH, () => {
+      const watcher = watch(PUBLIC_ASSETS["index.html"].path, () => {
         if (reloadDebounce) clearTimeout(reloadDebounce);
         reloadDebounce = setTimeout(() => {
           console.log("synapse ui: index.html changed — pushing reload");
@@ -822,7 +248,7 @@ export function cmdUi(flags: Record<string, string>) {
       });
       process.on("SIGINT",  () => { watcher.close(); shutdown(); });
       process.on("SIGTERM", () => { watcher.close(); shutdown(); });
-      console.log(`synapse ui: dev mode — watching ${PUBLIC_HTML_PATH}`);
+      console.log(`synapse ui: dev mode — watching ${PUBLIC_ASSETS["index.html"].path}`);
     } catch {
       process.on("SIGINT",  shutdown);
       process.on("SIGTERM", shutdown);
@@ -838,16 +264,51 @@ export function cmdUi(flags: Record<string, string>) {
       const url = new URL(req.url);
 
       if (url.pathname === "/" && req.method === "GET") {
-        const html = dev
-          ? readFileSync(PUBLIC_HTML_PATH, "utf8")
-          : PUBLIC_INDEX_HTML;
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-        });
+        return serveAsset("index.html", dev);
+      }
+
+      if (url.pathname === "/styles.css" && req.method === "GET") {
+        return serveAsset("styles.css", dev);
+      }
+
+      if (url.pathname === "/app.js" && req.method === "GET") {
+        return serveAsset("app.js", dev);
       }
 
       if (url.pathname === "/runs" && req.method === "GET") {
         return Response.json({ runs: recentRuns() });
+      }
+
+      if (url.pathname === "/info" && req.method === "GET") {
+        const projectRoot = resolve(dirname(dbPath()), "..");
+        const projectName = basename(projectRoot);
+        const tmuxPane = process.env.TMUX_PANE ?? null;
+        let uiSession: string | null = null;
+        let uiWindow: string | null = null;
+        if (tmuxPane) {
+          const s = Bun.spawnSync(["tmux", "display-message", "-p", "-t", tmuxPane, "#S"]);
+          const w = Bun.spawnSync(["tmux", "display-message", "-p", "-t", tmuxPane, "#I"]);
+          if (s.exitCode === 0) uiSession = new TextDecoder().decode(s.stdout).trim();
+          if (w.exitCode === 0) uiWindow  = new TextDecoder().decode(w.stdout).trim();
+        }
+        return Response.json({ projectName, uiSession, uiWindow });
+      }
+
+      if (url.pathname === "/thread" && req.method === "GET") {
+        const runId = Number(url.searchParams.get("run_id"));
+        if (!runId) return Response.json({ error: "missing run_id" }, { status: 400 });
+        const run = db.query(
+          `SELECT id, session, status, goal, started_at, ended_at, session_killed_at FROM runs WHERE id=?`,
+        ).get(runId) as any;
+        if (!run) return Response.json({ error: "run not found" }, { status: 404 });
+        const messages = db.query(
+          `SELECT id, run_id, from_agent, to_agent, type, ref_id, body, title, options, status, created_at
+           FROM messages
+           WHERE (from_agent='operator' OR to_agent='operator') AND run_id=?
+           ORDER BY id`,
+        ).all(runId);
+        const managerActivity = managerActivityForRun(runId);
+        return Response.json({ run, messages, managerActivity });
       }
 
       if (url.pathname === "/events" && req.method === "GET") {
@@ -886,7 +347,7 @@ export function cmdUi(flags: Record<string, string>) {
         return req
           .json()
           .then((body: any) => {
-            const { to, type, body: msgBody, run_id } = body ?? {};
+            const { to, type, body: msgBody, run_id, ref_id } = body ?? {};
             if (!to || !type || !msgBody) {
               return Response.json(
                 { ok: false, error: "missing to, type, or body" },
@@ -895,84 +356,203 @@ export function cmdUi(flags: Record<string, string>) {
             }
             if (!MESSAGE_TYPES.has(type)) {
               return Response.json(
-                {
-                  ok: false,
-                  error: `type must be one of ${[...MESSAGE_TYPES].sort()}`,
-                },
+                { ok: false, error: `type must be one of ${[...MESSAGE_TYPES].sort()}` },
                 { status: 400 },
               );
             }
-            const runId =
-              run_id === undefined || run_id === null || run_id === ""
-                ? null
-                : Number(run_id);
-            if (runId !== null && !Number.isInteger(runId)) {
+            if (to === "broadcast") {
               return Response.json(
-                { ok: false, error: "run_id must be an integer" },
+                { ok: false, error: "broadcast messages are no longer supported; send to a specific agent" },
                 { status: 400 },
               );
             }
-            const run = runId === null ? null : runById(runId);
-            if (runId !== null && !run) {
-              return Response.json(
-                { ok: false, error: `unknown run_id ${runId}` },
-                { status: 404 },
-              );
-            }
-            if (run && run.status !== "running") {
-              return Response.json(
-                { ok: false, error: `run #${runId} is ${run.status}` },
-                { status: 409 },
-              );
-            }
+            const run = run_id
+              ? (db.query(`SELECT id FROM runs WHERE id=?`).get(run_id) as any)
+              : activeRun();
             const known = db
-              .query(
-                "SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)",
-              )
-              .get(to, runId ?? -1);
+              .query("SELECT 1 FROM agents WHERE window_name=? AND (run_id=? OR run_id=0)")
+              .get(to, run?.id ?? -1);
             if (!known) {
-              console.error(
-                `synapse ui: warning — '${to}' not in agents registry (sending anyway)`,
-              );
+              console.error(`synapse ui: warning — '${to}' not in agents registry (sending anyway)`);
             }
             const result = db.run(
-              `INSERT INTO messages (run_id, from_agent, to_agent, type, body) VALUES (?, 'operator', ?, ?, ?)`,
-              [runId, to, type, msgBody],
+              `INSERT INTO messages (run_id, from_agent, to_agent, type, ref_id, body) VALUES (?, 'operator', ?, ?, ?, ?)`,
+              [run?.id ?? null, to, type, ref_id ?? null, msgBody],
             );
-            return Response.json({
-              ok: true,
-              id: Number(result.lastInsertRowid),
-            });
+            if (ref_id) {
+              db.run(`UPDATE messages SET status='read' WHERE id=? AND status != 'read'`, [ref_id]);
+            }
+            return Response.json({ ok: true, id: Number(result.lastInsertRowid) });
           })
           .catch(() =>
-            Response.json(
-              { ok: false, error: "invalid JSON" },
-              { status: 400 },
-            ),
+            Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }),
           );
+      }
+
+      if (url.pathname === "/open-file" && req.method === "POST") {
+        return req.json().then(async (body: any) => {
+          const filePath = body?.path ?? "";
+          const projectRoot = resolve(dirname(dbPath()), "..");
+          const abs = resolve(filePath.startsWith("/") ? filePath : join(projectRoot, filePath));
+          if (!abs.startsWith(projectRoot + "/") && abs !== projectRoot) {
+            return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
+          }
+          try {
+            Bun.spawn(["open", "-a", "Cursor", abs]);
+          } catch {
+            try {
+              Bun.spawn(["open", abs]);
+            } catch (err: any) {
+              return Response.json({ ok: false, error: String(err) });
+            }
+          }
+          return Response.json({ ok: true });
+        }).catch(() => Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }));
+      }
+
+      if (url.pathname === "/file" && req.method === "GET") {
+        const filePath = url.searchParams.get("path") ?? "";
+        const projectRoot = resolve(dirname(dbPath()), "..");
+        const abs = resolve(filePath.startsWith("/") ? filePath : join(projectRoot, filePath));
+        if (!abs.startsWith(projectRoot + "/") && abs !== projectRoot) {
+          return new Response("Forbidden", { status: 403 });
+        }
+        try {
+          const content = readFileSync(abs, "utf8");
+          return Response.json({ path: filePath, content });
+        } catch {
+          return new Response("Not found", { status: 404 });
+        }
+      }
+
+      if (url.pathname === "/focus-agent" && req.method === "POST") {
+        return req.json().then((body: any) => {
+          const { session, window: win } = body ?? {};
+          if (!session || !win) {
+            return Response.json({ ok: false, error: "missing session or window" }, { status: 400 });
+          }
+          const target = `${session}:${win}`;
+          const selectResult = Bun.spawnSync(["tmux", "select-window", "-t", target]);
+          if (selectResult.exitCode !== 0) {
+            const stderr = new TextDecoder().decode(selectResult.stderr).trim();
+            return Response.json({ ok: false, error: stderr || `exit ${selectResult.exitCode}` }, { status: 500 });
+          }
+          const listResult = Bun.spawnSync(["tmux", "list-clients", "-F", "#{client_name} #{session_name}"]);
+          const clientLines = new TextDecoder().decode(listResult.stdout).trim().split('\n').filter(Boolean);
+          for (const line of clientLines) {
+            const clientName = line.split(' ')[0];
+            const switchResult = Bun.spawnSync(["tmux", "switch-client", "-c", clientName, "-t", target]);
+            if (switchResult.exitCode !== 0) {
+              const stderr = new TextDecoder().decode(switchResult.stderr).trim();
+              process.stderr.write(`[Synapse] switch-client -c ${clientName} failed: ${stderr}\n`);
+            }
+          }
+          raiseTerminal();
+          return Response.json({ ok: true });
+        }).catch(() => Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }));
+      }
+
+      if (url.pathname === "/start" && req.method === "POST") {
+        return req
+          .json()
+          .then((body: any) => {
+            const goal = String(body?.goal ?? "").trim();
+            const configPath = String(body?.config_path ?? DEFAULT_TASK_TEMPLATE).trim();
+            const args = [...synapseCommand(), "start", configPath];
+            if (goal) args.push("--goal", goal);
+            if (body?.no_monitor) args.push("--no-monitor");
+            const result = Bun.spawnSync({
+              cmd: args,
+              env: { ...process.env, SYNAPSE_DB: dbPath() },
+            });
+            const stdout = result.stdout.toString();
+            const stderr = result.stderr.toString();
+            if (result.exitCode !== 0) {
+              return Response.json(
+                { ok: false, error: stderr.trim() || stdout.trim() || "start failed" },
+                { status: 500 },
+              );
+            }
+            const runId = Number(stdout.match(/run #(\d+)/)?.[1] ?? 0) || null;
+            pollDb();
+            return Response.json({ ok: true, run_id: runId, stdout });
+          })
+          .catch(() =>
+            Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }),
+          );
+      }
+
+      if (url.pathname === "/kill-session" && req.method === "POST") {
+        return req.json().then((body: any) => {
+          const reqRunId = body?.run_id ? Number(body.run_id) : null;
+          const run = reqRunId
+            ? (db.query(`SELECT id, session, status, goal, started_at, ended_at, session_killed_at FROM runs WHERE id=?`).get(reqRunId) as any)
+            : activeRun();
+          if (!run) {
+            return Response.json({ ok: false, error: "no run selected" }, { status: 404 });
+          }
+          if (run.status === "running") {
+            return Response.json({ ok: false, error: "run is still running" }, { status: 409 });
+          }
+          const runId = Number(run.id);
+          const session = run.session;
+          db.run(
+            "INSERT INTO events (agent, type, summary, created_at) VALUES ('operator', 'decision', ?, ?)",
+            [`requested tmux session kill for terminal run ${runId}; session ${session}`, nowIso()],
+          );
+          const result = disbandTeam(db, session, runId, (s) => console.log(`[kill-session] ${s}`));
+          pollDb();
+          if (!result.sessionKilled) {
+            return Response.json(
+              { ok: false, run_id: runId, session, error: result.error || "tmux session still exists" },
+              { status: 500 },
+            );
+          }
+          const updated = db.query("SELECT session_killed_at FROM runs WHERE id=?").get(runId) as any;
+          return Response.json({ ok: true, run_id: runId, session, session_killed_at: updated?.session_killed_at ?? null });
+        }).catch(() => Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }));
+      }
+
+      if (url.pathname === "/finish-run" && req.method === "POST") {
+        return req.json().then((body: any) => {
+          const reqRunId = body?.run_id ? Number(body.run_id) : null;
+          const run = reqRunId
+            ? (db.query(`SELECT id, session, status, goal, started_at, ended_at, session_killed_at FROM runs WHERE id=?`).get(reqRunId) as any)
+            : activeRun();
+          if (!run) {
+            return Response.json({ ok: false, error: "no run selected" }, { status: 404 });
+          }
+          if (run.status !== "running") {
+            return Response.json({ ok: false, error: "run is not running" }, { status: 409 });
+          }
+          const runId = Number(run.id);
+          const session = run.session;
+          cmdDone("done", "Operator finished the run from UI.", "operator", null, runId);
+          const result = disbandTeam(db, session, runId, (s) => console.log(`[finish-run] ${s}`));
+          pollDb();
+          if (!result.sessionKilled) {
+            return Response.json(
+              { ok: false, run_id: runId, session, error: result.error || "tmux session still exists" },
+              { status: 500 },
+            );
+          }
+          const updated = db.query("SELECT session_killed_at FROM runs WHERE id=?").get(runId) as any;
+          return Response.json({ ok: true, run_id: runId, session, session_killed_at: updated?.session_killed_at ?? null });
+        }).catch(() => Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }));
       }
 
       if (url.pathname === "/ack-run" && req.method === "POST") {
         const runIdParam = url.searchParams.get("run_id");
         const runId = runIdParam === null ? null : Number(runIdParam);
         if (runId !== null && !Number.isInteger(runId)) {
-          return Response.json(
-            { ok: false, error: "run_id must be an integer" },
-            { status: 400 },
-          );
+          return Response.json({ ok: false, error: "run_id must be an integer" }, { status: 400 });
         }
         const run = runId === null ? recentRuns()[0] : runById(runId);
         if (!run) {
-          return Response.json(
-            { ok: false, error: "no run to acknowledge" },
-            { status: 404 },
-          );
+          return Response.json({ ok: false, error: "no run to acknowledge" }, { status: 404 });
         }
         if (run.status === "running") {
-          return Response.json(
-            { ok: false, error: "run is still running" },
-            { status: 409 },
-          );
+          return Response.json({ ok: false, error: "run is still running" }, { status: 409 });
         }
         const resolvedRunId = Number(run.id);
         const session = run.session;
@@ -985,6 +565,21 @@ export function cmdUi(flags: Record<string, string>) {
           shutdown();
         }, 50);
         return Response.json({ ok: true, run_id: resolvedRunId, session });
+      }
+
+      if (url.pathname === "/upload" && req.method === "POST") {
+        return req.formData().then(async (formData) => {
+          const file = formData.get("file") as File | null;
+          if (!file) return Response.json({ error: "no file" }, { status: 400 });
+          const uploadsDir = join(dirname(dbPath()), "uploads");
+          mkdirSync(uploadsDir, { recursive: true });
+          const safeName = basename(file.name).replace(/[^\w.\-]/g, "_");
+          const destPath = join(uploadsDir, safeName);
+          await Bun.write(destPath, await file.arrayBuffer());
+          const projectRoot = dirname(dirname(dbPath()));
+          const relPath = relative(projectRoot, destPath);
+          return Response.json({ path: relPath });
+        }).catch(() => Response.json({ error: "invalid form data" }, { status: 400 }));
       }
 
       return new Response("Not Found", { status: 404 });
