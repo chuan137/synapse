@@ -4,9 +4,6 @@
   const header      = $('header');
   const connStatus  = $('conn-status');
   const msgInput    = $('msg-input');
-  const sessionActions = $('session-actions');
-  const killSessionBtn = $('kill-session-btn');
-  const finishRunBtn   = $('finish-run-btn');
   const stopRunBtn     = $('stop-run-btn');
   const startPanel  = $('start-run-panel');
   const startGoal   = $('start-goal-input');
@@ -723,7 +720,7 @@
   const landingEl = $('history-landing');
   const threadHeaderEl = $('thread-header');
   const messagesListEl = $('messages-list');
-  const sessionActionsEl = $('session-actions');
+  const sessionActionsEl = null; // removed
   const composeEl = $('compose');
 
   function renderHistoryLanding() {
@@ -935,29 +932,22 @@
     footEl.textContent = msgs.length + ' messages' + ctxStr;
   }
 
-  function updateKillSessionButton(run) {
-    if (!sessionActions || !killSessionBtn || !finishRunBtn) return;
+  function updateStopButton(run) {
+    if (!stopRunBtn) return;
     if (!run) {
-      sessionActions.classList.remove('visible');
-      killSessionBtn._currentRun = null;
-      finishRunBtn._currentRun = null;
-      if (stopRunBtn) { stopRunBtn.style.display = 'none'; stopRunBtn._currentRun = null; }
+      stopRunBtn.style.display = 'none';
+      stopRunBtn._currentRun = null;
       return;
     }
     const isRunning = run.status === 'running';
-    const canKill = !isRunning && run.status && !run.session_killed_at;
-    const canFinish = isRunning && !run.session_killed_at;
-    sessionActions.classList.toggle('visible', !!canKill);
-    killSessionBtn.style.display = canKill ? '' : 'none';
-    killSessionBtn.disabled = false;
-    killSessionBtn._currentRun = run;
-    finishRunBtn.style.display = 'none';
-    finishRunBtn._currentRun = run;
-    if (stopRunBtn) {
-      stopRunBtn.style.display = canFinish ? '' : 'none';
-      stopRunBtn.disabled = canFinish && runHasBusyAgent(run.id);
-      stopRunBtn._currentRun = run;
-    }
+    const isDone = !isRunning && run.status && !run.session_killed_at;
+    const canStop = isRunning || isDone;
+    stopRunBtn.style.display = canStop ? '' : 'none';
+    stopRunBtn._currentRun = run;
+    stopRunBtn.disabled = isRunning && runHasBusyAgent(run.id);
+    stopRunBtn.title = isRunning
+      ? (stopRunBtn.disabled ? 'Waiting for agents to go idle…' : 'Stop this run and kill tmux session')
+      : 'Kill tmux session for this completed run';
   }
 
   async function selectRun(runId, knownRun) {
@@ -970,7 +960,7 @@
     const run = state.runs.find(r => r.id === runId) || knownRun;
     updateThreadHeader(run);
     updateThreadFooter(run);
-    updateKillSessionButton(run);
+    updateStopButton(run);
 
     renderAgentsStrip(state.agents.get(runId) || []);
 
@@ -989,6 +979,12 @@
           state.messages.set(runId, msgs);
           msgs.forEach(m => state.seenMsgIds.add(m.id));
           state.managerActivity.set(runId, data.managerActivity || []);
+          // Merge fresh run data (e.g. session_killed_at) into state.runs
+          if (data.run) {
+            const idx = state.runs.findIndex(r => r.id === runId);
+            if (idx !== -1) Object.assign(state.runs[idx], data.run);
+            if (token === _selectToken) updateStopButton(state.runs[idx] ?? data.run);
+          }
           renderThread();
         }
       } catch {
@@ -1042,7 +1038,7 @@
       if (run) {
         updateThreadHeader(run);
         updateThreadFooter(run);
-        updateKillSessionButton(run);
+        updateStopButton(run);
       }
       syncComposeMode();
       const hasRunning = state.runs.some(r => r.status === 'running');
@@ -1112,7 +1108,7 @@
             renderThread();
             updateThreadHeader(run);
             updateThreadFooter(run);
-            updateKillSessionButton(run);
+            updateStopButton(run);
           }
         } else {
           renderMessages(messages, []);
@@ -1214,66 +1210,36 @@
     } catch (err) { flash(String(err), false); }
   }
 
-  async function killSession() {
-    if (!killSessionBtn || !sessionActions) return;
-    const run = killSessionBtn._currentRun;
-    if (!run || run.status === 'running') return;
-    killSessionBtn.disabled = true;
-    killSessionBtn.textContent = 'Killing...';
-    try {
-      const res = await fetch('/kill-session', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ run_id: run.id }),
-      });
-      const json = await res.json();
-      if (json.ok) {
-        run.session_killed_at = json.session_killed_at || new Date().toISOString();
-        sessionActions.classList.remove('visible');
-        flash('killed session ' + json.session, true);
-      } else {
-        killSessionBtn.disabled = false;
-        killSessionBtn.textContent = 'Kill tmux session';
-        flash(json.error || 'error', false);
-      }
-    } catch (err) {
-      killSessionBtn.disabled = false;
-      killSessionBtn.textContent = 'Kill tmux session';
-      flash(String(err), false);
-    }
-  }
-
-  async function finishRun() {
-    const run = (stopRunBtn && stopRunBtn._currentRun) || finishRunBtn._currentRun;
+  async function stopRun() {
+    if (!stopRunBtn) return;
+    const run = stopRunBtn._currentRun;
     if (!run) return;
     if (!confirm('Stop this run and kill its tmux session?')) return;
-    if (stopRunBtn) { stopRunBtn.disabled = true; stopRunBtn.textContent = 'Stopping...'; }
-    finishRunBtn.disabled = true;
-    finishRunBtn.textContent = 'Finishing...';
+    stopRunBtn.disabled = true;
+    stopRunBtn.textContent = 'Stopping...';
+    const isRunning = run.status === 'running';
+    const endpoint = isRunning ? '/finish-run' : '/kill-session';
     try {
-      const res = await fetch('/finish-run', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ run_id: run.id }),
       });
       const json = await res.json();
       if (json.ok) {
-        if (stopRunBtn) { stopRunBtn.textContent = 'Stop Run'; }
-        run.status = 'completed';
+        if (isRunning) run.status = 'completed';
         run.session_killed_at = json.session_killed_at || new Date().toISOString();
-        updateKillSessionButton(run);
-        flash('run finished and session killed', true);
+        updateStopButton(run);
+        flash('session stopped', true);
       } else {
-        flash('finish failed: ' + (json.error || 'unknown'), false);
-        if (stopRunBtn) { stopRunBtn.disabled = false; stopRunBtn.textContent = 'Stop Run'; }
-        finishRunBtn.disabled = false;
-        finishRunBtn.textContent = 'Finish Run';
+        stopRunBtn.disabled = false;
+        stopRunBtn.textContent = 'Stop';
+        flash(json.error || 'stop failed', false);
       }
     } catch (e) {
-      flash('finish failed: ' + e.message, false);
-      if (stopRunBtn) { stopRunBtn.disabled = false; stopRunBtn.textContent = 'Stop Run'; }
-      finishRunBtn.disabled = false;
-      finishRunBtn.textContent = 'Finish Run';
+      stopRunBtn.disabled = false;
+      stopRunBtn.textContent = 'Stop';
+      flash(String(e), false);
     }
   }
 
@@ -1613,9 +1579,7 @@
     setStartStatus('', true);
   });
   startSubmit.addEventListener('click', startRun);
-  killSessionBtn.addEventListener('click', killSession);
-  finishRunBtn.addEventListener('click', finishRun);
-  if (stopRunBtn) stopRunBtn.addEventListener('click', finishRun);
+  if (stopRunBtn) stopRunBtn.addEventListener('click', stopRun);
   msgInput.addEventListener('keydown', e => {
     if (e.isComposing) return;
     if (e.key === 'Enter' && e.altKey && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
