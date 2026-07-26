@@ -233,6 +233,34 @@ export function cmdSend(
       refId ? ", ref=" + refId : ""
     }${resolvedRunId ? ", run=" + resolvedRunId : ""})`,
   );
+
+  // Push-on-send: nudge an idle target immediately so it doesn't wait for the
+  // sweep. Best-effort — enqueue already succeeded above, so any failure here
+  // is silently swallowed. Guards: real run, deliverable type, not sending to
+  // self or operator, target is idle.
+  if (
+    resolvedRunId !== null &&
+    to !== frm &&
+    to !== "operator" &&
+    ["TASK", "QUESTION", "PROGRESS", "REPLY"].includes(type)
+  ) {
+    try {
+      const targetAgent = db
+        .query("SELECT status FROM agents WHERE window_name=? AND run_id=?")
+        .get(to, resolvedRunId) as any;
+      if (targetAgent?.status === "idle") {
+        const tmuxSession = (
+          db.query("SELECT session FROM runs WHERE id=?").get(resolvedRunId) as any
+        )?.session;
+        if (tmuxSession) {
+          const log = (s: string) => process.stderr.write(`[send] ${s}\n`);
+          nudgeForPendingWork(db, tmuxSession, to, resolvedRunId, log);
+        }
+      }
+    } catch {
+      // nudge failure must never surface to the caller
+    }
+  }
 }
 
 // Reply to a message by id, without naming the recipient: the recipient is the

@@ -972,3 +972,70 @@ describe("hook-stop: error handling (V-6)", () => {
     expect(r.stderr).toContain("hook-stop");
   });
 });
+
+describe("push-on-send: immediate nudge to idle target (V1/V2/V5)", () => {
+  beforeEach(() => {
+    run(["init"]);
+    new Database(dbFile).run("INSERT INTO runs (session, goal, status) VALUES ('team', 'test', 'running')");
+    run(["register", "manager", "manager", "sess-manager"]);
+    run(["register", "coder-1", "coder", "sess-coder"]);
+  });
+
+  // V1: sending to an idle agent nudges it synchronously from the send call.
+  test("V1: send to idle agent produces immediate nudge without waiting for sweep", () => {
+    new Database(dbFile).run("UPDATE agents SET status='idle' WHERE window_name='coder-1'");
+
+    run(["send", "coder-1", "TASK", "push-on-send task", "--from", "manager"]);
+
+    expect(tmuxLogContents()).toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
+
+    const msg = openDb().query("SELECT status FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(msg.status).toBe("pending"); // message still pending (not consumed by nudge)
+  });
+
+  // V1 extended: push-on-send shares the Task-1 DB cooldown — send + sweep = 1 nudge.
+  test("V1+cooldown: send + --once sweep for same pending set yields exactly one nudge", () => {
+    new Database(dbFile).run("UPDATE agents SET status='idle' WHERE window_name='coder-1'");
+    writeTranscript("sess-coder", "end_turn", 5000);
+
+    run(["send", "coder-1", "TASK", "cooldown task", "--from", "manager"]);
+    const afterSend = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(afterSend.length).toBe(1);
+
+    // Sweep should see same sig in DB and suppress.
+    run(["monitor", "--once", "--debounce", "100"]);
+    const afterSweep = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(afterSweep.length).toBe(1); // still 1 — cooldown suppressed sweep nudge
+  });
+
+  // V2: sending to a busy agent does NOT nudge on send.
+  test("V2: send to busy agent produces no nudge", () => {
+    new Database(dbFile).run("UPDATE agents SET status='busy' WHERE window_name='coder-1'");
+
+    run(["send", "coder-1", "TASK", "busy task", "--from", "manager"]);
+
+    expect(tmuxLogContents()).toBe("");
+
+    const msg = openDb().query("SELECT status FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(msg.status).toBe("pending");
+  });
+
+  // V5: enqueue succeeds even when nudge fails (tmux unavailable).
+  test("V5: enqueue succeeds when tmux unavailable — message row still inserted, no throw", () => {
+    new Database(dbFile).run("UPDATE agents SET status='idle' WHERE window_name='coder-1'");
+    // Replace fake tmux with one that always fails.
+    writeFileSync(join(fakeBinDir, "tmux"), `#!/bin/sh\necho "no server" >&2\nexit 1\n`);
+    chmodSync(join(fakeBinDir, "tmux"), 0o755);
+
+    const r = run(["send", "coder-1", "TASK", "v5 task", "--from", "manager"]);
+    expect(r.exitCode).toBe(0);
+
+    const msg = openDb().query("SELECT status FROM messages WHERE to_agent='coder-1'").get() as any;
+    expect(msg).not.toBeNull();
+    expect(msg.status).toBe("pending");
+  });
+});
