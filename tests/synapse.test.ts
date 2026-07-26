@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { parsePlanSteps } from "../src/commands";
+import { parsePlanSteps, DEFAULT_MODEL_BY_ROLE } from "../src/commands";
 import { buildClaudeArgs } from "../src/launch-args";
 import { basename, dirname, join } from "path";
 
@@ -999,6 +999,36 @@ describe("buildClaudeArgs (TC1/TC2 — prompt-swallowing regression)", () => {
     expect(args[sepIdx + 1]).toBe("synapse pending coder-2");
     const dtIdx = args.indexOf("--disallowedTools");
     expect(args[dtIdx + 1]).toBe("AskUserQuestion,EnterPlanMode");
+  });
+});
+
+describe("DEFAULT_MODEL_BY_ROLE (per-role default model resolution)", () => {
+  test("each role resolves to the approved default model", () => {
+    expect(DEFAULT_MODEL_BY_ROLE["manager"]).toBe("opus");
+    expect(DEFAULT_MODEL_BY_ROLE["coder"]).toBe("sonnet");
+    expect(DEFAULT_MODEL_BY_ROLE["reviewer"]).toBe("opus");
+    expect(DEFAULT_MODEL_BY_ROLE["tester"]).toBe("sonnet");
+  });
+
+  test("buildClaudeArgs uses role default when no model flag given (coder=sonnet)", () => {
+    const args = buildClaudeArgs("sess-3", DEFAULT_MODEL_BY_ROLE["coder"], "synapse pending coder-1");
+    const modelIdx = args.indexOf("--model");
+    expect(modelIdx).toBeGreaterThan(-1);
+    expect(args[modelIdx + 1]).toBe("sonnet");
+  });
+
+  test("buildClaudeArgs uses role default when no model flag given (reviewer=opus)", () => {
+    const args = buildClaudeArgs("sess-4", DEFAULT_MODEL_BY_ROLE["reviewer"], "synapse pending reviewer");
+    const modelIdx = args.indexOf("--model");
+    expect(modelIdx).toBeGreaterThan(-1);
+    expect(args[modelIdx + 1]).toBe("opus");
+  });
+
+  test("explicit --model overrides the role default", () => {
+    const args = buildClaudeArgs("sess-5", "haiku", "synapse pending coder-1");
+    const modelIdx = args.indexOf("--model");
+    expect(modelIdx).toBeGreaterThan(-1);
+    expect(args[modelIdx + 1]).toBe("haiku");
   });
 });
 

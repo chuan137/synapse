@@ -64,7 +64,15 @@ function installSkills(targetDir: string): void {
 export const MESSAGE_TYPES = new Set(["TASK", "QUESTION", "PROGRESS", "REPLY"]);
 
 export const DEFAULT_TASK_TEMPLATE = "templates/task.example.yml";
-export const DEFAULT_MANAGER_MODEL = "opus";
+
+export const DEFAULT_MODEL_BY_ROLE: Record<string, string> = {
+  manager: "opus",
+  coder: "sonnet",
+  reviewer: "opus",
+  tester: "sonnet",
+};
+
+export const DEFAULT_MANAGER_MODEL = DEFAULT_MODEL_BY_ROLE["manager"];
 
 export const c = {
   reset: "\x1b[0m",
@@ -974,7 +982,7 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
 
   const sessionId = crypto.randomUUID();
 
-  const effectiveModel = flags["model"] ?? (role === "manager" ? DEFAULT_MANAGER_MODEL : undefined);
+  const effectiveModel = flags["model"] ?? DEFAULT_MODEL_BY_ROLE[role];
   const agent: AgentConfig = { role, name, model: effectiveModel, focus: flags["focus"] };
 
   const absCwd = resolve(defaultAgentDir(runFolderName, name));
