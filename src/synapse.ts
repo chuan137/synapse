@@ -110,9 +110,46 @@ async function resolveBody(
   rawIndex: number,
 ): Promise<string> {
   const src = context.flags["body-file"];
-  if (!src) return context.positional[rawIndex];
-  const text = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
-  return text.trimEnd();
+  if (src) {
+    const text = src === "-" ? await Bun.stdin.text() : await Bun.file(src).text();
+    return text.trimEnd();
+  }
+
+  const body = context.positional[rawIndex];
+
+  // Shell-mangling detection — only for inline positional bodies.
+  //
+  // Odd backtick count: shell consumed one command-substitution boundary;
+  // the content between the pair was evaluated and removed. Hard-error so
+  // the caller re-sends via --body-file.
+  const backtickCount = (body?.match(/`/g) ?? []).length;
+  if (backtickCount % 2 !== 0) {
+    fail(
+      `body has an odd number of backticks (${backtickCount}) — shell likely swallowed a command substitution.\n` +
+        `Re-send using a quoted heredoc and --body-file to avoid interpolation:\n` +
+        `  synapse reply <id> --body-file - <<'EOF'\n` +
+        `  <your message here>\n` +
+        `  EOF`,
+    );
+  }
+
+  // Code-token-without-backtick warning: the body references code identifiers
+  // (file references like foo.ts:42 or function calls like foo_bar()) but has
+  // zero backticks. Backticks are almost always present in technical messages
+  // that cite code — zero backticks in such a message strongly suggests they
+  // were silently eaten in pairs by the shell.
+  if (body && backtickCount === 0) {
+    const CODE_TOKEN = /\w+\.(ts|go|c|h|py|md|sh|json|yaml):\d+|\w+_\w+\(\)/;
+    if (CODE_TOKEN.test(body)) {
+      process.stderr.write(
+        `warning: body references code identifiers but contains no backticks — ` +
+          `shell may have silently stripped them in matching pairs.\n` +
+          `If inline code was lost, re-send via --body-file to avoid interpolation.\n`,
+      );
+    }
+  }
+
+  return body;
 }
 
 // Resolve which run a command acts on: explicit --run-id → SYNAPSE_RUN_ID → null.

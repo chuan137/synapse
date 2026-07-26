@@ -551,6 +551,52 @@ describe("intent verbs", () => {
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("line breaks");
   });
+
+  // Shell-mangling detection tests (resolveBody inline path only).
+
+  test("rejects a body with an odd number of backticks", () => {
+    // Three backticks: shell ate one matching pair and left a lone survivor.
+    const r = run(["reply", "1", "模型加密一次（`.mdl` 全网共享），`rknn_init 那行不用改"], {
+      SYNAPSE_AGENT: "coder-1",
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("odd number of backticks");
+    expect(r.stderr).toContain("--body-file");
+    expect(r.stderr).toContain("EOF");
+  });
+
+  test("warns (exit 0) when body has code tokens but zero backticks", () => {
+    // This reproduces the real incident: backticks were eaten in pairs by the
+    // shell, leaving code references stripped but no lone backtick survivor.
+    const r = run(
+      ["task", "coder-1", "模型加密一次（全网共享），rknn_init() 那行不用改", "--from", "manager"],
+    );
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toContain("warning");
+    expect(r.stderr).toContain("backtick");
+    expect(r.stderr).toContain("--body-file");
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg).toBeTruthy();
+  });
+
+  test("does not warn for a plain short body with no code tokens", () => {
+    const r = run(["task", "coder-1", "review: LGTM — 3/3 green", "--from", "manager"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toBe("");
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg).toBeTruthy();
+  });
+
+  test("--body-file bypasses shell-mangling detection entirely", () => {
+    const bodyFile = join(dir, "body.txt");
+    writeFileSync(bodyFile, "模型加密一次（`.mdl` 全网共享），`rknn_init` 那行不用改\n");
+    const r = run(["task", "coder-1", "--from", "manager", "--body-file", bodyFile]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toBe("");
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg).toBeTruthy();
+    expect(msg.body).toContain("`rknn_init`");
+  });
 });
 
 describe("status", () => {
