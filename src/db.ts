@@ -19,7 +19,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 //     subtask flags for the `synapse done` completion gate).
 // v15 added plan_steps table and last_notified_at column to agents.
 // v16 added workdir column to runs (absolute path to code repo, separate from synapse project root).
-export const SCHEMA_VERSION = 16;
+// v17 added pending_nudged_at and pending_nudge_sig columns to agents (DB-backed pending-nudge cooldown).
+export const SCHEMA_VERSION = 17;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -216,6 +217,15 @@ export function initDb() {
       db.close();
       currentVersion = 16;
       console.log(`synapse: migrated ${path} from schema v15 to v16`);
+    }
+    if (hasTables && currentVersion === 16) {
+      // Migrate v16 → v17: add pending_nudged_at and pending_nudge_sig to agents
+      // (DB-backed pending-nudge cooldown shared across monitor, hook, and send).
+      migrate(path, 16, 17, (db) => {
+        addColumn(db, "agents", "pending_nudged_at", "TEXT");
+        addColumn(db, "agents", "pending_nudge_sig", "TEXT");
+      });
+      currentVersion = 17;
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

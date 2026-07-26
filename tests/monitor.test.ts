@@ -608,6 +608,87 @@ describe("monitor: live event-driven loop (no --once)", () => {
   }, 15000);
 });
 
+describe("monitor: DB-backed pending-nudge cooldown (V3/V4/V6)", () => {
+  beforeEach(() => {
+    run(["init"]);
+    new Database(dbFile).run("INSERT INTO runs (session, goal, status) VALUES ('team', 'test', 'running')");
+    run(["register", "coder-1", "coder", "sess-coder"]);
+    new Database(dbFile).run("UPDATE agents SET status='busy' WHERE window_name='coder-1'");
+    writeTranscript("sess-coder", "end_turn", 5000);
+  });
+
+  // V6: hook-stop routes through nudgeForPendingWork, writes pending_nudged_at/sig,
+  // and a second immediate hook-stop for the same pending set does NOT re-nudge.
+  test("V6: hook-stop writes DB cooldown; second call for same set is suppressed", () => {
+    run(["send", "coder-1", "TASK", "v6 task", "--from", "manager"]);
+
+    const r1 = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r1.exitCode).toBe(0);
+
+    const nudges1 = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(nudges1.length).toBe(1);
+
+    const agent1 = openDb().query("SELECT pending_nudged_at, pending_nudge_sig FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(agent1.pending_nudged_at).not.toBeNull();
+    expect(agent1.pending_nudge_sig).not.toBeNull();
+
+    // Second hook-stop immediately after — same pending set, cooldown should suppress.
+    const r2 = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r2.exitCode).toBe(0);
+
+    const nudges2 = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(nudges2.length).toBe(1); // still only 1 — cooldown suppressed the second
+  });
+
+  // V3: sweep (--once) + hook-stop for the same idle agent + same pending set = 1 nudge total.
+  test("V3: sweep --once + hook-stop for same pending set yields exactly one nudge", () => {
+    run(["send", "coder-1", "TASK", "v3 task", "--from", "manager"]);
+
+    // First trigger: sweep --once
+    run(["monitor", "--once", "--debounce", "100"]);
+    const after1 = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(after1.length).toBe(1);
+
+    // Second trigger: hook-stop — same pending set, cooldown should suppress.
+    run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    const after2 = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(after2.length).toBe(1); // still 1 — cross-process DB cooldown suppressed the hook
+  });
+
+  // V4: a new pending message (changed id set) bypasses DB cooldown and re-nudges.
+  test("V4: new pending message changes signature and bypasses DB cooldown", () => {
+    run(["send", "coder-1", "TASK", "v4 first task", "--from", "manager"]);
+
+    // First nudge via sweep.
+    run(["monitor", "--once", "--debounce", "100"]);
+    const after1 = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(after1.length).toBe(1);
+
+    // New message — id set changes, cooldown should not suppress.
+    run(["send", "coder-1", "TASK", "v4 second task", "--from", "manager"]);
+    run(["monitor", "--once", "--debounce", "100"]);
+
+    const after2 = tmuxLogContents()
+      .split("\n")
+      .filter((l) => l.includes("send-keys -t team:coder-1 -l -- synapse pending coder-1"));
+    expect(after2.length).toBe(2);
+
+    // DB signature should reflect the updated (larger) id set.
+    const agent = openDb().query("SELECT pending_nudge_sig FROM agents WHERE window_name='coder-1'").get() as any;
+    expect(agent.pending_nudge_sig).toContain(","); // two ids joined
+  });
+});
+
 describe("monitor: live process lock", () => {
   beforeEach(() => {
     run(["init"]);
@@ -844,8 +925,10 @@ describe("hook-stop: delivery (V-4)", () => {
     const log = tmuxLogContents();
     expect(log).toContain("send-keys -t team:coder-1 -l -- synapse pending coder-1");
 
-    const agent = openDb().query("SELECT status FROM agents WHERE window_name='coder-1'").get() as any;
+    const agent = openDb().query("SELECT status, pending_nudged_at, pending_nudge_sig FROM agents WHERE window_name='coder-1'").get() as any;
     expect(agent.status).not.toBe("idle");
+    expect(agent.pending_nudged_at).not.toBeNull();
+    expect(agent.pending_nudge_sig).not.toBeNull();
   });
 
   test("with no pending work: sets status to idle, no tmux nudge", () => {

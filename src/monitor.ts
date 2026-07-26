@@ -393,7 +393,6 @@ export function nudgeForPendingWork(
   windowName: string,
   runId: number,
   log: (s: string) => void,
-  pendingNudgeSentAt: Map<string, number>,
 ) {
   const rows = db
     .query(
@@ -403,17 +402,29 @@ export function nudgeForPendingWork(
     .all(windowName, runId) as any[];
   if (rows.length === 0) return false;
 
-  // Key on the sorted set of pending message IDs: a genuinely new message
-  // changes the key and bypasses the cooldown immediately.
-  const key = `${windowName}:${rows.map((r) => r.id).join(",")}`;
-  const lastSent = pendingNudgeSentAt.get(key) ?? 0;
-  if (Date.now() - lastSent < PENDING_NUDGE_COOLDOWN_MS) {
+  // Signature = sorted pending-id set. A genuinely new message changes the
+  // signature and bypasses the cooldown regardless of elapsed time.
+  const sig = rows.map((r) => r.id).join(",");
+  const agent = db
+    .query("SELECT pending_nudged_at, pending_nudge_sig FROM agents WHERE window_name=? AND run_id=?")
+    .get(windowName, runId) as any;
+  const lastSig = agent?.pending_nudge_sig ?? null;
+  const lastTs = agent?.pending_nudged_at ? new Date(agent.pending_nudged_at + "Z").getTime() : 0;
+  if (sig === lastSig && Date.now() - lastTs < PENDING_NUDGE_COOLDOWN_MS) {
     log(`  ${windowName}: pending-nudge suppressed (cooldown)`);
     return false;
   }
 
-  nudgeAgent(tmuxSession, windowName, `synapse pending ${windowName}`, log);
-  pendingNudgeSentAt.set(key, Date.now());
+  const res = tmuxSendKeys(tmuxSession, windowName, `synapse pending ${windowName}`);
+  if (!res.ok) {
+    log(`  ${windowName}: pending-nudge FAILED: ${res.error}`);
+    return false;
+  }
+  log(`  ${windowName}: nudged (synapse pending ${windowName})`);
+  db.run(
+    "UPDATE agents SET pending_nudged_at=?, pending_nudge_sig=? WHERE window_name=? AND run_id=?",
+    [nowIso(), sig, windowName, runId],
+  );
   return true;
 }
 
@@ -625,7 +636,6 @@ function pollOnce(
     .all(...(runId !== undefined ? [runId] : [])) as any[];
   const agentStatuses = new Map<string, AgentStatus>();
   const unknownSinceMs = new Map<string, number>();
-  const pendingNudgeSentAt = new Map<string, number>();
   for (const agent of agents) {
     if (agent.window_name === "operator") continue;
     const result = refreshAgentState(
@@ -641,7 +651,7 @@ function pollOnce(
     );
     if (result?.status === "idle") {
       if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, log)) {
-        nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, log, pendingNudgeSentAt);
+        nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, log);
       }
     }
   }
@@ -661,7 +671,6 @@ function runLiveMonitor(
   const agentStatuses = new Map<string, AgentStatus>();
   const unknownSinceMs = new Map<string, number>();
   const loggedTranscripts = new Set<string>(); // tracks agents whose transcript path was logged
-  const pendingNudgeSentAt = new Map<string, number>();
   let agents: any[] = [];
   const sourceLog = (source: "sweep") => (s: string) => log(`[${source}] ${s}`);
 
@@ -724,10 +733,6 @@ function runLiveMonitor(
       if (liveNames.has(name)) continue;
       agentStatuses.delete(name);
       unknownSinceMs.delete(name);
-      // Clear pending-nudge cooldown entries for this stopped agent.
-      for (const k of [...pendingNudgeSentAt.keys()]) {
-        if (k.startsWith(`${name}:`)) pendingNudgeSentAt.delete(k);
-      }
       sweepLog(`  ${name}: stopped, cleanup`);
     }
     for (const agent of agents) {
@@ -751,7 +756,7 @@ function runLiveMonitor(
       );
       if (agentState?.status === "idle") {
         if (nudgeForMissingStatusBeforeMoreWork(db, tmuxSession, agent, agent.run_id, sweepLog)) {
-          nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog, pendingNudgeSentAt);
+          nudgeForPendingWork(db, tmuxSession, agent.window_name, agent.run_id, sweepLog);
         }
       }
     }

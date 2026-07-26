@@ -1269,12 +1269,14 @@ export function cmdHookStop(agentName: string, runId: number): void {
         [nowIso(), agentName, runId]);
     }
 
-    // Check for pending messages
+    // Check for pending messages — route through shared DB-cooled nudge so hook
+    // and sweep never double-nudge the same pending set. Returns false when
+    // cooldown suppressed the nudge or when there's no pending work at all.
     const hasPending = !!db.query(
       "SELECT 1 FROM messages WHERE status='pending' AND to_agent=? AND run_id=? LIMIT 1"
     ).get(agentName, runId);
     if (hasPending) {
-      nudgeAgent(tmuxSession, agentName, `synapse pending ${agentName}`, log);
+      nudgeForPendingWork(db, tmuxSession, agentName, runId, log);
       return;
     }
 

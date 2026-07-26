@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS agents (
   context_tokens  INTEGER,  -- last known total input context tokens, null if unknown
   sendback_nudged_at TEXT,  -- ISO timestamp of last send-back reminder; NULL = never nudged
   last_notified_at TEXT,    -- ISO timestamp of last hook-stop notification; NULL = never notified
+  pending_nudged_at TEXT,   -- ISO timestamp of last pending-work nudge; NULL = never nudged
+  pending_nudge_sig TEXT,   -- sorted pending-id set at last nudge; changed set bypasses cooldown
   UNIQUE(window_name, run_id)
 );
 
