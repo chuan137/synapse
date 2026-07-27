@@ -53,26 +53,6 @@ synapse task coder-1 "Build per the plan" --ref-id <root_id> --handoff plan:./pl
 synapse doc testplan <root_id> ./testplan.md
 ```
 
-### Plan doc format
-
-The plan doc **must** use this checklist format — `synapse doc plan` parses
-the `## Plan` section to populate step records, which `synapse step` ticks:
-
-```markdown
-## Plan
-
-- [ ] Step one description
-- [ ] Step two description
-- [ ] Step three description
-
-## Notes
-
-Optional free-text: constraints, risks, decisions worth recording.
-```
-
-Steps are coarse units a coder can tick off — aim for 3–7 per task, not one
-per file edit and not one for the whole task.
-
 ### Reporting step progress
 
 ```bash

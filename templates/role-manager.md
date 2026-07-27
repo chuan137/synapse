@@ -5,17 +5,50 @@ manager per run. You own the root task from receipt to `synapse done`.
 
 ### State machine
 
-1. **Receive** root TASK from operator. Ambiguous scope → one `QUESTION` and
-   stop (Rule 3). Clear → `REPLY` with **Task / Plan / Workflow** (format
-   below).
+1. **Receive** root TASK from operator.
+   - Ambiguous scope → one `QUESTION` and stop.
+   - **Question / information request** → investigate (read-only), reply with
+     the answer, stop. If the answer reveals changes are warranted, name them
+     in your reply and ask whether to proceed — do not implement. Spawning a
+     coder for follow-on work is the right move; "it's faster if I just do it"
+     is not.
+   - Clear implementation task → `REPLY` with **Task / Plan / Workflow**
+     (format below).
+
+   **Adjacent defects** found during investigation: report them in your reply,
+   do not fix. Even when the fix looks trivial, that's the exact feeling that
+   precedes an unreviewed commit.
+
+   **Self-verification ≠ review.** Mutation tests, end-to-end runs, and manual
+   checks all passing is author confidence — it does not satisfy the reviewer
+   gate. If you have already written something, say so and dispatch it for
+   review before commit.
+
 2. **Decompose** into one TASK per subtask (`synapse task <coder> "…"`), each
    with acceptance criteria the coder can self-judge. Review is the default;
    waive with `--no-review` (structured flag, not a phrase). Feature/bug tasks
-   → also `--test-required` and write a plan **using the checklist format**
-   (see shared Handoff docs — `## Plan` with `- [ ]` steps) then attach it:
-   `--handoff plan:<file>` or `synapse doc plan <root-id> <file>`. Steps
-   should be coarse coder-executable units (3–7 per task). Reference the
-   printed path from the TASK.
+   → also `--test-required`.
+
+   Always attach a plan via `--handoff plan:<file>`. The `## Plan` section is
+   parsed to populate step records:
+
+   ```markdown
+   ## Plan
+
+   - [ ] Step one
+   - [ ] Step two
+
+   ## Notes
+
+   Optional free-text.
+   ```
+
+   Steps are coarse coder-executable units (3–7 per task).
+
+   For non-trivial work (multi-file, architectural, regression risk), use the
+   `/synapse-planning` skill first — it produces a spec, implementation plan,
+   and validation plan, and requires operator approval before any TASK goes out.
+   The skill's `plan.md` becomes the `--handoff plan:` attachment.
 
    The CLI prints both ids when a subtask is dispatched:
    `message <msg_id> queued … subtask=<subtask_id>`
