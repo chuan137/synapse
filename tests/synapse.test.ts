@@ -78,7 +78,7 @@ describe("init", () => {
       .query("SELECT name FROM sqlite_master WHERE type='table'")
       .all()
       .map((row: any) => row.name);
-    expect(names).toEqual(expect.arrayContaining(["agents", "messages", "events"]));
+    expect(names).toEqual(expect.arrayContaining(["agents", "messages", "events", "subtasks"]));
   });
 
   test("stamps the DB with the current schema version", () => {
@@ -243,6 +243,48 @@ describe("init", () => {
     // Existing rows get NULL workdir
     const row = after.query("SELECT workdir FROM runs WHERE id=1").get() as any;
     expect(row.workdir).toBeNull();
+  });
+
+  test("migrates v17 DB by adding subtasks table", () => {
+    const db17 = openDbWritable();
+    db17.exec(`
+      CREATE TABLE agents (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        window_name TEXT NOT NULL, run_id INTEGER NOT NULL, role TEXT NOT NULL,
+        model TEXT, session_id TEXT, status TEXT NOT NULL DEFAULT 'unknown',
+        last_seen_at TEXT, context_tokens INTEGER, sendback_nudged_at TEXT,
+        last_notified_at TEXT, pending_nudged_at TEXT, pending_nudge_sig TEXT,
+        UNIQUE(window_name, run_id));
+      CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER, from_agent TEXT NOT NULL, to_agent TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'REPLY', ref_id INTEGER, body TEXT NOT NULL,
+        title TEXT, options TEXT, status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), delivered_at TEXT,
+        retry_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT,
+        review_waived INTEGER, test_required INTEGER);
+      CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent TEXT NOT NULL, type TEXT NOT NULL, summary TEXT NOT NULL,
+        run_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session TEXT NOT NULL, goal TEXT, workdir TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ended_at TEXT, session_killed_at TEXT);
+      CREATE TABLE plan_steps (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL, root_msg_id INTEGER NOT NULL,
+        step_index INTEGER NOT NULL, label TEXT NOT NULL,
+        completed_at TEXT, update_text TEXT,
+        UNIQUE(run_id, root_msg_id, step_index));
+      INSERT INTO runs (session, goal, status) VALUES ('t', 'g', 'running');
+    `);
+    db17.exec(`PRAGMA user_version=17;`);
+    db17.close();
+
+    run(["init"]);
+    const after = openDb();
+    const tables = after.query("SELECT name FROM sqlite_master WHERE type='table'").all().map((r: any) => r.name);
+    expect(tables).toContain("subtasks");
+    const cols = after.query("PRAGMA table_info(subtasks)").all().map((c: any) => (c as any).name);
+    expect(cols).toEqual(expect.arrayContaining(["id", "run_id", "task_msg_id", "review_waived", "test_required", "status"]));
   });
 });
 
@@ -1041,8 +1083,13 @@ function seedRun(): void {
 }
 function subtaskId(): number {
   return (openDb()
-    .query("SELECT id FROM messages WHERE type='TASK' AND from_agent='manager' AND to_agent='coder-1' ORDER BY id LIMIT 1")
+    .query("SELECT id FROM subtasks ORDER BY id LIMIT 1")
     .get() as any).id;
+}
+function subtaskMsgId(): number {
+  return (openDb()
+    .query("SELECT task_msg_id FROM subtasks ORDER BY id LIMIT 1")
+    .get() as any).task_msg_id;
 }
 
 describe("reply --handoff review (reviewer close-out)", () => {
@@ -1104,8 +1151,8 @@ describe("reply --handoff review (reviewer close-out)", () => {
 
   test("rejects a malformed --handoff (no kind:path)", () => {
     run(["send", "coder-1", "TASK", "x", "--from", "manager"]);
-    const S = subtaskId();
-    const r = run(["reply", String(S), "hi", "--handoff", "reviewonly"], { SYNAPSE_AGENT: "coder-1" });
+    const M = subtaskMsgId();
+    const r = run(["reply", String(M), "hi", "--handoff", "reviewonly"], { SYNAPSE_AGENT: "coder-1" });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("<kind>:<path>");
   });
@@ -1119,7 +1166,7 @@ describe("synapse doc (write-only artifact)", () => {
 
   test("writes the canonical file and sends no message", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
-    const S = subtaskId();
+    const S = subtaskMsgId();
     const before = (openDb().query("SELECT COUNT(*) n FROM messages").get() as any).n;
     const tp = join(dir, "tp.md");
     writeFileSync(tp, "case 1: happy path\n");
@@ -1181,7 +1228,8 @@ describe("done completion gate", () => {
   test("blocks closing while a reported subtask is unreviewed", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
     const S = subtaskId();
-    run(["reply", String(S), "done, merged", "--from", "coder-1"]);
+    const M = subtaskMsgId();
+    run(["reply", String(M), "done, merged", "--from", "coder-1"]);
     const r = run(["done", "1", "--reason", "shipit", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("not reviewed");
@@ -1190,7 +1238,8 @@ describe("done completion gate", () => {
   test("--no-review lets a reported subtask close without a reviewer", () => {
     run(["send", "coder-1", "TASK", "trivial", "--from", "manager", "--no-review"]);
     const S = subtaskId();
-    run(["reply", String(S), "done", "--from", "coder-1"]);
+    const M = subtaskMsgId();
+    run(["reply", String(M), "done", "--from", "coder-1"]);
     const r = run(["done", "1", "--reason", "shipit", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
     expect((openDb().query("SELECT status FROM runs WHERE id=1").get() as any).status).toBe("completed");
@@ -1199,17 +1248,39 @@ describe("done completion gate", () => {
   test("closes once the chain is reported and reviewed via reply --handoff review:", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
     const S = subtaskId();
-    run(["reply", String(S), "done", "--from", "coder-1"]);
+    const M = subtaskMsgId();
+    run(["reply", String(M), "done", "--from", "coder-1"]);
     run(["send", "reviewer", "TASK", "review", "--from", "coder-1", "--ref-id", String(S)]);
     const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
     const cf = join(dir, "rev.md");
     writeFileSync(cf, "LGTM\n");
-    // No manager fan-out anymore; the reviewer's REPLY on the review TASK is the
-    // reply-pair the gate accepts (hasOpenChains: reviewedByReplyPair).
     run(["reply", String(R), "LGTM", "--handoff", `review:${cf}`], { SYNAPSE_AGENT: "reviewer" });
     const r = run(["done", "1", "--reason", "shipit", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
     expect((openDb().query("SELECT status FROM runs WHERE id=1").get() as any).status).toBe("completed");
+  });
+
+  test("relay TASK (manager follow-up to coder) does not block run closure", () => {
+    // The bug: manager sends a second TASK to the coder (e.g. "please merge")
+    // after review. Old code treated every manager→coder TASK as a new work
+    // item requiring its own review cycle. New code skips subtask creation when
+    // the TASK carries a ref_id pointing at a prior manager→coder TASK.
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskId();
+    const M = subtaskMsgId();
+    run(["reply", String(M), "done", "--from", "coder-1"]);
+    run(["send", "reviewer", "TASK", "review", "--from", "coder-1", "--ref-id", String(S)]);
+    const R = (openDb().query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
+    const cf = join(dir, "rev.md");
+    writeFileSync(cf, "LGTM\n");
+    run(["reply", String(R), "LGTM", "--handoff", `review:${cf}`], { SYNAPSE_AGENT: "reviewer" });
+    // Relay TASK: ref_id points at the original coder TASK — no subtask row created
+    run(["send", "coder-1", "TASK", "please merge now", "--from", "manager", "--ref-id", String(M)]);
+    expect((openDb().query("SELECT COUNT(*) n FROM subtasks").get() as any).n).toBe(1);
+    const relay_M = (openDb().query("SELECT id FROM messages WHERE body='please merge now'").get() as any).id;
+    run(["reply", String(relay_M), "merged", "--from", "coder-1"]);
+    const r = run(["done", "1", "--reason", "shipit", "--status", "done"], { SYNAPSE_AGENT: "manager" });
+    expect(r.exitCode).toBe(0);
   });
 
   test("--force closes past an open chain and logs the override to events", () => {
@@ -1255,23 +1326,23 @@ describe("done gate: worktree merge evidence", () => {
     new Database(pdb).run("INSERT INTO runs (session, goal, status) VALUES ('t', 'g', 'running')");
   });
 
-  // Seeds a fully reported + reviewed subtask (DB chain complete) and returns S.
+  // Seeds a fully reported + reviewed subtask (DB chain complete) and returns subtask id.
   function reviewedSubtask(): number {
     prun(["send", "coder-1", "TASK", "work", "--from", "manager"]);
-    const S = (new Database(pdb, { readonly: true })
-      .query("SELECT id FROM messages WHERE to_agent='coder-1' AND type='TASK'").get() as any).id;
-    prun(["reply", String(S), "done", "--from", "coder-1"]);
+    const db = new Database(pdb, { readonly: true });
+    const S = (db.query("SELECT id FROM subtasks ORDER BY id LIMIT 1").get() as any).id;
+    const M = (db.query("SELECT task_msg_id FROM subtasks ORDER BY id LIMIT 1").get() as any).task_msg_id;
+    prun(["reply", String(M), "done", "--from", "coder-1"]);
     prun(["send", "reviewer", "TASK", "rev", "--from", "coder-1", "--ref-id", String(S)]);
     const R = (new Database(pdb, { readonly: true })
       .query("SELECT id FROM messages WHERE to_agent='reviewer' AND type='TASK'").get() as any).id;
     prun(["reply", String(R), "LGTM", "--from", "reviewer"], { SYNAPSE_RUN_ID: "1" });
-    prun(["send", "manager", "PROGRESS", "LGTM", "--from", "reviewer", "--ref-id", String(S)], { SYNAPSE_RUN_ID: "1" });
     return S;
   }
 
-  test("blocks when a task-<S> branch is unmerged into main", () => {
+  test("blocks when a subtask-<S> branch is unmerged into main", () => {
     const S = reviewedSubtask();
-    git(["checkout", "-q", "-b", `task-${S}`]);
+    git(["checkout", "-q", "-b", `subtask-${S}`]);
     writeFileSync(join(proj, "f.txt"), "x\n");
     git(["add", "f.txt"]);
     git(["commit", "-q", "-m", "wip"]);
@@ -1279,20 +1350,20 @@ describe("done gate: worktree merge evidence", () => {
 
     const r = prun(["done", "1", "--reason", "x", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr).toContain(`task-${S}`);
+    expect(r.stderr).toContain(`subtask-${S}`);
     expect(r.stderr).toContain("not merged into main");
     expect(pquery("SELECT status FROM runs WHERE id=1").status).toBe("running");
   });
 
   test("closes once the branch is merged and removed", () => {
     const S = reviewedSubtask();
-    git(["checkout", "-q", "-b", `task-${S}`]);
+    git(["checkout", "-q", "-b", `subtask-${S}`]);
     writeFileSync(join(proj, "f.txt"), "x\n");
     git(["add", "f.txt"]);
     git(["commit", "-q", "-m", "wip"]);
     git(["checkout", "-q", "main"]);
-    git(["merge", "-q", "--ff-only", `task-${S}`]);
-    git(["branch", "-q", "-D", `task-${S}`]);
+    git(["merge", "-q", "--ff-only", `subtask-${S}`]);
+    git(["branch", "-q", "-D", `subtask-${S}`]);
 
     const r = prun(["done", "1", "--reason", "x", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
@@ -1301,7 +1372,7 @@ describe("done gate: worktree merge evidence", () => {
 
   test("blocks when a leftover worktree dir remains", () => {
     const S = reviewedSubtask();
-    mkdirSync(join(proj, ".worktrees", `task-${S}`), { recursive: true });
+    mkdirSync(join(proj, ".worktrees", `subtask-${S}`), { recursive: true });
     const r = prun(["done", "1", "--reason", "x", "--status", "done"], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("not removed");
@@ -1310,7 +1381,7 @@ describe("done gate: worktree merge evidence", () => {
 
   test("--force overrides a leftover branch and closes the run", () => {
     const S = reviewedSubtask();
-    git(["checkout", "-q", "-b", `task-${S}`]);
+    git(["checkout", "-q", "-b", `subtask-${S}`]);
     writeFileSync(join(proj, "f.txt"), "x\n");
     git(["add", "f.txt"]);
     git(["commit", "-q", "-m", "wip"]);
@@ -1366,7 +1437,7 @@ describe("synapse doc plan (step parsing + DB population)", () => {
     const planFile = join(dir, "plan.md");
     writeFileSync(planFile, `## Plan\n\n- [ ] Implement feature\n- [ ] Write tests\n- [ ] Update docs\n`);
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
-    const S = subtaskId();
+    const S = subtaskMsgId();
     const r = run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
     const rows = openDb().query("SELECT * FROM plan_steps WHERE root_msg_id=? ORDER BY step_index").all(S) as any[];
@@ -1381,7 +1452,7 @@ describe("synapse doc plan (step parsing + DB population)", () => {
     const planFile = join(dir, "plan.md");
     writeFileSync(planFile, `## Notes\n\nJust some notes.\n`);
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
-    const S = subtaskId();
+    const S = subtaskMsgId();
     const r = run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
     expect(r.exitCode).toBe(0);
     expect(existsSync(join(dir, "artifacts", "run-1", `${S}-plan.md`))).toBe(true);
@@ -1400,7 +1471,7 @@ describe("synapse step", () => {
     const planFile = join(dir, "plan.md");
     writeFileSync(planFile, `## Plan\n\n- [ ] Step one\n- [ ] Step two\n`);
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
-    const S = subtaskId();
+    const S = subtaskMsgId();
     run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
     return S;
   }
@@ -1438,7 +1509,7 @@ describe("synapse step", () => {
 
   test("fails when plan has no steps (no plan doc written)", () => {
     run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
-    const S = subtaskId();
+    const S = subtaskMsgId();
     const r = run(["step", String(S), "1", "update"], { SYNAPSE_AGENT: "coder-1" });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("no step 1");

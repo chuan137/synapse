@@ -20,7 +20,8 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v15 added plan_steps table and last_notified_at column to agents.
 // v16 added workdir column to runs (absolute path to code repo, separate from synapse project root).
 // v17 added pending_nudged_at and pending_nudge_sig columns to agents (DB-backed pending-nudge cooldown).
-export const SCHEMA_VERSION = 17;
+// v18 added subtasks table: first-class work items keyed by subtask id, separate from message ids.
+export const SCHEMA_VERSION = 18;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -66,6 +67,39 @@ function failInit(msg: string): never {
   process.exit(1);
 }
 
+function hasColumn(db: Database, table: string, column: string): boolean {
+  return (db.query(`PRAGMA table_info(${table})`).all() as any[]).some(
+    (c) => c.name === column,
+  );
+}
+
+// Adds a column only if it is missing, so a migration that half-applied (columns
+// added but user_version never stamped) can be re-run instead of dying on
+// "duplicate column name".
+function addColumn(db: Database, table: string, column: string, decl: string) {
+  if (!hasColumn(db, table, column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl};`);
+  }
+}
+
+// Runs one migration step and stamps user_version in a single transaction, so
+// the schema and its version stamp can never diverge.
+function migrate(path: string, from: number, to: number, apply: (db: Database) => void) {
+  const db = connect(true);
+  try {
+    db.exec("BEGIN");
+    apply(db);
+    db.exec(`PRAGMA user_version=${to};`);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    db.close();
+    failInit(`migration v${from} → v${to} failed on ${path}: ${err}`);
+  }
+  db.close();
+  console.log(`synapse: migrated ${path} from schema v${from} to v${to}`);
+}
+
 export function initDb() {
   const path = dbPath();
   const dataDir = dirname(path);
@@ -85,138 +119,98 @@ export function initDb() {
       // Migrate v2 → v3: add run_id column to messages (non-destructive).
       // v3 → v4 cannot use ALTER TABLE (agents PRIMARY KEY changed) — falls through
       // to the backup+rebuild path below.
-      const db = connect(true);
-      db.exec(`ALTER TABLE messages ADD COLUMN run_id INTEGER;`);
-      db.exec(`PRAGMA user_version=3;`);
-      db.close();
+      migrate(path, 2, 3, (db) => addColumn(db, "messages", "run_id", "INTEGER"));
       currentVersion = 3;
-      console.log(`synapse: migrated ${path} from schema v2 to v3`);
       // Fall through: if target is v4, the version<SCHEMA_VERSION branch below fires next.
     }
     if (hasTables && currentVersion === 4) {
       // Migrate v4 → v5: add retry_count and next_retry_at columns to messages (non-destructive).
-      const db = connect(true);
-      db.exec(`ALTER TABLE messages ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;`);
-      db.exec(`ALTER TABLE messages ADD COLUMN next_retry_at TEXT;`);
-      db.exec(`PRAGMA user_version=5;`);
-      db.close();
+      migrate(path, 4, 5, (db) => {
+        addColumn(db, "messages", "retry_count", "INTEGER NOT NULL DEFAULT 0");
+        addColumn(db, "messages", "next_retry_at", "TEXT");
+      });
       currentVersion = 5;
-      console.log(`synapse: migrated ${path} from schema v4 to v5`);
     }
     if (hasTables && currentVersion === 5) {
       // Migrate v5 → v6: add options column to messages (non-destructive).
-      const db = connect(true);
-      db.exec(`ALTER TABLE messages ADD COLUMN options TEXT;`);
-      db.exec(`PRAGMA user_version=6;`);
-      db.close();
+      migrate(path, 5, 6, (db) => addColumn(db, "messages", "options", "TEXT"));
       currentVersion = 6;
-      console.log(`synapse: migrated ${path} from schema v5 to v6`);
     }
     if (hasTables && currentVersion === 6) {
       // Migrate v6 → v8: remember whether a terminal run's tmux session was killed.
-      const db = connect(true);
-      db.exec(`ALTER TABLE runs ADD COLUMN session_killed_at TEXT;`);
-      db.exec(`PRAGMA user_version=8;`);
-      db.close();
+      migrate(path, 6, 8, (db) => addColumn(db, "runs", "session_killed_at", "TEXT"));
       currentVersion = 8;
-      console.log(`synapse: migrated ${path} from schema v6 to v8`);
     }
     if (hasTables && currentVersion === 7) {
       // Migrate v7 → v8: replace the intermediate column with explicit session state.
-      const db = connect(true);
-      db.exec(`ALTER TABLE runs RENAME COLUMN acknowledged_at TO session_killed_at;`);
-      db.exec(`PRAGMA user_version=8;`);
-      db.close();
+      migrate(path, 7, 8, (db) => {
+        if (!hasColumn(db, "runs", "session_killed_at")) {
+          db.exec(`ALTER TABLE runs RENAME COLUMN acknowledged_at TO session_killed_at;`);
+        }
+      });
       currentVersion = 8;
-      console.log(`synapse: migrated ${path} from schema v7 to v8`);
     }
     if (hasTables && currentVersion === 8) {
       // Migrate v8 → v9: add title column to messages (non-destructive).
-      const db = connect(true);
-      db.exec(`ALTER TABLE messages ADD COLUMN title TEXT;`);
-      db.exec(`PRAGMA user_version=9;`);
-      db.close();
+      migrate(path, 8, 9, (db) => addColumn(db, "messages", "title", "TEXT"));
       currentVersion = 9;
-      console.log(`synapse: migrated ${path} from schema v8 to v9`);
     }
     if (hasTables && currentVersion === 9) {
       // Migrate v9 → v10: add run_id to events for manager activity visibility.
-      const db = connect(true);
-      db.exec(`ALTER TABLE events ADD COLUMN run_id INTEGER;`);
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);`);
-      db.exec(`PRAGMA user_version=10;`);
-      db.close();
+      migrate(path, 9, 10, (db) => {
+        addColumn(db, "events", "run_id", "INTEGER");
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);`);
+      });
       currentVersion = 10;
-      console.log(`synapse: migrated ${path} from schema v9 to v10`);
     }
     if (hasTables && currentVersion === 10) {
       // Migrate v10 → v11: add model column to agents (non-destructive).
-      const db = connect(true);
-      db.exec(`ALTER TABLE agents ADD COLUMN model TEXT;`);
-      db.exec(`PRAGMA user_version=11;`);
-      db.close();
+      migrate(path, 10, 11, (db) => addColumn(db, "agents", "model", "TEXT"));
       currentVersion = 11;
-      console.log(`synapse: migrated ${path} from schema v10 to v11`);
     }
     if (hasTables && currentVersion === 11) {
       // Migrate v11 → v12: add context_tokens column to agents (non-destructive).
-      const db = connect(true);
-      db.exec(`ALTER TABLE agents ADD COLUMN context_tokens INTEGER;`);
-      db.exec(`PRAGMA user_version=12;`);
-      db.close();
+      migrate(path, 11, 12, (db) => addColumn(db, "agents", "context_tokens", "INTEGER"));
       currentVersion = 12;
-      console.log(`synapse: migrated ${path} from schema v11 to v12`);
     }
     if (hasTables && currentVersion === 12) {
       // Migrate v12 → v13: add sendback_nudged_at column to agents (non-destructive).
-      const db = connect(true);
-      db.exec(`ALTER TABLE agents ADD COLUMN sendback_nudged_at TEXT;`);
-      db.exec(`PRAGMA user_version=13;`);
-      db.close();
+      migrate(path, 12, 13, (db) => addColumn(db, "agents", "sendback_nudged_at", "TEXT"));
       currentVersion = 13;
-      console.log(`synapse: migrated ${path} from schema v12 to v13`);
     }
     if (hasTables && currentVersion === 13) {
       // Migrate v13 → v14: add review_waived and test_required columns to
       // messages (non-destructive) for the done completion gate.
-      const db = connect(true);
-      db.exec(`ALTER TABLE messages ADD COLUMN review_waived INTEGER;`);
-      db.exec(`ALTER TABLE messages ADD COLUMN test_required INTEGER;`);
-      db.exec(`PRAGMA user_version=14;`);
-      db.close();
+      migrate(path, 13, 14, (db) => {
+        addColumn(db, "messages", "review_waived", "INTEGER");
+        addColumn(db, "messages", "test_required", "INTEGER");
+      });
       currentVersion = 14;
-      console.log(`synapse: migrated ${path} from schema v13 to v14`);
     }
     if (hasTables && currentVersion === 14) {
       // Migrate v14 → v15: add plan_steps table and last_notified_at to agents.
-      const db = connect(true);
-      db.exec(`ALTER TABLE agents ADD COLUMN last_notified_at TEXT;`);
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS plan_steps (
-          id          INTEGER PRIMARY KEY AUTOINCREMENT,
-          run_id      INTEGER NOT NULL,
-          root_msg_id INTEGER NOT NULL,
-          step_index  INTEGER NOT NULL,
-          label       TEXT NOT NULL,
-          completed_at TEXT,
-          update_text TEXT,
-          UNIQUE(run_id, root_msg_id, step_index)
-        );
-      `);
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_plan_steps_root ON plan_steps(run_id, root_msg_id);`);
-      db.exec(`PRAGMA user_version=15;`);
-      db.close();
+      migrate(path, 14, 15, (db) => {
+        addColumn(db, "agents", "last_notified_at", "TEXT");
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS plan_steps (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id      INTEGER NOT NULL,
+            root_msg_id INTEGER NOT NULL,
+            step_index  INTEGER NOT NULL,
+            label       TEXT NOT NULL,
+            completed_at TEXT,
+            update_text TEXT,
+            UNIQUE(run_id, root_msg_id, step_index)
+          );
+        `);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_plan_steps_root ON plan_steps(run_id, root_msg_id);`);
+      });
       currentVersion = 15;
-      console.log(`synapse: migrated ${path} from schema v14 to v15`);
     }
     if (hasTables && currentVersion === 15) {
       // Migrate v15 → v16: add workdir column to runs (non-destructive).
-      const db = connect(true);
-      db.exec(`ALTER TABLE runs ADD COLUMN workdir TEXT;`);
-      db.exec(`PRAGMA user_version=16;`);
-      db.close();
+      migrate(path, 15, 16, (db) => addColumn(db, "runs", "workdir", "TEXT"));
       currentVersion = 16;
-      console.log(`synapse: migrated ${path} from schema v15 to v16`);
     }
     if (hasTables && currentVersion === 16) {
       // Migrate v16 → v17: add pending_nudged_at and pending_nudge_sig to agents
@@ -226,6 +220,26 @@ export function initDb() {
         addColumn(db, "agents", "pending_nudge_sig", "TEXT");
       });
       currentVersion = 17;
+    }
+    if (hasTables && currentVersion === 17) {
+      // Migrate v17 → v18: add subtasks table (first-class work items, separate
+      // from message ids, so the done gate doesn't infer topology from ref_id).
+      migrate(path, 17, 18, (db) => {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS subtasks (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id        INTEGER NOT NULL,
+            title         TEXT,
+            task_msg_id   INTEGER NOT NULL,
+            review_waived INTEGER DEFAULT 0,
+            test_required INTEGER DEFAULT 0,
+            status        TEXT NOT NULL DEFAULT 'open'
+          );
+        `);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_run ON subtasks(run_id);`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_task_msg ON subtasks(task_msg_id);`);
+      });
+      currentVersion = 18;
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

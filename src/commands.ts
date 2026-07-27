@@ -236,10 +236,30 @@ export function cmdSend(
       testRequired ? 1 : null,
     ],
   );
+  const msgId = result.lastInsertRowid as number;
+
+  // Create a subtask row for new manager→coder TASKs. Relay TASKs (where
+  // ref_id points to a prior manager→coder TASK in the same run) are follow-up
+  // instructions, not new work items, so they get no subtask row and are
+  // invisible to the completion gate.
+  let subtaskId: number | null = null;
+  if (type === "TASK" && frm === "manager" && /^coder/.test(to) && resolvedRunId !== null) {
+    const isRelay = refId !== null && refId !== undefined && !!db.query(
+      `SELECT 1 FROM messages WHERE id=? AND type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%' LIMIT 1`,
+    ).get(refId);
+    if (!isRelay) {
+      const sub = db.run(
+        `INSERT INTO subtasks (run_id, task_msg_id, review_waived, test_required) VALUES (?, ?, ?, ?)`,
+        [resolvedRunId, msgId, reviewWaived ? 1 : 0, testRequired ? 1 : 0],
+      );
+      subtaskId = sub.lastInsertRowid as number;
+    }
+  }
+
   console.log(
-    `synapse: message ${result.lastInsertRowid} queued (${frm} -> ${to}, ${type}${
+    `synapse: message ${msgId} queued (${frm} -> ${to}, ${type}${
       refId ? ", ref=" + refId : ""
-    }${resolvedRunId ? ", run=" + resolvedRunId : ""})`,
+    }${resolvedRunId ? ", run=" + resolvedRunId : ""}${subtaskId !== null ? `, subtask=${subtaskId}` : ""})`,
   );
 
   // Push-on-send: nudge an idle target immediately so it doesn't wait for the
@@ -998,60 +1018,48 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
 // (bootstrap-spec.md #8/#13). Writes the run's terminal state and sends the
 // final REPLY back to operator. The monitor stays alive after terminal state
 // and keeps dispatching operator follow-ups until the tmux session is killed.
-// A subtask (manager -> coder TASK, keyed by its own id S once the coder
-// replies) is "open" until it is both reported done and — unless review was
-// waived — reviewed. This is the state machine `role-manager.md` used to ask
-// the manager to walk by hand; computing it here lets `synapse done` refuse to
-// close a run with unfinished work instead of trusting the manager to notice.
-// Test coverage isn't gated here yet: testers are currently dispatched on the
-// root task id, so there's no clean per-subtask link (see
-// docs/proposals/harness-enforcement-spec.md, "Not tested").
+// A subtask row (created by cmdSend when manager dispatches to a coder) is
+// "open" until the coder replies to its task_msg_id AND — unless review was
+// waived — a reviewer closes it. Reading from the subtasks table instead of
+// inferring topology from ref_id chains means follow-up relay TASKs
+// (e.g. "please merge") are invisible to the gate because they create no row.
 export function openChains(
   db: ReturnType<typeof connect>,
   runId: number | null,
 ): { subtaskId: number; reason: string }[] {
   const subtasks = (runId !== null
-    ? db.query(
-        `SELECT id, review_waived FROM messages
-         WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%' AND run_id=?`,
-      ).all(runId)
-    : db.query(
-        `SELECT id, review_waived FROM messages
-         WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%'`,
-      ).all()) as any[];
+    ? db.query(`SELECT id, task_msg_id, review_waived FROM subtasks WHERE run_id=?`).all(runId)
+    : db.query(`SELECT id, task_msg_id, review_waived FROM subtasks`).all()) as any[];
 
   const open: { subtaskId: number; reason: string }[] = [];
   for (const s of subtasks) {
     const reportedDone = !!db.query(
       `SELECT 1 FROM messages WHERE ref_id=? AND type='REPLY' AND to_agent='manager' LIMIT 1`,
-    ).get(s.id);
+    ).get(s.task_msg_id);
     if (!reportedDone) {
       open.push({ subtaskId: s.id, reason: "coder has not reported done (no REPLY to manager)" });
       continue;
     }
     if (s.review_waived) continue;
-    const reviewedByProgress = !!db.query(
-      `SELECT 1 FROM messages WHERE ref_id=? AND from_agent LIKE 'reviewer%' LIMIT 1`,
-    ).get(s.id);
-    const reviewedByReplyPair = !!db.query(
+    // Reviewer TASK carries ref_id = subtask.id (new convention) or task_msg_id
+    // (old convention, for runs that predate v18). Accept either.
+    const reviewed = !!db.query(
       `SELECT 1 FROM messages rt JOIN messages rr ON rr.ref_id=rt.id
-       WHERE rt.ref_id=? AND rt.type='TASK' AND rt.to_agent LIKE 'reviewer%'
+       WHERE (rt.ref_id=? OR rt.ref_id=?) AND rt.type='TASK' AND rt.to_agent LIKE 'reviewer%'
          AND rr.type='REPLY' AND rr.from_agent LIKE 'reviewer%' LIMIT 1`,
-    ).get(s.id);
-    if (!reviewedByProgress && !reviewedByReplyPair) {
+    ).get(s.id, s.task_msg_id);
+    if (!reviewed) {
       open.push({ subtaskId: s.id, reason: "not reviewed (no reviewer verdict; pass --no-review on the TASK to waive)" });
     }
   }
   return open;
 }
 
-// Git-side evidence that each coder subtask was actually merged and cleaned
-// up. The coder names its worktree/branch `task-<S>` after the subtask id and,
-// after review, ff-merges into `main` and removes both. A leftover worktree or
-// an unmerged `task-<S>` branch means "done" was reported without the merge —
-// so the gate holds on it, same as an unreviewed chain (evidence, not trust).
-// Skips silently when the project isn't a git repo or has no `main` branch —
-// there's nothing to verify against.
+// Git-side evidence that each subtask was actually merged and cleaned up.
+// The coder names its worktree/branch `subtask-<S>` after the subtask id.
+// A leftover worktree or an unmerged branch means "done" was reported without
+// the merge — so the gate holds on it. Skips silently when the project isn't
+// a git repo or has no `main` branch.
 export function worktreeIssues(
   db: ReturnType<typeof connect>,
   runId: number | null,
@@ -1062,8 +1070,8 @@ export function worktreeIssues(
   if (git(["rev-parse", "--verify", "--quiet", "refs/heads/main"]).exitCode !== 0) return [];
 
   const subtasks = (runId !== null
-    ? db.query(`SELECT id FROM messages WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%' AND run_id=?`).all(runId)
-    : db.query(`SELECT id FROM messages WHERE type='TASK' AND from_agent='manager' AND to_agent LIKE 'coder%'`).all()) as any[];
+    ? db.query(`SELECT id FROM subtasks WHERE run_id=?`).all(runId)
+    : db.query(`SELECT id FROM subtasks`).all()) as any[];
   if (subtasks.length === 0) return [];
 
   const mergedOut = git(["branch", "--merged", "main"]);
@@ -1075,7 +1083,7 @@ export function worktreeIssues(
 
   const issues: { subtaskId: number; reason: string }[] = [];
   for (const s of subtasks) {
-    const branch = `task-${s.id}`;
+    const branch = `subtask-${s.id}`;
     if (existsSync(join(projectRoot, ".worktrees", branch))) {
       issues.push({ subtaskId: s.id, reason: `worktree .worktrees/${branch} not removed (merge + cleanup incomplete)` });
       continue;

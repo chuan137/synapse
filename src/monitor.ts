@@ -338,16 +338,16 @@ export function newestOpenInboundWork(
   return row ?? null;
 }
 
-export function sendBackReminderBody(agentName: string, msg: any): string {
+export function sendBackReminderBody(agentName: string, msg: any, subtaskId?: number | null): string {
   const lines = [
     `Harness enforcement: ${msg.type} #${msg.id} from ${msg.from_agent} is still awaiting your REPLY.`,
     `Reply to ${msg.from_agent} on msg #${msg.id} before doing anything else:`,
     `synapse reply ${msg.id} "<result: done, blocked, or issues found; include key files/tests>"`,
     `You are ${agentName}; do not start another task until this send-back is complete.`,
   ];
-  if (msg.type === "TASK" && agentName.startsWith("coder")) {
+  if (msg.type === "TASK" && agentName.startsWith("coder") && subtaskId != null) {
     lines.push(
-      `Before replying done: confirm you created a worktree (git worktree add .worktrees/task-${msg.id} -b task-${msg.id}), implemented inside it, and merged it into main (git merge --ff-only task-${msg.id} && git worktree remove .worktrees/task-${msg.id} && git branch -d task-${msg.id}).`,
+      `Before replying done: confirm you created a worktree (git worktree add .worktrees/subtask-${subtaskId} -b subtask-${subtaskId}), implemented inside it, and merged it into main (git merge --ff-only subtask-${subtaskId} && git worktree remove .worktrees/subtask-${subtaskId} && git branch -d subtask-${subtaskId}).`,
     );
   }
   return lines.join(" ");
@@ -375,7 +375,13 @@ function nudgeForMissingStatusBeforeMoreWork(
   nudgeAgent(
     tmuxSession,
     agent.window_name,
-    sendBackReminderBody(agent.window_name, open),
+    sendBackReminderBody(
+      agent.window_name,
+      open,
+      open.type === "TASK" && agent.role === "coder"
+        ? (db.query("SELECT id FROM subtasks WHERE task_msg_id=? LIMIT 1").get(open.id) as any)?.id ?? null
+        : null,
+    ),
     log,
   );
   db.run("UPDATE agents SET sendback_nudged_at=? WHERE window_name=? AND run_id=?",

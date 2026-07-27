@@ -84,3 +84,19 @@ CREATE TABLE IF NOT EXISTS plan_steps (
   UNIQUE(run_id, root_msg_id, step_index)
 );
 CREATE INDEX IF NOT EXISTS idx_plan_steps_root ON plan_steps(run_id, root_msg_id);
+
+-- First-class work items. One row per unit of work dispatched by manager to a
+-- coder. Separates work identity from message routing so the completion gate
+-- can track state without inferring topology from ref_id chains.
+-- status: open | reviewed | merged | done
+CREATE TABLE IF NOT EXISTS subtasks (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id        INTEGER NOT NULL,
+  title         TEXT,
+  task_msg_id   INTEGER NOT NULL,   -- the manager→coder TASK message that opened this
+  review_waived INTEGER DEFAULT 0,
+  test_required INTEGER DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'open'
+);
+CREATE INDEX IF NOT EXISTS idx_subtasks_run ON subtasks(run_id);
+CREATE INDEX IF NOT EXISTS idx_subtasks_task_msg ON subtasks(task_msg_id);

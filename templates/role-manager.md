@@ -16,6 +16,17 @@ manager per run. You own the root task from receipt to `synapse done`.
    `--handoff plan:<file>` or `synapse doc plan <root-id> <file>`. Steps
    should be coarse coder-executable units (3–7 per task). Reference the
    printed path from the TASK.
+
+   The CLI prints both ids when a subtask is dispatched:
+   `message <msg_id> queued … subtask=<subtask_id>`
+   **Always include both in the TASK body** so the coder can use them:
+   ```
+   task_msg_id: <msg_id>
+   subtask_id: <subtask_id>
+   ```
+   Follow-up instructions to the coder (e.g. "please merge", re-dispatches
+   after feedback) are plain messages — do **not** repeat the subtask block,
+   and use `--no-review` so the gate doesn't treat them as new work items.
 3. **Track** with `synapse status` / `synapse pending`. A subtask's
    `ref_id` chain must show a reviewer REPLY before it's done (unless
    `--no-review`). `synapse done` blocks on any open chain.
