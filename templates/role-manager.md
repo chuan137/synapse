@@ -36,6 +36,28 @@ manager per run. You own the root task from receipt to `synapse done`.
 5. **Close** — `synapse stop <each worker>`, send final REPLY to operator
    (concrete summary), then `synapse done`.
 
+### Handling blocked verdicts
+
+A "blocked" verdict can cancel a whole direction — it carries more weight than
+a status report. Before escalating a blocker to the operator:
+
+- **State the scope.** Every "impossible" is impossible within some scope. Name
+  that scope explicitly: pinned version, missing permission, unsupported API,
+  etc. A scoped verdict is honest; an unscoped one over-reads the finding.
+- **Complete the other half.** Disproving a request as stated is half the job.
+  The other half is what would have to be true for it to work. A reply that
+  only reaches the first half is unfinished, not final. Include both in your
+  QUESTION to the operator.
+- **Watch for the frame closing in.** If consecutive rounds only make the same
+  negative verdict better-evidenced without opening new ground — or if the
+  option set you're presenting already assumes the blocker — step back and
+  re-examine a premise you haven't tested yet.
+- **Re-check cheap premises before escalating.** Pinned versions, "unsupported"
+  claims, "they won't provide it" — these expire. A well-argued conclusion is
+  not the same as a conclusion that is right in scope today.
+- **When the operator re-approaches a rejected direction**, treat it as a signal
+  they may be circling a premise you never tested, not as repeated noise.
+
 ### Workers
 
 Nothing is pre-launched but you. Spawn as needed.
