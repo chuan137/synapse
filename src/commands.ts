@@ -801,17 +801,26 @@ function launchAgentWindow(
   runId: number,
   projectRoot: string,
   workdir: string,
+  headroom?: boolean,
 ): void {
   const absCwd = resolve(defaultAgentDir(taskName, agent.name));
   presetClaudeTrust(absCwd);
   injectStopHook(absCwd, agent.name, runId, synapseDb);
+
+  let mcpConfigPath: string | undefined;
+  if (headroom) {
+    const headroomBin = Bun.spawnSync(["which", "headroom"]).stdout.toString().trim() || "headroom";
+    const mcpConfig = { mcpServers: { headroom: { type: "stdio", command: headroomBin, args: ["mcp", "serve"] } } };
+    mcpConfigPath = join(absCwd, ".claude", "headroom-mcp.json");
+    writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+  }
 
   // Use direnv exec to load the project root's .envrc (if any), giving each
   // agent the env that matches the project directory rather than inheriting
   // whatever the launching shell had (e.g. a ~/ccloud direnv that sets
   // ANTHROPIC_BASE_URL to an enterprise proxy).
   const direnvPath = Bun.spawnSync(["which", "direnv"]).stdout.toString().trim() || "direnv";
-  const claudeArgs = buildClaudeArgs(sessionId, agent.model, `synapse pending ${agent.name}`);
+  const claudeArgs = buildClaudeArgs(sessionId, agent.model, `synapse pending ${agent.name}`, mcpConfigPath);
   // Shell-quote each arg; none contain single quotes, so this is safe.
   const quotedArgs = claudeArgs.map((a) => `'${a}'`).join(" ");
   const shellCmd = `
@@ -855,6 +864,7 @@ export function cmdStart(flags: Record<string, string>) {
   const goal = flags["goal"];
   if (!goal) fail("--goal is required");
   const noMonitor = flags["no-monitor"] === "true";
+  const headroom = flags["headroom"] !== "false";
   const managerModel = flags["manager-model"] ?? DEFAULT_MANAGER_MODEL;
 
   const dbFile = dbPath();
@@ -942,7 +952,7 @@ export function cmdStart(flags: Record<string, string>) {
   const absCwd = resolve(defaultAgentDir(runFolderName, "manager"));
   writeAgentClaudeMd(absCwd, manager);
   console.log(`synapse: launching window 'manager' in ${absCwd}`);
-  launchAgentWindow(tmuxSession, runFolderName, manager, dbFile, claudePath, sessionId, runId, projectRoot, workdir);
+  launchAgentWindow(tmuxSession, runFolderName, manager, dbFile, claudePath, sessionId, runId, projectRoot, workdir, headroom);
   cmdRegister("manager", "manager", sessionId, runId, managerModel);
 
   if (!noMonitor) {
@@ -1008,7 +1018,7 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
   const absCwd = resolve(defaultAgentDir(runFolderName, name));
   writeAgentClaudeMd(absCwd, agent);
 
-  launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, run.id, projectRoot, workdir);
+  launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, run.id, projectRoot, workdir, flags["headroom"] !== "false");
   cmdRegister(name, role, sessionId, run.id, effectiveModel ?? null);
 
   console.log(`synapse: spawned '${name}' (${role}) in run #${run.id}, window '${tmuxSession}:${name}'`);
