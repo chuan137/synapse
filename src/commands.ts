@@ -807,25 +807,32 @@ function launchAgentWindow(
   presetClaudeTrust(absCwd);
   injectStopHook(absCwd, agent.name, runId, synapseDb);
 
-  let mcpConfigPath: string | undefined;
-  if (headroom) {
-    const headroomBin = Bun.spawnSync(["which", "headroom"]).stdout.toString().trim() || "headroom";
-    const mcpConfig = { mcpServers: { headroom: { type: "stdio", command: headroomBin, args: ["mcp", "serve"] } } };
-    mcpConfigPath = join(absCwd, ".claude", "headroom-mcp.json");
-    writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-  }
-
   // Use direnv exec to load the project root's .envrc (if any), giving each
   // agent the env that matches the project directory rather than inheriting
   // whatever the launching shell had (e.g. a ~/ccloud direnv that sets
   // ANTHROPIC_BASE_URL to an enterprise proxy).
   const direnvPath = Bun.spawnSync(["which", "direnv"]).stdout.toString().trim() || "direnv";
-  const claudeArgs = buildClaudeArgs(sessionId, agent.model, `synapse pending ${agent.name}`, mcpConfigPath);
+  const claudeArgs = buildClaudeArgs(sessionId, agent.model, `synapse pending ${agent.name}`);
   // Shell-quote each arg; none contain single quotes, so this is safe.
   const quotedArgs = claudeArgs.map((a) => `'${a}'`).join(" ");
+  // Use `headroom wrap claude` to route API calls through the compression proxy,
+  // unless an *external* ANTHROPIC_BASE_URL is set (enterprise proxy) or headroom is disabled.
+  // A second `headroom wrap` call reuses the already-running proxy rather than starting a new one.
+  // We must NOT skip when ANTHROPIC_BASE_URL is already a localhost headroom URL — that happens
+  // when the manager (itself headroom-wrapped) spawns coders/reviewers, and the env var is inherited.
+  // Skipping in that case is the bug: spawned agents would launch plain claude with no wrapping.
+  const inheritedBase = process.env.ANTHROPIC_BASE_URL ?? "";
+  const isHeadroomProxy = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(inheritedBase);
+  const useHeadroom = headroom && (!inheritedBase || isHeadroomProxy);
+  const headroomBin = useHeadroom
+    ? (Bun.spawnSync(["which", "headroom"]).stdout.toString().trim() || "headroom")
+    : null;
+  const launchCmd = useHeadroom
+    ? `'${headroomBin}' wrap claude -- ${quotedArgs}`
+    : `'${claudePath}' ${quotedArgs}`;
   const shellCmd = `
     cd '${absCwd}' || exit 1
-    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' SYNAPSE_PROJECT_ROOT='${projectRoot}' SYNAPSE_WORKDIR='${workdir}' '${direnvPath}' exec '${projectRoot}' '${claudePath}' ${quotedArgs}
+    SYNAPSE_DB='${synapseDb}' SYNAPSE_AGENT='${agent.name}' SYNAPSE_RUN_ID='${runId}' SYNAPSE_PROJECT_ROOT='${projectRoot}' SYNAPSE_WORKDIR='${workdir}' '${direnvPath}' exec '${projectRoot}' ${launchCmd}
   `;
 
   if (process.env.SYNAPSE_DEBUG) {
@@ -864,7 +871,7 @@ export function cmdStart(flags: Record<string, string>) {
   const goal = flags["goal"];
   if (!goal) fail("--goal is required");
   const noMonitor = flags["no-monitor"] === "true";
-  const headroom = flags["headroom"] !== "false";
+  const headroom = !flags["no-headroom"];
   const managerModel = flags["manager-model"] ?? DEFAULT_MANAGER_MODEL;
 
   const dbFile = dbPath();
@@ -1018,7 +1025,7 @@ export function cmdSpawn(role: string, flags: Record<string, string>) {
   const absCwd = resolve(defaultAgentDir(runFolderName, name));
   writeAgentClaudeMd(absCwd, agent);
 
-  launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, run.id, projectRoot, workdir, flags["headroom"] !== "false");
+  launchAgentWindow(tmuxSession, runFolderName, agent, dbFile, claudePath, sessionId, run.id, projectRoot, workdir, !flags["no-headroom"]);
   cmdRegister(name, role, sessionId, run.id, effectiveModel ?? null);
 
   console.log(`synapse: spawned '${name}' (${role}) in run #${run.id}, window '${tmuxSession}:${name}'`);
