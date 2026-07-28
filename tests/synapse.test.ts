@@ -526,6 +526,40 @@ describe("intent verbs", () => {
     expect(msg.test_required).toBe(1);
   });
 
+  test("--scout prepends the SCOUT marker, waives review, and flags the row", () => {
+    const r = run([
+      "task", "coder-1", "Question: how does X work?", "--from", "manager", "--scout",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg.body).toBe("SCOUT (read-only, no code changes, no worktree).\nQuestion: how does X work?");
+    expect(msg.review_waived).toBe(1);
+    expect(msg.is_scout).toBe(1);
+    const sub = openDb().query("SELECT * FROM subtasks WHERE task_msg_id=?").get(msg.id) as any;
+    expect(sub.is_scout).toBe(1);
+    expect(sub.review_waived).toBe(1);
+  });
+
+  test("--scout does not double-prefix a body that already starts with SCOUT", () => {
+    const r = run([
+      "task", "coder-1", "SCOUT already phrased", "--from", "manager", "--scout",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg.body).toBe("SCOUT already phrased");
+  });
+
+  test("--scout and --test-required conflict", () => {
+    const r = run([
+      "task", "coder-1", "Question: how does X work?", "--from", "manager",
+      "--scout", "--test-required",
+    ]);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("--scout");
+    const msg = openDb().query("SELECT * FROM messages WHERE type='TASK'").get() as any;
+    expect(msg).toBeFalsy();
+  });
+
   test("ask queues a QUESTION and stores --options as JSON + --title", () => {
     const r = run([
       "ask", "operator", "Approve the plan?", "--from", "manager",
@@ -568,6 +602,19 @@ describe("intent verbs", () => {
     const bad = run(["progress", "operator", "just chatting", "--from", "coder-1"]);
     expect(bad.exitCode).toBe(1);
     expect(bad.stderr).toContain("[start]");
+  });
+
+  test("--tag prepends the lifecycle marker instead of hand-typing it", () => {
+    const r = run(["progress", "operator", "on it", "--tag", "start", "--from", "coder-1"]);
+    expect(r.exitCode).toBe(0);
+    const msg = openDb().query("SELECT * FROM messages WHERE type='PROGRESS'").get() as any;
+    expect(msg.body).toBe("[start] on it");
+  });
+
+  test("--tag rejects a value outside start/done/blocked", () => {
+    const r = run(["progress", "operator", "on it", "--tag", "step", "--from", "coder-1"]);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("--tag");
   });
 
   test("verbs read the body from --body-file - (stdin)", () => {

@@ -47,7 +47,7 @@ Resolved in order: explicit flag → env var → default. Set once per shell.
 | `synapse stop <name> [--run-id N]` | Mark an agent stopped and close its tmux window. |
 | `synapse set-goal "<text>" [--run-id N]` | Update the running run's recorded goal. |
 | `synapse ui [--port N]` | Web dashboard (S-Deck); default port 7700. |
-| `synapse done --force --reason "<why>"` | **Override only** — see Gotchas; normally the manager closes the run itself. |
+| `synapse done` | Close the run — call this once manager's final `REPLY` confirms every subtask chain is done; see Gotchas for the `--force` override form. |
 | `synapse init` | Create/migrate the DB. Rarely needed by hand — `start`/`ui` call it. |
 
 The everyday message verbs are `synapse task` / `ask` / `progress` / `reply`
@@ -62,12 +62,13 @@ documented in the role templates.
 
 - **Run from the project root** (or export `SYNAPSE_DB`) — wrong cwd silently
   queries an unrelated or nonexistent DB.
-- **The manager owns run closure.** It calls `synapse done` itself once every
-  subtask chain is reviewed (and tested, when required); the completion gate
-  refuses to close a run with open chains. As operator you don't normally call
-  `done` — only to override a stuck team, with `SYNAPSE_AGENT=operator synapse
-  done --status done --force --reason "<why>"` (the `--force` + `--reason` are
-  required and the override is logged to `events`).
+- **Operator owns run closure.** Manager never calls `synapse done` — it stops
+  at the final `REPLY`. Once that REPLY confirms every subtask chain is
+  reviewed (and tested, when required), you call `synapse done`; the
+  completion gate refuses to close a run with open chains. To override a stuck
+  team instead, use `SYNAPSE_AGENT=operator synapse done --status done --force
+  --reason "<why>"` (the `--force` + `--reason` are required and the override
+  is logged to `events`).
 - **Answer a `QUESTION` with `reply`, not `send`** — `synapse reply
   <question_id> "<choice or free text>" --from operator` routes back to whoever
   asked. The UI's "Chat about this" free-text arrives as the reply body.

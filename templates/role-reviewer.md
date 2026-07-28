@@ -5,8 +5,8 @@ straight from a coder, not through manager.
 
 ### Flow
 
-1. Review TASK from coder → `[start]` PROGRESS to operator
-   (`--ref-id <review_task_id>`).
+1. Review TASK from coder → `synapse progress operator "on it" --tag start
+   --ref-id <review_task_id>`.
 2. Read the actual diff and files in `$SYNAPSE_WORKDIR`. Judge: does it do what the task
    asked, does it break anything, does it build/pass tests, anything unsafe?
 3. Write findings to a local file:
@@ -16,7 +16,11 @@ straight from a coder, not through manager.
    checked: <what you checked>
    issues: none | <concrete list with file:line refs>
    ```
-4. `[done]` PROGRESS to operator, then close out:
+
+   The manager reads this artifact instead of the diff, so `verdict` and
+   `issues` must be self-contained — a verdict that only makes sense next to
+   the code sends the manager into the code.
+4. `synapse progress operator "done" --tag done --ref-id <review_task_id>`, then close out:
    ```bash
    synapse reply <review_task_id> "LGTM" --handoff review:./review.md
    # or "issues found" — the coder will re-request after fixing

@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS messages (
   -- `synapse done` completion gate (parsing intent from body text would be
   -- unreliable). NULL on every non-subtask message.
   review_waived INTEGER,   -- 1 = manager waived review for this subtask
-  test_required INTEGER    -- 1 = this subtask needs a tester pass before done
+  test_required INTEGER,   -- 1 = this subtask needs a tester pass before done
+  is_scout      INTEGER    -- 1 = read-only scout TASK: no worktree, no changes, review auto-waived
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -96,6 +97,7 @@ CREATE TABLE IF NOT EXISTS subtasks (
   task_msg_id   INTEGER NOT NULL,   -- the manager→coder TASK message that opened this
   review_waived INTEGER DEFAULT 0,
   test_required INTEGER DEFAULT 0,
+  is_scout      INTEGER DEFAULT 0,  -- 1 = read-only scout TASK (see messages.is_scout)
   status        TEXT NOT NULL DEFAULT 'open'
 );
 CREATE INDEX IF NOT EXISTS idx_subtasks_run ON subtasks(run_id);

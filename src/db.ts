@@ -21,7 +21,9 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v16 added workdir column to runs (absolute path to code repo, separate from synapse project root).
 // v17 added pending_nudged_at and pending_nudge_sig columns to agents (DB-backed pending-nudge cooldown).
 // v18 added subtasks table: first-class work items keyed by subtask id, separate from message ids.
-export const SCHEMA_VERSION = 18;
+// v19 added is_scout column to messages and subtasks (structural flag for a
+//     read-only scout TASK, replacing the "SCOUT" body-text convention).
+export const SCHEMA_VERSION = 19;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -240,6 +242,15 @@ export function initDb() {
         db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_task_msg ON subtasks(task_msg_id);`);
       });
       currentVersion = 18;
+    }
+    if (hasTables && currentVersion === 18) {
+      // Migrate v18 → v19: add is_scout column to messages and subtasks
+      // (non-destructive) — structural flag for a read-only scout TASK.
+      migrate(path, 18, 19, (db) => {
+        addColumn(db, "messages", "is_scout", "INTEGER");
+        addColumn(db, "subtasks", "is_scout", "INTEGER DEFAULT 0");
+      });
+      currentVersion = 19;
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

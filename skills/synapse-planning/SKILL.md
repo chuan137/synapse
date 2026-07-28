@@ -14,6 +14,24 @@ This skill covers **what to write and the approval loop**. For the exact
 `synapse ask` / `--options` / `--ref-id` syntax, see the `synapse-operator`
 skill; for your standing responsibilities, see `templates/role-manager.md`.
 
+## Plan from scout findings, not from the source
+
+Planning is where managers quietly turn into coders: the plan feels like it
+needs one more file read, and the run's context is gone before the first TASK
+goes out. It doesn't. You plan at the level of behavior, contracts, and
+sequencing — all of which survive being told to you secondhand.
+
+So: when you need to know how something works, send a `SCOUT` TASK to a coder
+(read-only, findings doc back via `--handoff notes:`; see
+`templates/role-manager.md`) and write the artifacts from what comes back.
+Scope one question per scout and send several in parallel. Your own reading
+stays inside the budget in the role template — inbox, artifacts, root-level
+docs.
+
+A plan built this way is also a better plan: what a scout can't answer is
+precisely what's underspecified, and it shows up as an open question instead
+of an assumption you absorbed while skimming.
+
 ## When to plan vs. skip
 
 - **Plan** — anything that adds or changes a feature, changes architecture,
@@ -52,8 +70,11 @@ state, not the steps to reach it. Cover:
 - **Feature set** — each user-visible behavior as a short, testable
   statement ("refreshing the page keeps the open file-viewer panel").
 - **Architecture** — the components touched or added, how data flows between
-  them, key interfaces/contracts, and where state lives. Name the actual
-  modules/files in this repo.
+  them, key interfaces/contracts, and where state lives. Identify the entry
+  points and boundaries: what gets called, what owns the state, what the
+  contract between them is. Name modules only where a scout named them —
+  file-level discovery is the coder's job, and a spec that guesses paths is
+  worse than one that describes the boundary and lets the coder find it.
 - **Constraints & decisions** — dependencies, backward-compat requirements,
   and any design choice with an alternative rejected (one line each). Flag
   open questions here — these become operator `QUESTION`s.
@@ -65,8 +86,11 @@ can execute without re-deriving the design. For each task:
 
 - A numbered **task** with an imperative title, broken into **subtasks**
   where useful.
-- **Files** it touches (create/edit), and the concrete change in each.
-- **Acceptance criteria** the coder self-checks against before reporting done.
+- **Area** it touches — the module or boundary, and the change in behavior
+  there. Give exact files only when a scout reported them; otherwise let the
+  coder locate them. Never spell out line-level edits.
+- **Acceptance criteria** the coder self-checks against before reporting done —
+  observable outcomes, so the coder can judge and you can judge the reply.
 - **Dependencies / order** — which tasks must land first; what can run in
   parallel across coders.
 - Which **validation-plan** items (by id) this task must make pass.
@@ -92,26 +116,24 @@ layers, both required for a feature:
 Every feature statement in the spec must trace to at least one validation
 item; note the mapping so coverage gaps are visible.
 
-**Reconcile with existing tests — do this, don't assume greenfield.** Before
-finalizing, read what's already there (this repo: `tests/*.test.ts`,
-`tests/e2e-*.sh`, and any `*-testplan.md` from earlier runs). Then:
+**Reconciling with existing tests is a coder responsibility.** Don't read the
+test suite to write this plan. Instead make it an explicit acceptance criterion
+in every implementation `TASK`: before reporting done, the coder must survey
+existing coverage, **update** assertions the change makes stale (a passing
+stale test is a false negative), **reuse or extend** coverage that already
+exercises part of the feature rather than duplicating it, and **flag** any test
+the change is expected to break along with why that break is correct. Their
+REPLY reports what they found and changed.
 
-- If the change alters behavior an existing test asserts, the plan must say
-  which test to **update** and to what — a passing stale test is a false
-  negative.
-- If existing coverage already exercises part of the feature, **reuse or
-  extend** it rather than duplicating.
-- Call out any existing test the change is expected to **break** and why
-  that break is correct.
-
-List these adjustments explicitly as their own validation items so a coder
-picks them up.
+If a scout has already mapped the relevant coverage, fold its findings in as
+named validation items.
 
 ## Approval loop
 
 Planning is not done until the operator approves. Iterate:
 
-1. **Write** the three artifacts to the run directory.
+0. **Scout** whatever you don't know, in parallel, and wait for the findings.
+1. **Write** the three artifacts to the run directory, from the findings.
 2. **Present** — send the operator a `QUESTION` (`synapse ask operator "…"
    --options … --title …`; blocking; `--options` required) that points to the
    three files and asks for a decision.
@@ -134,11 +156,14 @@ pass on the affected artifacts — re-approve before new code goes out.
 ## Guardrails
 
 - No implementation `TASK` before an approve verdict — that's the whole point.
+- **Scout TASKs are exempt** — they're read-only and produce no code, so send
+  them before approval. That's the point of them.
 - The plan is the source of truth the coder builds from; if reality diverges
   during implementation, update the artifact and tell the operator, don't
   let the doc rot.
 - Keep artifacts concise. A plan a coder won't read is worse than a short one
-  they will.
+  they will — and a spec padded with code you pasted in is a spec you paid
+  twice for.
 
 ## See also
 

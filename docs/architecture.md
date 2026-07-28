@@ -198,7 +198,7 @@ to raise the terminal), `/start`, `/kill-session`, `/finish-run`, `/upload`.
 ### Templates & skills
 
 `templates/` holds the CLAUDE.md building blocks: `shared.md` (the team protocol —
-roles, message types, hub-and-spoke routing, bootstrap rules) and one
+roles, message types, hub-and-spoke routing) and one
 `role-<role>.md` per role (`manager`, `coder`, `reviewer`, `tester`). `skills/`
 holds the operator-facing skills (`synapse-operator`, `synapse-planning`, `tmux`)
 that get compiled into `skills.generated.ts` and installed into each agent's and

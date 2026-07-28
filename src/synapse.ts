@@ -43,6 +43,7 @@ import {
   DEFAULT_MANAGER_MODEL,
   fail,
   HANDOFF_KINDS,
+  PROGRESS_TAGS,
   writeArtifact,
 } from "./commands";
 import { cmdMonitor } from "./monitor";
@@ -330,7 +331,7 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "task",
-    usage: "synapse task <to> <body> [--from NAME] [--ref-id N] [--run-id N] [--body-file PATH] [--handoff kind:path] [--no-review] [--test-required]",
+    usage: "synapse task <to> <body> [--from NAME] [--ref-id N] [--run-id N] [--body-file PATH] [--handoff kind:path] [--no-review] [--test-required] [--scout]",
     summary: "Assign a TASK to an agent. The recipient replies when done.",
     help: [
       {
@@ -350,6 +351,8 @@ const COMMANDS: CommandSpec[] = [
           "--handoff kind:path  Attach an artifact: write <path> to its canonical .synapse/artifacts path (kind: spec/plan/testplan/review/notes) and append that path to the body.",
           "--no-review        Manager -> coder: waive review for this subtask (the done gate won't require a reviewer verdict).",
           "--test-required    Manager -> coder: mark this subtask as needing a tester pass.",
+          "--scout            Manager -> coder: read-only investigation, not a change. Prepends the SCOUT marker",
+          "                   the coder recognizes, implies --no-review, and conflicts with --test-required.",
         ],
       },
     ],
@@ -364,7 +367,7 @@ const COMMANDS: CommandSpec[] = [
       requireArgs(context, !!to && !!body);
       return cmdSend(
         to, "TASK", body, flags["from"] ?? null, refId, runId, null, null,
-        !!flags["no-review"], !!flags["test-required"],
+        !!flags["no-review"], !!flags["test-required"], !!flags["scout"],
       );
     },
   },
@@ -411,7 +414,7 @@ const COMMANDS: CommandSpec[] = [
   },
   {
     name: "progress",
-    usage: "synapse progress <to> <body> [--from NAME] [--ref-id N] [--run-id N] [--body-file PATH] [--handoff kind:path]",
+    usage: "synapse progress <to> <body> [--from NAME] [--ref-id N] [--run-id N] [--body-file PATH] [--handoff kind:path] [--tag start|done|blocked]",
     summary: "Send a one-way PROGRESS signal (no reply expected). Direct-to-operator bodies must lead with [start]/[done]/[blocked]/[step].",
     help: [
       {
@@ -429,6 +432,8 @@ const COMMANDS: CommandSpec[] = [
           "--run-id N        Store the message on a specific run.",
           "--body-file PATH  Read body from file (use - for stdin).",
           "--handoff kind:path  Attach an artifact (see 'synapse task') and append its path to the body.",
+          "--tag start|done|blocked  Prepend the lifecycle marker a direct-to-operator PROGRESS requires,",
+          "                          instead of typing '[start]'/'[done]'/'[blocked]' into the body by hand.",
         ],
       },
     ],
@@ -441,6 +446,15 @@ const COMMANDS: CommandSpec[] = [
       const handoffPath = await resolveHandoff(context, refId, runId);
       body = withHandoffPath(body, handoffPath);
       requireArgs(context, !!to && !!body);
+      if (flags["tag"]) {
+        const tag = flags["tag"];
+        if (!PROGRESS_TAGS.has(tag)) {
+          fail(`--tag must be one of ${[...PROGRESS_TAGS].sort().join(", ")}, got '${tag}'`);
+        }
+        if (!new RegExp(`^\\[${tag}\\]`).test(body)) {
+          body = `[${tag}] ${body}`;
+        }
+      }
       return cmdSend(to, "PROGRESS", body, flags["from"] ?? null, refId, runId);
     },
   },

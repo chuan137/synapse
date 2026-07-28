@@ -6,13 +6,11 @@ windows, coordinating through a shared SQLite mailbox.
 `SYNAPSE_DB`, `SYNAPSE_AGENT`, `SYNAPSE_PROJECT_ROOT`, and `SYNAPSE_WORKDIR` are pre-exported.
 
 - `SYNAPSE_PROJECT_ROOT` — the directory containing `.synapse/` (synapse home).
+- `SYNAPSE_DB` — path to the shared SQLite mailbox. Defaults to `$SYNAPSE_PROJECT_ROOT/synapse.db`.
+- `SYNAPSE_AGENT` — your name/id in the team (e.g. `coder-1`, `manager`).
+
 - `SYNAPSE_WORKDIR` — the code repo to work in. **Always use this for git operations, worktrees, builds, and tests.** It equals `SYNAPSE_PROJECT_ROOT` unless `--workdir` was passed to `synapse start`.
 
-## Bootstrap
-
-Your launch prompt is just `synapse pending <your-name>`. Run it once on
-launch to pull work. The monitor re-sends it when new work arrives — don't
-call it again mid-turn.
 
 ## Roles
 
@@ -20,6 +18,15 @@ call it again mid-turn.
 
 Manager is the hub. Coders send review TASKs peer-to-peer to reviewers.
 Testers report to manager. Nothing else bypasses manager.
+
+Manager defines the workflow, assigns work, and judges what comes back — it
+does not read the codebase, so its context lasts the whole run. Everything it
+needs to know about the code arrives in your messages and handoff docs. Write
+them to be acted on without a follow-up.
+
+When manager needs something from the code, it delegates to a **scout** — a
+read-only TASK to a coder asking for findings, not changes — instead of
+spending its own context on exploration (details in role-manager.md).
 
 ## Message types
 
@@ -62,20 +69,25 @@ synapse step <root-id> <n> "What actually happened at this step"
 
 `root-id` is the same ref-id used when the plan was written. Steps only exist
 if the plan was written with `synapse doc plan` or `--handoff plan:<file>`.
-For unplanned tasks, `[start]`/`[done]` are the only notifications.
+For unplanned tasks, `--tag start`/`--tag done` are the only notifications.
 
 ## Direct PROGRESS to operator (coder / reviewer / tester only)
 
 Send `PROGRESS` straight to `operator` — bypassing manager — only as lifecycle
-markers. Body must start with one of these tags:
+markers, via `--tag`:
 
-- `[start]` — once, right after accepting a TASK
-- `[done]` — once, right before the REPLY that closes it out
-- `[blocked]` — if stalled on something not yet a QUESTION
+```bash
+synapse progress operator "on it" --tag start --ref-id <task_msg_id>
+```
 
-The harness rejects a direct-to-operator PROGRESS from a non-manager agent
-with any other tag. Mid-task progress is reported via `synapse step` (see
-Handoff docs) when a plan exists — not as ad-hoc PROGRESS messages.
+- `--tag start` — once, right after accepting a TASK
+- `--tag done` — once, right before the REPLY that closes it out
+- `--tag blocked` — if stalled on something not yet a QUESTION
+
+`--tag` prepends the `[start]`/`[done]`/`[blocked]` marker the harness checks
+for — it rejects a direct-to-operator PROGRESS from a non-manager agent
+whose body doesn't lead with one. Mid-task progress is reported via `synapse
+step` (see Handoff docs) when a plan exists — not as ad-hoc PROGRESS messages.
 
 ## QUESTION rules
 
@@ -102,7 +114,7 @@ Note the id printed when you `synapse task` so you can track the chain.
 
 1. **Reply with the full result** — concrete: what changed, outcome, evidence.
    "Done" alone is not a result.
-2. **Send `[start]`/`[done]` PROGRESS; stay silent otherwise.** Milestones are
+2. **Send `--tag start`/`--tag done` PROGRESS; stay silent otherwise.** Milestones are
    one-way markers, not questions or summaries.
 3. **One QUESTION at a time.** Block and wait; do not guess and proceed.
 
