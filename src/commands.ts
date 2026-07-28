@@ -420,9 +420,10 @@ export function cmdStep(
     );
   }
   const now = nowIso();
+  const agent = from ?? process.env.SYNAPSE_AGENT ?? "agent";
   db.run(
-    "UPDATE plan_steps SET completed_at=?, update_text=? WHERE run_id=? AND root_msg_id=? AND step_index=?",
-    [now, updateText, resolvedRunId, rootMsgId, stepIndex]
+    "UPDATE plan_steps SET completed_at=?, update_text=?, agent=? WHERE run_id=? AND root_msg_id=? AND step_index=?",
+    [now, updateText, agent, resolvedRunId, rootMsgId, stepIndex]
   );
   const total = (db.query(
     "SELECT COUNT(*) AS n FROM plan_steps WHERE run_id=? AND root_msg_id=?"
@@ -430,10 +431,12 @@ export function cmdStep(
   const done = (db.query(
     "SELECT COUNT(*) AS n FROM plan_steps WHERE run_id=? AND root_msg_id=? AND completed_at IS NOT NULL"
   ).get(resolvedRunId, rootMsgId) as any).n;
-  const agent = from ?? process.env.SYNAPSE_AGENT ?? "agent";
-  console.log(`synapse: step ${stepIndex}/${total} marked done`);
-  // Emit the Claude Code push-notification JSON that the Stop hook contract reads from stdout.
-  emitNotification(`[${agent} · step ${done}/${total}] ${updateText}`);
+  console.log(`synapse: step ${stepIndex} marked done (${done}/${total} steps complete)`);
+  // No emitNotification here: this runs as a plain CLI invocation from the
+  // agent's own Bash tool, not as the Stop hook subprocess, so stdout here
+  // never reaches the operator (see emitNotification's doc comment). The
+  // Stop hook (cmdHookStop) picks this row up from plan_steps instead, once
+  // the agent's turn actually ends.
 }
 
 
@@ -1333,19 +1336,30 @@ export function cmdHookStop(agentName: string, runId: number): void {
       return;
     }
 
-    // Notify operator about messages this agent sent since last notification.
-    // Only fires on end_turn turns (the hook only reaches here when the agent
-    // is idle), so tool-use mid-task turns are already excluded.
+    // Notify operator about messages this agent sent, and plan steps it ticked
+    // via `synapse step`, since last notification. Only fires on end_turn turns
+    // (the hook only reaches here when the agent is idle), so tool-use mid-task
+    // turns are already excluded. `synapse step` itself can't emit this
+    // notification — it runs as a plain CLI call from the agent's own Bash
+    // tool, not as this Stop hook subprocess — so completed steps sit in
+    // plan_steps until picked up here.
     const since = agent.last_notified_at ?? "1970-01-01T00:00:00";
     const newMsgs = db.query(
       `SELECT type, to_agent, body FROM messages
        WHERE from_agent=? AND run_id=? AND created_at > ? ORDER BY created_at`
     ).all(agentName, runId, since) as { type: string; to_agent: string; body: string }[];
-    if (newMsgs.length > 0) {
-      const lines = newMsgs.map((m) => {
-        const preview = m.body.split("\n")[0].slice(0, 80);
-        return `${m.type} → ${m.to_agent}: ${preview}`;
-      });
+    const newSteps = db.query(
+      `SELECT step_index, update_text FROM plan_steps
+       WHERE agent=? AND run_id=? AND completed_at > ? ORDER BY completed_at`
+    ).all(agentName, runId, since) as { step_index: number; update_text: string }[];
+    if (newMsgs.length > 0 || newSteps.length > 0) {
+      const lines = [
+        ...newMsgs.map((m) => {
+          const preview = m.body.split("\n")[0].slice(0, 80);
+          return `${m.type} → ${m.to_agent}: ${preview}`;
+        }),
+        ...newSteps.map((s) => `step ${s.step_index}: ${(s.update_text ?? "").split("\n")[0].slice(0, 80)}`),
+      ];
       emitNotification(lines.join("\n"), `[${agentName}]`);
       db.run("UPDATE agents SET last_notified_at=? WHERE window_name=? AND run_id=?",
         [nowIso(), agentName, runId]);

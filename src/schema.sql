@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS plan_steps (
   label       TEXT NOT NULL,      -- text of the checklist item
   completed_at TEXT,              -- ISO timestamp when ticked; NULL = not yet done
   update_text TEXT,               -- free-text from `synapse step … "<update>"`
+  agent       TEXT,               -- agent that ticked the step (hook-stop notification lookup)
   UNIQUE(run_id, root_msg_id, step_index)
 );
 CREATE INDEX IF NOT EXISTS idx_plan_steps_root ON plan_steps(run_id, root_msg_id);

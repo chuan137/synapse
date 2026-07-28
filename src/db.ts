@@ -23,7 +23,10 @@ import SCHEMA_SQL from "./schema.sql" with { type: "text" };
 // v18 added subtasks table: first-class work items keyed by subtask id, separate from message ids.
 // v19 added is_scout column to messages and subtasks (structural flag for a
 //     read-only scout TASK, replacing the "SCOUT" body-text convention).
-export const SCHEMA_VERSION = 19;
+// v20 added agent column to plan_steps, so hook-stop can surface newly
+//     completed steps in the same push notification it already builds from
+//     `messages` — `synapse step` alone never reached the operator.
+export const SCHEMA_VERSION = 20;
 
 export function dbPath(): string {
   return resolve(process.env.SYNAPSE_DB ?? "./.synapse/synapse.db");
@@ -251,6 +254,14 @@ export function initDb() {
         addColumn(db, "subtasks", "is_scout", "INTEGER DEFAULT 0");
       });
       currentVersion = 19;
+    }
+    if (hasTables && currentVersion === 19) {
+      // Migrate v19 → v20: add agent column to plan_steps (non-destructive) —
+      // lets hook-stop attribute a completed step to the agent whose turn
+      // just ended, so it can fold newly-ticked steps into that agent's
+      // push notification alongside its messages.
+      migrate(path, 19, 20, (db) => addColumn(db, "plan_steps", "agent", "TEXT"));
+      currentVersion = 20;
     }
     if (hasTables && currentVersion < SCHEMA_VERSION) {
       // Move the whole data directory aside — it may also hold audit logs that

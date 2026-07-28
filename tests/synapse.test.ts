@@ -1527,24 +1527,26 @@ describe("synapse step", () => {
     const S = seedPlan();
     const r = run(["step", String(S), "1", "Extracted the module"], { SYNAPSE_AGENT: "coder-1" });
     expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("step 1/2");
+    expect(r.stdout).toContain("step 1 marked done (1/2 steps complete)");
     const row = openDb().query(
       "SELECT * FROM plan_steps WHERE root_msg_id=? AND step_index=1"
     ).get(S) as any;
     expect(row.completed_at).not.toBeNull();
     expect(row.update_text).toBe("Extracted the module");
+    expect(row.agent).toBe("coder-1");
   });
 
-  test("emits a notification JSON line to stdout", () => {
+  // `synapse step` runs as a plain CLI call from the agent's own Bash tool,
+  // not as the Stop hook subprocess — stdout here never reaches the operator
+  // as a push notification, so it must not print notification JSON itself.
+  // hook-stop picks the completed row up from plan_steps instead (see the
+  // "hook-stop notification emit" describe block).
+  test("does not emit notification JSON directly (that's hook-stop's job)", () => {
     const S = seedPlan();
     const r = run(["step", String(S), "2", "Tests passing"], { SYNAPSE_AGENT: "coder-1" });
     expect(r.exitCode).toBe(0);
     const jsonLine = r.stdout.split("\n").find((l: string) => l.startsWith("{"));
-    expect(jsonLine).toBeTruthy();
-    const n = JSON.parse(jsonLine!);
-    expect(n.type).toBe("notification");
-    expect(n.message).toContain("step");
-    expect(n.message).toContain("Tests passing");
+    expect(jsonLine).toBeUndefined();
   });
 
   test("fails when step index does not exist", () => {
@@ -1608,5 +1610,39 @@ describe("hook-stop notification emit", () => {
       "SELECT last_notified_at FROM agents WHERE window_name='coder-1'"
     ).get() as any).last_notified_at;
     expect(after).not.toBeNull();
+  });
+
+  test("surfaces a plan step this agent ticked since last_notified_at", () => {
+    const planFile = join(dir, "plan.md");
+    writeFileSync(planFile, `## Plan\n\n- [ ] Step one\n- [ ] Step two\n`);
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskMsgId();
+    run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
+    run(["step", String(S), "1", "Extracted the module"], { SYNAPSE_AGENT: "coder-1" });
+
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "coder-1", SYNAPSE_RUN_ID: "1" });
+    expect(r.exitCode).toBe(0);
+    const jsonLine = r.stdout.split("\n").find((l: string) => l.startsWith("{"));
+    expect(jsonLine).toBeTruthy();
+    const n = JSON.parse(jsonLine!);
+    expect(n.message).toContain("step 1");
+    expect(n.message).toContain("Extracted the module");
+  });
+
+  test("does not surface another agent's plan step", () => {
+    const planFile = join(dir, "plan.md");
+    writeFileSync(planFile, `## Plan\n\n- [ ] Step one\n`);
+    run(["send", "coder-1", "TASK", "build it", "--from", "manager"]);
+    const S = subtaskMsgId();
+    run(["doc", "plan", String(S), planFile], { SYNAPSE_AGENT: "manager" });
+    run(["step", String(S), "1", "Extracted the module"], { SYNAPSE_AGENT: "coder-1" });
+
+    // manager's own hook-stop still notifies about the TASK it sent — the
+    // point is it must not also pick up coder-1's step.
+    const r = run(["hook-stop"], { SYNAPSE_AGENT: "manager", SYNAPSE_RUN_ID: "1" });
+    const jsonLine = r.stdout.split("\n").find((l: string) => l.startsWith("{"));
+    expect(jsonLine).toBeTruthy();
+    const n = JSON.parse(jsonLine!);
+    expect(n.message).not.toContain("Extracted the module");
   });
 });
