@@ -1,505 +1,737 @@
-# Claude Team Synapse — Design Spec
+# Synapse — Design Specification
 
-Status: draft, no implementation yet.
+> A multi-agent coordination system: several Claude Code sessions work as a
+> team on one or more goals, coordinating through a shared SQLite database.
 
-## Goal
+Status: DRAFT rev 3 — pending operator approval.
+Change history in §9. Implementation decisions in §10.
 
-Run multiple Claude Code agents as a coordinated team, each in its own tmux
-window, exchanging messages through a shared SQLite mailbox. A monitor
-process watches each agent for idleness and delivers queued messages by
-injecting keystrokes into its pane. A separate audit pipeline tails each
-agent's session transcript and produces human-readable activity summaries.
+---
 
-## Components
+## 1. Overview
 
-### 1. tmux layout
+Synapse runs a team of AI agents against an operator's goals. One **manager**
+agent decomposes each goal into units of work and dispatches them to short-lived
+**worker** agents (coders, reviewers, testers, and other roles). All
+coordination happens through a shared SQLite database — there is no direct
+agent-to-agent messaging bus and no central broker.
 
-- One tmux session per team (e.g. `team`), one window per agent.
-- Window naming convention encodes role and instance: `manager`,
-  `coder-1`, `coder-2`, `reviewer`. The monitor and message bus use this
-  name as the agent's address — no separate ID mapping needed.
-- Each window launches `claude` (or `claude --resume <session-id>`) in a
-  working directory specific to that agent's role.
-- A window's Claude Code session ID is needed by the monitor (see
-  Idle Detection). Captured either by parsing it from the session-start
-  banner in the pane, or by having the launch wrapper write it to a known
-  location (e.g. `.synapse/<window-name>.session-id`) right after start.
+The design is a **blackboard architecture**: shared state is the coordination
+medium and the single source of truth. Workers write their results to the
+`subtasks` table and exit. The manager reacts to those writes — and to new goals
+from the operator — and decides what happens next. A human operator reads the
+tables directly and converses with the manager.
 
-### 2. Message bus (SQLite)
+("Blackboard" is used once, here, as pattern attribution. Everywhere else the
+tables are named.)
 
-One DB file shared by all agents and the monitor, with two tables: an
-`agents` registry (so the session-id and status of every window is looked
-up, not scraped) and a `messages` mailbox.
+Work is a three-level hierarchy:
+
+```
+run    (the team / session — holds the one persistent manager)
+ └── task     (a goal from the operator — "build X", later "add Y")
+      └── subtask  (a unit of worker work under that goal)
+```
+
+Every *process* in the system is exactly one of two things: **the run** (the one
+persistent manager) or **a subtask** (a one-shot worker). There is no third kind
+of agent and no separate registry of agents — see §2.
+
+A subtask is **1:1 with a worker**. Reviewing a change and testing a change are
+their own subtask rows, siblings under the same task, linked to the row they
+act on by `depends_on` (§2.3). One row, one worker, one result, one verdict.
+
+### Design principles
+
+1. **The tables are the truth.** Progress lives in the database. Every consumer
+   — operator, manager, watcher — reads it; no state of record lives in an
+   agent's private context or in a message log.
+2. **Workers are disposable.** A worker is a process that runs one subtask and
+   exits. A worker *is* its subtask row. Liveness is not tracked as state — but
+   every worker's exit is *guaranteed to produce a subtask transition*, success or
+   failure (§4.5). The absence of a write is never a valid outcome.
+3. **The manager is the only persistent mind.** It accumulates judgment across
+   the whole run. Everything it decides is written to a row, so its context is a
+   cache that can be lost (to compaction) without losing the run — see §4.9, where
+   this is a hard contract, not a hope. The manager *is* the run row.
+4. **The human sees everything, immediately.** The operator reads the tables
+   with no relay through the manager, so status is never gated on the manager's
+   attention.
+5. **Goals accumulate.** A run is a standing team; the operator sends goals over
+   time. Each goal is a task; the manager plans and dispatches work under it.
+6. **Small surface.** Four tables, roughly a dozen commands, one background
+   watcher.
+
+---
+
+## 2. Data model
+
+Four tables. There is no `agents` table (a worker is a subtask row; the manager
+is the run row) and no `roles` table (roles are built into the controller, §3).
+
+### 2.1 `runs` — the team / session (holds the persistent manager)
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | INTEGER PK | run id |
+| `status` | TEXT | `running` \| `done` \| `failed` |
+| `manager_session_id` | TEXT | the manager's Claude session UUID (the watcher resumes it); the run row *is* the manager's record |
+| `manager_model` | TEXT | the manager's Claude model |
+| `rev_counter` | INTEGER | monotonic counter for this run; source of all `rev` values (§4.2) |
+| `manager_reacted_rev` | INTEGER | high-water-mark: the latest `rev` the manager has already reacted to |
+| `manager_turns` | INTEGER | turns run, incremented after each; `0` means the session does not exist yet (§4.4) |
+| `created_at` | TEXT | ISO timestamp |
+| `ended_at` | TEXT | ISO timestamp, NULL until closed; the manager's "completed_at" is the run's |
+
+The run holds **no goal text** — goals live in `tasks`. The run is a standing
+team, not a single goal. The manager is 1:1 with the run (one persistent process
+spanning all its tasks), so it needs no row of its own.
+
+### 2.2 `tasks` — a goal from the operator
+
+The operator's goals. The initial goal at `synapse start` is the first task
+row; each follow-up goal adds another. A task is created by an operator
+`REQUEST` message (§2.4).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | INTEGER PK | task id |
+| `run_id` | INTEGER FK | the team this goal belongs to |
+| `text` | TEXT | the goal as the operator stated it |
+| `status` | TEXT | `open` → `planning` → `running` → `done`; or `cancelled` |
+| `source_message_id` | INTEGER FK | the operator `REQUEST` message that stated this goal |
+| `created_at` | TEXT | ISO timestamp |
+| `done_at` | TEXT | ISO timestamp, NULL until terminal |
+
+`tasks.status` is the manager's **declaration**, not the ground truth. Whether a
+task's work is finished is *derived* from its subtasks, exposed as a view:
 
 ```sql
-CREATE TABLE agents (
-  window_name TEXT PRIMARY KEY,    -- tmux window name == agent address
-  role        TEXT NOT NULL,       -- manager | coder | reviewer | ...
-  session_id  TEXT,                -- Claude Code session id, for jsonl path
-  status      TEXT NOT NULL DEFAULT 'unknown',  -- idle | busy | unknown
-  last_seen_at TEXT
-);
-
-CREATE TABLE messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  from_agent TEXT NOT NULL,
-  to_agent   TEXT NOT NULL,       -- references agents.window_name, or 'broadcast'
-  type       TEXT NOT NULL DEFAULT 'INFO',  -- TASK | STATUS | REVIEW | ACK | INFO
-  ref_id     INTEGER,             -- id of the message this one replies to/closes
-  body       TEXT NOT NULL,
-  status     TEXT NOT NULL DEFAULT 'pending',  -- pending | delivered | read | failed
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  delivered_at TEXT
-);
+CREATE VIEW task_progress AS
+SELECT t.id, t.run_id, t.status,
+       COUNT(s.id)                                          AS n_subtasks,
+       SUM(s.stage IN ('done','failed','cancelled'))        AS n_terminal,
+       COUNT(s.id) > 0
+         AND COUNT(s.id) = SUM(s.stage IN ('done','failed','cancelled'))
+                                                            AS work_settled
+FROM tasks t LEFT JOIN subtasks s ON s.task_id = t.id
+GROUP BY t.id;
 ```
 
-`ref_id` is what makes the team's interactions traceable: a `STATUS`
-message sets `ref_id` to the `TASK` it's closing out, a `REVIEW`'s
-follow-up `STATUS` points back to the `REVIEW`. Without it, the message
-log is just a flat chat transcript with no way to tell which task a given
-status report belongs to.
+`work_settled` is false for a task with **zero** subtasks — a goal that has been
+stated but not yet planned is not finished. A task is terminal when
+`work_settled` is true and the manager has set `status='done'`, or when
+`status='cancelled'`. `synapse done` gates on the view, never on stored status
+(§4.6).
 
-**Session id.** Each agent registers itself in `agents` right after start
-(a `synapse-register <window-name> <role> <session-id>` call from the launch
-wrapper, or from the agent itself on its first turn). This replaces
-parsing the session-start banner out of the pane — the monitor and the
-audit pipeline both just read `agents.session_id` to find the right jsonl
-file. The monitor updates `agents.status`/`last_seen_at` as it observes
-idle/busy transitions (see Idle Detection), so `agents` doubles as a live
-status board for the team.
+### 2.3 `subtasks` — one row per unit of work (and per worker)
 
-**Message type.** `type` is a required, small closed vocabulary rather
-than free text, so the monitor/audit can route and log meaningfully
-without parsing message bodies:
-- `TASK` — assignment of work, expects eventual `STATUS`.
-- `STATUS` — progress/completion report on a previously assigned task.
-- `REVIEW` — request for another agent (typically reviewer role) to look
-  at something.
-- `ACK` — lightweight acknowledgment, no reply expected.
-- `INFO` — anything else (FYI, broadcast notices, etc.).
+The heart of the system. The manager creates rows under a task; exactly one
+worker is spawned per row, does that row's work, and exits. A worker's process
+facts live on its row — the worker *is* the row.
 
-- Agents don't touch SQLite directly — they call a small CLI
-  (`synapse-send <to> <type> "<message>"`) exposed as a tool/skill, which
-  inserts a row. This keeps the write path uniform and avoids giving every
-  agent raw DB access.
-- The monitor is the only reader/writer that transitions `pending` →
-  `delivered`. WAL mode recommended for concurrent access from many
-  agent-side CLI invocations plus the monitor.
-- `broadcast` as `to_agent` value fans out to all windows except sender;
-  monitor expands this at delivery time rather than storing N rows.
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | INTEGER PK | subtask id; also identifies its worker ("subtask-7's worker") |
+| `run_id` | INTEGER FK | |
+| `task_id` | INTEGER FK | which goal this work serves |
+| `title` | TEXT | what this unit of work is |
+| `assignee_role` | TEXT | which role does it (`coder`, `reviewer`, …) |
+| `depends_on` | TEXT | JSON array of subtask ids that must be `done` first; `[]` if none. **The first element is this row's subject** (§2.3.1) |
+| `worker_session_id` | TEXT | the worker's Claude session UUID, assigned by the controller at spawn; **not unique across rows** |
+| `worker_model` | TEXT | the worker's Claude model |
+| `worker_pid` | INTEGER | the worker process, NULL until spawned; used for liveness sweep and cancellation kill |
+| `worktree_path` | TEXT | the filesystem the worker acts in (§4.7) |
+| `stage` | TEXT | `unassigned` → `assigned` → `done`; or `failed`, `cancelled` |
+| `result_summary` | TEXT | what the worker did (written on its reply), or the failure detail if `failed` |
+| `artifact_path` | TEXT | pointer to a handoff doc, NULL if none |
+| `verdict` | TEXT | the manager's ruling on this row (`LGTM`, `issues: …`), NULL until judged |
+| `cancel_reason` | TEXT | why it was cancelled, NULL otherwise |
+| `cancelled_at` | TEXT | ISO, set if the row is cancelled |
+| `rev` | INTEGER | the `rev` of the last transition on this row that the manager owes a reaction to (§4.2) |
+| `created_at` | TEXT | ISO timestamp |
+| `updated_at` | TEXT | ISO, for humans only — **not** used for control |
 
-### 3. Idle detection
+Terminal stages: `done`, `failed`, `cancelled`.
 
-Detection is event-driven off the Claude Code session transcript
-(`~/.claude/projects/<project-slug>/<session-id>.jsonl`), not pane-text
-polling.
+#### 2.3.1 `depends_on` does two jobs
 
-- Tail the jsonl per agent (`tail -f` or inotify watch).
-- Each `assistant` entry has `message.stop_reason`:
-  - `tool_use` → turn continues automatically, agent is busy.
-  - `end_turn` → agent has finished its turn and is sitting at the prompt.
-- Idle = last assistant entry has `stop_reason: "end_turn"` AND no new
-  jsonl lines for a short debounce window (e.g. 2s), to avoid acting on a
-  transient end_turn that's immediately followed by more activity (rare,
-  but a debounce removes the race instead of reasoning about why it could
-  occur).
-- No reliance on parsing rendered terminal output — avoids spinner frames,
-  ANSI codes, line-wrap, and other rendering noise that plagues pane
-  scraping.
-- Open question: confirm there's no simpler explicit "turn boundary" event
-  already emitted (e.g. via a hook) before building the jsonl-diffing
-  logic — worth a short investigation before implementation.
+It is both the **dispatch gate** ("do not spawn until these are `done`") and the
+**subject pointer** ("this is the row I am reviewing"). A reviewer row for
+subtask 7 has `depends_on = [7]`; a tester row that needs both the code and a
+fixture has `[7, 9]` and its subject is 7. The controller passes the subject
+row's `artifact_path` and `worktree_path` into the worker's prompt.
 
-### 4. Message delivery
+The gate replaces rev 1's `needs_review` / `needs_test` columns: "review is
+required" is now expressed by a reviewer row existing.
 
-- When the monitor sees an agent go idle AND there's a `pending` message
-  addressed to it, it delivers via:
-  `tmux send-keys -t team:<window-name> "<message>" Enter`
-- Multiple pending messages for the same agent: deliver oldest first,
-  one at a time, re-checking idle state between deliveries (the agent's
-  next turn may itself produce `tool_use` activity before reading further
-  messages).
-- Mark row `delivered` immediately after the send-keys call succeeds;
-  `read` status is aspirational (would require the agent to ack — out of
-  scope for v1, see Open Questions).
-- Failure handling: if `send-keys` targets a dead/closed window, mark the
-  row `status = 'failed'`. This is terminal in v1; the monitor does not
-  automatically retry failed rows. Retrying transient tmux failures would
-  require explicit retry state such as `retry_count` / `next_retry_at` and
-  a redelivery command or scheduler policy.
+#### 2.3.2 Other modeling choices
 
-### 5. Audit pipeline
+- **Two creation paths, one table.** A subtask row is created either **up-front**
+  (approving a plan materializes the whole plan's rows at once, stage=unassigned,
+  with their dependency edges, so the operator sees the full arc) **or on the
+  fly** (the manager creates a row during execution — a follow-up goal's work, a
+  re-do after a bad review, an emergent unit). The row is the truth regardless
+  of *when* it was born.
+- **The manager owns no row.** Its work is *judging* subtask rows; its ruling is
+  the `verdict` field on the row it judged, not a message. A freshly-compacted
+  manager reads the row and sees its own verdict.
+- **A worker owns no separate record.** Its identity is its subtask id; its
+  process facts (`worker_session_id`, `worker_model`, `worker_pid`,
+  `worktree_path`) are columns on the row.
+- **`worker_session_id` is a process artifact, not an identity.** Do not index or
+  join on it. It is normally fresh per row, but a fix-round row may deliberately
+  resume the original coder's session (§4.8), so the same UUID can appear twice.
+- **`stage` is authoritative** — no per-stage timestamps; the "when" of each
+  stage is observability we don't need for control.
+- **Workers are blinkered by design.** A worker sees only its own row (and its
+  subject's artifact); the whole run is the manager's and operator's view,
+  obtained by query, never a stored summary blob.
 
-Two complementary mechanisms, not one — self-reported events for the
-"why," and external transcript summarization for the "what happened"
-fallback/detail. They answer different questions and are built in two
-phases, not in parallel:
+### 2.4 `messages` — the operator conversation
 
-- **Phase 1: self-reported events.** Build this first. It reuses the same
-  CLI-call shape as `synapse-send`, requires no transcript parsing, and
-  captures intent directly ("I chose X over Y because Z") instead of it
-  being inferred after the fact. Sufficient for "give a readable
-  narrative of what the team did."
-- **Phase 2: transcript tailing.** Add later, specifically when
-  independence from the agent's own cooperation starts to matter — e.g.
-  once the team runs with less supervision and "the agent said it was
-  done" isn't good enough on its own. Self-reported events can be
-  skipped or — for a decision an agent would rather not surface —
-  selectively omitted; the transcript can't be, since it captures every
-  tool call regardless of whether the agent thought it worth reporting.
-  This is also the harder build (jsonl schema stability, summarization
-  cost over large/noisy tool payloads), which is a second reason to defer
-  it rather than build both at once.
+Agent *work* flows through `subtasks`, not through messages. The `messages`
+table carries the operator↔manager conversation only.
 
-**Self-reported events (Phase 1, agent-initiated).** The agent itself
-calls a `synapse-log <type> "<summary>"` skill/CLI at meaningful lifecycle
-points: starting a task, closing a task, making a notable decision. This
-is the agent narrating its own intent in its own words, at the moment it
-matters, rather than an external process inferring intent after the fact.
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `run_id` | INTEGER FK | |
+| `author` | TEXT | `operator` or `manager` |
+| `type` | TEXT | `REQUEST` \| `QUESTION` \| `ANSWER` \| `NOTE` |
+| `ref_id` | INTEGER | the message this answers (NULL for a root) |
+| `body` | TEXT | |
+| `title` | TEXT | short header for a QUESTION card |
+| `options` | TEXT | JSON array of choices (required on a QUESTION) |
+| `rev` | INTEGER | assigned iff `author='operator'`; NULL otherwise (§4.2) |
+| `created_at` | TEXT | ISO timestamp |
+
+`to_agent` is dropped: only two identities exist, so the recipient is whoever
+the author is not. `author` is kept (rather than deriving direction from `type`)
+because `NOTE` is legal in both directions.
+
+Message types — each is a distinct CLI verb, so the type is never inferred from
+the text:
+
+| verb | type | author | behavior |
+|---|---|---|---|
+| `synapse request "<goal>"` | REQUEST | operator | **creates a `tasks` row** |
+| `synapse ask "<q>" --options a,b,c` | QUESTION | manager | blocking; UI renders a card; `options` required |
+| `synapse answer <id> "<text>"` | ANSWER | operator | resolves by `ref_id`; unblocks the manager |
+| `synapse say "<text>"` | NOTE | either | none — plain chat |
+
+Three of the four are behavior-bearing; `NOTE` is not, and is not pretended to
+be. Rev 1's lifecycle tags (`[start]`/`[done]`/`[blocked]`) are removed: that is
+status, status lives in `subtasks`, and the operator reads it directly
+(principle 4).
+
+The load-bearing distinction is **REQUEST vs NOTE** — "build the auth module"
+creates a task, "use tabs not spaces" does not. Putting that on the operator's
+choice of verb makes it unambiguous and needs no classifier.
+
+Illegal combinations (`QUESTION` from the operator, `REQUEST` from the manager,
+`QUESTION` without `options`, `ANSWER` with no `ref_id`) are rejected by the
+command layer.
+
+---
+
+## 3. Roles
+
+Roles are **built into the controller** as hard-coded prompt templates — no
+roles table, no external config. The shipped set:
+
+- **`manager`** — plans each goal, dispatches work, judges results, converses
+  with the operator. Persistent (one per run; it is the run row).
+- **`coder`** — implements a change. One-shot.
+- **`reviewer`** — judges its subject row's change against acceptance criteria.
+  One-shot.
+- **`tester`** — runs the validation plan for its subject row. One-shot.
+- **`doc-writer`** — produces documentation/specs. One-shot.
+
+`synapse spawn <role>` launches a worker with its built-in prompt and a default
+model. `--model` and `--prompt-file` are optional overrides — `--prompt-file` is
+the escape hatch to try a variant prompt without editing the controller. Adding
+a *permanent* new role is a controller code change.
+
+Roles carry no gate configuration; gating is `depends_on` (§2.3.1).
+
+---
+
+## 4. How it works
+
+### 4.1 The lifecycle of a run
+
+```
+operator: synapse start --goal "build X"      (= init, then watch)
+  synapse init:
+    → create runs row (status=running, rev_counter=0, manager_turns=0)
+    → generate manager_session_id (not yet used — no session exists)
+    → create the first REQUEST message + its tasks row, print the run id
+  synapse watch --run <id>:
+    → start the watcher
+    → (start does NOT spawn a manager turn directly — the watcher does, §4.4)
+
+manager (persistent = the run row), woken by the watcher:
+  → FIRST ACT, ALWAYS: synapse status --run <id> --json  (§4.9)
+  → new REQUEST? → plan: write spec / plan / testplan docs; ask operator to approve
+  → on approval: materialize the plan's subtask rows up front
+    (stage=unassigned, with depends_on edges — coder, then its reviewer,
+     then its tester, as sibling rows)
+  → dispatch: for every READY row (stage=unassigned and all deps done),
+    spawn a one-shot worker
+  → may also create rows ON THE FLY during execution
+  → its turn ends; the process exits, the SESSION persists (§4.9)
+
+worker (one-shot = a subtask row):
+  → claude -p --session-id <uuid>: read its row + its subject's artifact, work
+  → synapse reply <subtask-id> "<result>" [--handoff <kind>:<file>]
+      (writes result_summary + artifact_path, stage=done, assigns a rev)
+  → process exits
+  → if it exits WITHOUT replying, the wrapper writes stage=failed (§4.5)
+
+watcher (background, polling):
+  → any rev > runs.manager_reacted_rev (subtask transition or operator message)?
+  → cancel-cascade any row whose deps are terminal-but-not-done (§4.6)
+  → wake exactly one manager turn (claude -p --resume <manager_session_id>)
+
+manager (woken):
+  → judge each newly-terminal row (write `verdict`), decide next
+      (dispatch newly-ready rows, or create follow-up/re-do rows)
+  → a task's work settled and accepted → set tasks.status=done
+  → all tasks terminal → synapse done
+
+operator (throughout):
+  → reads the tables directly (live view) — each result the moment it is written,
+    no manager relay
+  → sends follow-up goals (synapse request); answers questions (synapse answer)
+```
+
+### 4.2 `rev`: one monotonic signal
+
+Every write **that the manager owes a reaction to** takes the next value of
+`runs.rev_counter`, in the same transaction as the write:
 
 ```sql
-CREATE TABLE events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  agent      TEXT NOT NULL,
-  type       TEXT NOT NULL,   -- task_start | task_end | decision
-  summary    TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+UPDATE runs SET rev_counter = rev_counter + 1 WHERE id = ? RETURNING rev_counter;
 ```
 
-- Requires each role's instructions (CLAUDE.md / system prompt) to
-  explicitly call out when to log: e.g. "call synapse-log task_start before
-  beginning assigned work, task_end when done, decision whenever you
-  choose between two reasonable approaches."
-- This is opt-in/best-effort by the agent — it can be skipped or
-  forgotten, which is why it's paired with the passive mechanism below
-  rather than relied on alone.
+Writes that assign a rev:
+- a worker's `synapse reply` (stage → done)
+- a wrapper/sweep failure write (stage → failed)
+- a cancel-cascade (stage → cancelled)
+- any **operator**-authored message (REQUEST, ANSWER, NOTE)
 
-**Transcript summarization (Phase 2, external, comprehensive).** Same
-jsonl tail used for idle detection feeds a second consumer: a periodic
-(or triggered-on-idle) summarization pass over the raw transcript,
-producing a rolling activity digest per agent (tool calls made, messages
-sent/received, outcome) — this catches everything the self-reported
-events might have missed or glossed over.
+Writes that do **not** assign a rev: everything the manager itself does —
+verdicts, row creation, dispatch, task status, its own QUESTIONs and NOTEs.
+Otherwise the manager would wake itself in a loop.
 
-- Digests written to a per-agent audit log (e.g.
-  `.synapse/audit/<window-name>.md`), appended incrementally rather than
-  regenerated from scratch each time, to keep cost bounded as sessions
-  grow long. Self-reported `events` rows can be interleaved into the same
-  digest by timestamp for a combined narrative.
-- Audit is read-only / observational — neither mechanism feeds back into
-  the agent's own context or influences delivery logic, to keep the audit
-  trail trustworthy as an independent record.
+This collapses rev 1's two watcher signals into one and removes two bugs that
+timestamp-based high-water-marks have:
 
-### 6. Team management
+- **Mid-turn loss.** Rev 1 advanced the mark to wall-clock-now at turn end, so a
+  transition landing *during* a manager turn fell behind the mark and was never
+  reacted to — a completed subtask nobody judged, and a stalled run.
+- **Same-second collisions.** ISO-second granularity with `>` merged two
+  transitions in the same second into one, or dropped one depending on `>` vs
+  `>=`.
 
-#### 6.1 Defining a team
-
-A team is declared in a config file (e.g. `task.yml`), not assembled by
-hand:
-
-```yaml
-session: team
-agents:
-  - name: manager
-    role: manager
-    cwd: ./manager
-  - name: coder-1
-    role: coder
-    cwd: ./coder-1
-  - name: coder-2
-    role: coder
-    cwd: ./coder-2
-  - name: reviewer
-    role: reviewer
-    cwd: ./reviewer
-```
-
-Each `cwd` has its own `CLAUDE.md` describing that role's responsibilities
-and, critically, the Synapse conventions it must follow: when to call
-`synapse-send` (and with which `type`), when to call `synapse-log`, and who it
-typically reports to. Role behavior lives entirely in these files — the
-bus and monitor have no concept of "manager" vs "coder," only of message
-types and idle/busy state.
-
-`cwd` is optional. If omitted for an agent, synapse defaults to
-`.synapse/agents/<version>/<name>` (created automatically) rather than a
-real project checkout — useful for ad hoc or scratch agents that don't need
-their own working tree. `<version>` is the running binary's version (`synapse
-version`; baked in at build time from `git describe`, see Makefile). It
-namespaces the directory by build rather than by run: the `CLAUDE.md` inside
-is fully regenerated from templates on every `synapse start`, so it holds no
-run-specific history, but pinning it to the version that wrote it means a
-synapse upgrade gets a clean directory instead of a stale mix of old and new
-template content.
-
-#### 6.2 Starting the team
-
-`synapse start` accepts any `task.yml` (including a template copy kept
-outside `.synapse`). If no argument is given, it defaults to
-`templates/task.example.yml`. On start it:
-
-0. Allocates a new run id from the DB and creates a run folder
-   `.synapse/runs/run-<id>/`, copying the supplied `task.yml` into it.
-   This gives every run a stable, self-contained snapshot of the config
-   that launched it — the original template is never mutated.
-
-Then, in order:
-
-1. Create the tmux session (`run-<id>`), one window per config entry.
-2. In each window: `cd <cwd> && claude`, then capture the new session id
-   and call `synapse-register <name> <role> <session-id>` to populate
-   `agents`.
-3. Start the monitor (idle detection + delivery) as its own process —
-   either a background process or its own tmux window (e.g. `monitor`),
-   so it's inspectable the same way agent windows are.
-4. Register the human operator as a pseudo-agent (`operator`) in `agents`
-   so the initial goal and any later interjections are just ordinary
-   messages, not a special-cased channel.
-5. Send the initial goal as a `TASK` message from `operator` to `manager`
-   — this is what actually kicks the team into motion; nothing runs
-   before this message is delivered.
-
-#### 6.3 Assigning tasks
-
-- The human operator's `TASK` to `manager` carries the overall goal in
-  free text (`ref_id` null — it's a root task).
-- `manager` decomposes the goal and sends one `TASK` message per subtask
-  to the relevant coder window(s), `ref_id` null (new tasks) but the body
-  should include enough acceptance criteria that the coder can self-judge
-  "done."
-- When a coder finishes (or gets blocked), it sends `STATUS` back to
-  `manager` with `ref_id` set to the originating `TASK`'s id. `manager`
-  uses `ref_id` to track which subtasks are outstanding rather than
-  keeping that state only in its own context window — the DB is the
-  source of truth for "what's still open," not the manager's memory.
-- `manager` only considers the root goal complete once all subtasks it
-  issued have a terminal `STATUS` (done or explicitly abandoned).
-
-#### 6.4 How agents interact
-
-Default topology is hub-and-spoke through `manager` for task
-assignment and status, with one explicit exception for review:
+The watcher therefore reads the mark **before** the turn and writes it **after**:
 
 ```
-operator --TASK--> manager --TASK--> coder-1
-                       ^                |
-                       |             REVIEW
-                    STATUS              v
-                       |             reviewer
-                       +----STATUS-----+
+rev_seen = max(rev) across subtasks + messages for this run   # before
+run one manager turn (blocking)
+runs.manager_reacted_rev = rev_seen                           # after
 ```
 
-- `TASK` / `STATUS` always flow through `manager` — it's the only agent
-  that hands out work and the only one that needs the full picture to
-  decide what's next.
-- `REVIEW` is peer-to-peer (coder → reviewer directly) rather than routed
-  through `manager`, since manager doesn't need to be in the loop for
-  every review round-trip — only the final `STATUS` (review passed/failed)
-  needs to reach manager, with `ref_id` chasing back to the original
-  `TASK`.
-- `ACK` is used for low-stakes "got it, working on it" replies that don't
-  need a `STATUS` round-trip later.
-- This keeps `manager` from being a bottleneck on review iteration while
-  still giving it a single, complete view of task lifecycle via `ref_id`
-  chains.
+Anything that lands mid-turn has `rev > rev_seen` and fires on the next poll.
+Coalescing (N transitions during one turn → one follow-up wake) and no-loss both
+fall out of this ordering.
 
-#### 6.5 Stopping / lifecycle control
+`updated_at` remains on `subtasks` for humans reading the table. It is not used
+for control.
 
-- `synapse-stop <name>` kills that window and sets `agents.status` to
-  `stopped` — distinguishes "intentionally shut down" from "looks idle"
-  in monitor/audit views.
-- Full teardown kills the tmux session; the SQLite DB and audit logs are
-  not deleted, so a finished or aborted run can be inspected after the
-  fact.
-- Staleness (an agent with a `TASK` outstanding but no `STATUS` and no
-  `last_seen_at` update past some timeout) is surfaced to `manager` (and/or
-  the human operator) as a notice, not auto-resolved — the monitor stays
-  mechanical (idle detection + delivery) and leaves judgment calls
-  ("reassign? nudge? escalate to human?") to the agents themselves.
+### 4.3 Readiness and dispatch
 
-#### 6.6 Operator interaction
+A row is **ready** when `stage='unassigned'` and every id in `depends_on` has
+`stage='done'`. The manager dispatches ready rows during its turn. Because the
+edges are stored, a freshly-compacted manager can recompute readiness from the
+tables alone — ordering never lives only in context.
 
-The human operator already has a CLI by construction — `agents` includes
-`operator` as a row, and sending a message is the same
-`synapse-send <to> <type> "<message>"` call any agent uses. The remaining
-question is what else the operator needs: a way to see status, and a way
-to intervene directly. Three tiers, in increasing cost:
+### 4.4 The trigger model
 
-- **Direct tmux attach (free).** Every agent is a real, ordinary tmux
-  window — `tmux attach -t team:coder-1` lets the operator watch or type
-  into any agent exactly as the monitor's send-keys does. Nothing to
-  build; this exists purely because of how the substrate is built, and
-  it's the escape hatch for debugging or hands-on intervention when
-  messaging through the bus isn't enough.
-- **`synapse` CLI subcommands (cheap, recommended for v1).** Thin wrappers
-  over the SQLite tables already speced — no new infrastructure, just
-  read/write access to tables that exist for other reasons:
-  - `synapse send <to> <type> "<msg>"` — same path agents use.
-  - `synapse status` — table of `agents`: role, idle/busy, `last_seen_at`,
-    outstanding `ref_id`(s).
-  - `synapse log <agent>` — tail that agent's audit digest/events.
-  - `synapse attach <agent>` — friendlier wrapper around `tmux attach`.
-- **A live status view ("UI"), built from the CLI, not a separate app.**
-  Run `watch -n2 synapse status` in its own tmux pane in the same session —
-  a continuously-refreshing dashboard with no web server, no GUI, no
-  second surface to maintain. It's the same CLI, rendered live, inside
-  the environment everything else already lives in.
+One persistent background component — the **watcher** — does one job: wake the
+manager when it owes a reaction (`max(rev) > manager_reacted_rev`).
 
-Recommendation: no standalone UI/web app for v1. A dedicated GUI would be
-a second surface — a different process presenting the same SQLite state
-a different way — which cuts against the single-host, tmux-resident
-design assumed elsewhere in this spec (see Out of scope). The CLI plus a
-`watch`'d status pane covers visibility; direct tmux attach covers
-hands-on intervention. Between the two there isn't a gap a GUI would
-close for v1 — revisit only if status/history needs outgrow what fits in
-a terminal pane.
+The first wake **creates** the manager session (`claude -p --session-id
+<manager_session_id>`); every later wake **resumes** it (`--resume`). The watcher
+distinguishes them by `runs.manager_turns`, which is `0` until the first turn
+completes and is incremented after each. A turn that fails before completing
+leaves the counter alone, so the next wake correctly retries session creation
+rather than resuming a session that was never established.
 
-## Bootstrap modes
+The watcher is the **only** thing that ever starts a manager turn, and it is
+single-threaded. Mutual exclusion is therefore structural, not enforced by a
+lock: at most one `claude -p --resume <manager_session_id>` process exists at
+any time. (Two concurrent resumes of one session id would fork the transcript —
+this is the invariant that prevents it.) This is why `synapse init` creates the
+run and first task but spawns nothing, and `synapse start` only hands off to the
+watcher.
 
-Section 6.2 assumes a human runs `synapse start task.yml` before any agent
-exists. A second, equally valid entry point: the human just opens one
-interactive Claude CLI session and prompts it directly ("set up a team to
-do X"). That collapses "write a YAML file" into "describe what you want,"
-but it forks into two materially different architectures depending on
-whether the resulting team members end up as separate processes or not.
+The invariants are:
 
-### Mode A — prompted, separate windows (still tmux + SQLite)
+- **At most one manager process alive.** (Structural, above.)
+- **No transition left unreacted.** (The rev ordering in §4.2.)
 
-The session the human is talking to plays `manager`. Instead of an
-external script performing bootstrap, `manager` does it itself,
-reactively, using its own Bash access:
+Note that "exactly one wake per transition" is *not* an invariant and is not
+wanted: several transitions arriving during a busy turn should coalesce into one
+follow-up wake.
 
-- decides team composition from the prompt (how many coders, is a
-  reviewer needed) instead of reading it from a YAML — team shape is
-  improvised at prompt time, not declared upfront,
-- creates the tmux windows and runs `cd <dir> && claude` in each,
-- captures each new session id and calls `synapse-register` itself,
-- then proceeds exactly as in 6.3 — sends `TASK` messages to the windows
-  it just created.
+Workers are never polled or nudged; a worker runs because the manager spawned it
+and finishes when its process exits.
 
-Everything in sections 2–6 (SQLite bus, jsonl idle detection, send-keys
-delivery, audit) applies unchanged — the only things that moved are *who*
-performs the bootstrap step (the manager agent itself, not a pre-run
-script) and *when* team shape gets decided (at prompt time, not config
-time). This is the natural mode for ad hoc or one-off teams where writing
-a YAML first is more overhead than it's worth.
+### 4.5 Guaranteed worker exit signal
 
-### Mode B — prompted, in-process (no separate windows at all)
+Liveness is not tracked, but a worker's exit must always become a subtask
+transition. Three mechanisms, in order of when they fire:
 
-Alternatively, `manager` doesn't spin up other tmux windows/CLI processes
-at all. It dispatches coder/reviewer work as sub-agent calls within its
-own process and gets the result back inline, synchronously, as a return
-value — no second process, no second tmux window.
+1. **Stop hook (prevention).** On the worker's turn end, if no `synapse reply`
+   has been recorded for its subtask, the hook blocks the stop with "you have not
+   called `synapse reply` for subtask N." This catches the common case — a model
+   that believes it is finished, or that narrated an error in prose instead of
+   writing it to its row — by making it finish properly. It does not fire on
+   OOM, non-zero exit, kill, or context-limit abort, and does not survive a
+   model that keeps getting blocked long enough to exhaust an internal
+   ~10-forced-stop retry cap — past that, the CLI silently reports success
+   with an empty result despite an active block (spike S0.3). This is exactly
+   why layers 2 and 3 are unconditional and never trust the hook or the CLI's
+   own exit code.
+2. **Spawn wrapper (primary).** `synapse spawn` waits on the child process. If
+   the child exits and no reply landed, the wrapper writes `stage='failed'`,
+   `result_summary = "<exit code>; <tail of stderr>"`, and assigns a rev.
+   Unconditional; catches everything the hook misses.
+3. **Watcher pid sweep (backstop).** Each poll, any row with `stage='assigned'`
+   whose `worker_pid` is gone → `failed`. Costs one column and survives a
+   controller or wrapper crash.
 
-This is a fork in the whole architecture, not just a startup detail:
+Each mechanism above assumes a worker actually got to attempt its tools. A
+worker's tool access is scoped per role via `--allowedTools`, granted at spawn:
 
-- No separate tmux window, no separate Claude CLI session, no jsonl
-  transcript per role — so idle detection (3), send-keys delivery (4),
-  and the `agents` session-id registry (2) don't apply at all. There's
-  nothing to poll for idleness; the call blocks until the sub-agent
-  returns.
-- No SQLite mailbox needed either — `manager` gets the sub-agent's result
-  directly as the call's return value, not as a `STATUS` row it has to
-  notice later via polling.
-- Loses: persistence (a sub-agent call isn't a resumable session you can
-  message again later), standing concurrency (several sub-agents can be
-  dispatched in one turn for parallel work, but each is a self-contained
-  call-and-return, not a process that stays around to receive a second
-  message), and the live status-board property of `agents` (nothing to
-  show as "currently idle" since nothing is ever idle — it's either
-  running or finished).
-- Gains: far less infrastructure — no `task.yml`, no bus, no monitor
-  process to keep alive, no audit pipeline to wire up. Good fit for
-  shorter, more supervised tasks where the human is actively driving the
-  one open session.
-- Audit, if wanted here, reduces to "log the dispatch prompt and the
-  returned result" — there's no transcript to tail, since a sub-agent's
-  intermediate steps aren't independently observable the way a full
-  Claude CLI session's jsonl is.
+| Role | Tools |
+|---|---|
+| `coder` | `Write`, `Edit`, `Bash`, `Read`, `Glob`, `Grep` |
+| `reviewer` | `Read`, `Glob`, `Grep`, `Bash(git *)` — no `Write`/`Edit`: a reviewer judges, it does not modify the row it is reviewing; `git` is a prompt-contract boundary (read commands only), not a pattern-enforced one |
+| `tester` | `Read`, `Glob`, `Grep`, `Bash` — runs the validation plan, including build/test commands, but does not edit source |
+| `doc-writer` | `Write`, `Edit`, `Read`, `Glob`, `Grep` — writes only under `.synapse/artifacts/` by prompt contract, not by tool restriction |
 
-### Which mode this spec targets
+All roles additionally get `Bash(<synapse-bin-path> *)` and `Bash(printenv
+*)`, computed at spawn time rather than listed statically above:
 
-Sections 1–6 are written for Mode A (and the originally-scripted variant)
-— they assume persistent, independently addressable agents that can
-receive a second message after finishing their first task, which is what
-makes the mailbox/idle-detection/audit machinery worth building at all.
-Mode B is a legitimate alternative but a meaningfully simpler system with
-none of that machinery; worth naming explicitly so it's a deliberate
-choice rather than something this spec quietly forecloses.
+- **The worker's own identity — the synapse binary's absolute path,
+  `SUBTASK_ID`, `RUN_ID` — is substituted as literal text into the prompt at
+  spawn time**, not read from the environment via shell expansion. A first
+  implementation passed these as process environment variables and told
+  workers to invoke `$SYNAPSE_BIN`; a real reviewer trial found Claude Code's
+  `Bash(pattern *)` allowlist matches literal command text, and denies both
+  `$VAR`-expanding commands ("Contains simple_expansion") and the binary's
+  resolved absolute path (requires approval) — so `Bash(synapse *)` never
+  matched anything the worker could actually run. The corrected design
+  substitutes the real absolute path directly into the prompt text before
+  spawn (no variable, nothing to expand), and grants
+  `Bash(<that same absolute path> *)` — computed per spawn, since the path
+  varies by checkout (D2). `Bash(printenv *)` remains granted for debugging
+  visibility but is no longer load-bearing for the worker's own identity.
+- The `synapse reply` call is mandatory, which is why every role's `Bash`
+  grant includes the synapse binary regardless of what else it can run.
 
-## Execution plan
+A tool-call denial is not a distinct failure mode: a worker that never gets
+to write still falls through the layer 2/3 guarantee above like any other
+silent exit — headless `-p` mode enforces permissions and exits 0 even when
+every tool call was denied (spike S0.1), so the wrapper's "no reply landed"
+check is what actually catches it, not the exit code.
 
-Ordered so each phase validates the riskiest/cheapest-to-test part of the
-next phase before more is built on top of it — same logic already
-applied to the audit-pipeline ordering above.
+`failed` is an ordinary subtask transition, not an exception path: the manager
+judges it like any other and typically responds by creating a replacement row.
 
-**Phase 0 — Foundations.** SQLite schema (`agents`, `messages`, `events`,
-WAL mode) and the `synapse` CLI skeleton: `synapse-register`, `synapse-send`,
-`synapse-log`, `synapse status`. No tmux automation yet — just confirm the
-schema and CLI ergonomics are right, since everything else builds on
-this.
+### 4.6 Cancellation
 
-**Phase 1 — Manual single-agent loop.** One tmux window running `claude`,
-registered by hand. Send it a `TASK` via `synapse-send` and deliver it by
-manually running `tmux send-keys` — no monitor process yet. Purpose: this
-is the smallest possible thing that exercises the actual message format
-end to end, before automating delivery makes mistakes harder to see.
+Three sources, all real:
 
-**Phase 2 — Idle detection + monitor, two agents.** Build the jsonl
-tailer (assistant `stop_reason: end_turn` + debounce) and the monitor
-loop (poll `pending` rows for idle agents, deliver, mark `delivered`).
-Test with exactly two windows — `manager` and one `coder` — running a
-real `TASK` → `STATUS` round trip with no human pressing send-keys by
-hand. This is the riskiest unverified piece (jsonl schema assumptions
-from section 3), so it's isolated here before scaling to a full team.
+1. The operator cancels a goal → cascade to that task's non-terminal rows.
+2. The manager decides a planned row is unnecessary (e.g. a review found the
+   whole approach wrong).
+3. **A dependency did not succeed.** With `depends_on`, a row whose dep ended
+   `failed` or `cancelled` can never become ready. The watcher cancels it
+   mechanically — `cancel_reason = "dependency <id> failed"` — with no manager
+   judgment required. Without this path such rows sit in `unassigned` forever and
+   block `synapse done`.
 
-**Phase 3 — Full team + bootstrap (Mode A).** `task.yml` format and
-`synapse start`; scale to the full role set (manager, 2 coders, reviewer);
-implement the `REVIEW` peer-to-peer path and `ref_id` correlation across
-multi-step task chains (6.3/6.4). Mode B (in-process sub-agents) is not
-built in this plan — it's a different, simpler system, noted but
-deliberately out of scope here.
+Cancelling an `assigned` row kills the worker's **process group**, not just
+`worker_pid` — a worker's own tool subprocesses must die with it, or a cancelled
+row leaves orphans holding its worktree, which then poisons any row that inherits
+that tree (§4.7). Workers are therefore spawned into their own process group.
 
-**Phase 4 — Self-audit.** `synapse-log` + `events` table, and role
-`CLAUDE.md` templates updated to call it at task_start/task_end/decision.
-Deferred to after Phase 3 rather than built earlier, since it needs a
-real multi-agent run to be worth evaluating against.
+`synapse reply` against a row already in a terminal stage — `cancelled`,
+`failed`, or `done` — is **rejected**, so a killed worker's dying write cannot
+revive it, and a second worker's late reply cannot overwrite an already-judged
+result.
 
-**Phase 5 — Operator tooling.** `synapse status` / `synapse log` /
-`synapse attach` subcommands, plus the `watch`-based live status pane
-(6.6). No new state — purely a presentation layer over what Phases 0–4
-already produce.
+`synapse done` gates on the derived view (§2.2): the run may close when every
+task is terminal — `work_settled` and accepted, or cancelled — never on stored
+status.
 
-**Deferred / explicitly not in this plan:** transcript-tailing audit
-(audit Phase 2, section 5), staleness/reassignment policy, and
-`--resume` re-registration semantics — all still open questions below,
-and each is more productively settled by running Phases 1–5 first.
+### 4.7 Worktrees
 
-## Open questions
+A row's `worktree_path` is assigned at dispatch by one rule that composes with
+`depends_on`:
 
-- Which mode (A: prompted-but-still-tmux, or B: in-process sub-agents) is
-  actually in scope for v1 — the rest of this spec only makes sense for A.
-- Should there be an explicit `read` acknowledgment step (an `ACK`
-  message back), or is `delivered` status sufficient for v1?
-- Self-reported events rely on each role's instructions actually telling
-  it to call `synapse-log` — how is that enforced/checked, if at all,
-  beyond "it's in the CLAUDE.md"?
-- On `--resume`, does the agent re-register (new row write) or update its
-  existing `agents` row in place? Affects whether `agents.session_id`
-  history is preserved or overwritten.
-- Reassignment policy when a coder stalls (6.5 says it's surfaced, not
-  auto-resolved) — does `manager` get a fixed playbook (e.g. nudge once,
-  then reassign), or is that left entirely to its judgment per situation?
-- Multiple coders, one subtask each is assumed in 6.3 — not specified:
-  can `manager` split a single subtask across two coders, and if so how
-  do their `STATUS` replies merge under one `ref_id`?
-- Backpressure: what happens if an agent is flooded with messages faster
-  than it can act on them between idle windows?
+- **No deps** → a fresh git worktree.
+- **Has deps** → inherit the worktree of the first dep (its subject).
 
-## Out of scope (for now)
+A reviewer and tester therefore read exactly what their coder wrote, with no
+merge step in between.
 
-- Authentication/access control on the SQLite mailbox (single-user,
-  single-machine assumption).
-- Cross-machine deployments (tmux + local SQLite implies single host).
-- Automatic recovery/restart of crashed agent windows.
+**Tier 1 serializes**: at most one running worker, acting in the repo directly.
+The column exists and is uniform. Concurrent coders in separate worktrees is a
+Tier 2+ feature — a real feature with its own validation, not a config change.
+
+### 4.8 Sessions
+
+The controller generates the worker's session UUID and passes `--session-id` at
+spawn, so `worker_session_id` is populated at spawn and never NULL afterward.
+Workers are one-shot: `--resume` is not used in Tier 1.
+
+The future case that changes this is a fix-round after a bad review. That is a
+**new row** (per the 1:1 rule) whose worker resumes the original coder's session
+so it retains the implementation context. Hence the warning in §2.3.2 that
+`worker_session_id` is not unique across rows.
+
+### 4.9 The manager's context and compaction
+
+**The manager is a persistent *session*, not a persistent process.** Each wake is
+a fresh `claude -p --resume <manager_session_id>` process that rehydrates the
+transcript from disk and exits when the turn ends. Nothing stays resident.
+
+Two consequences follow, and neither is optional:
+
+1. **The stateless-turn contract is the mechanism, not a safety net.** As the
+   transcript fills, Claude Code's built-in auto-compaction summarizes it. The
+   failure this creates is concrete: a compacted manager's summary says "building
+   the auth module, coder work in progress" — coherent enough to act on, but
+   unaware that subtask 5 failed and 9 was cancelled — and it dispatches against
+   a remembered plan that no longer matches the tables. So the wake prompt opens
+   with a standing instruction:
+
+   > Before deciding anything, run `synapse status --run <id> --json`. Your
+   > context may have been compacted; the tables are authoritative.
+
+2. **Manager verbosity is a real budget.** Per-turn latency and token cost scale
+   with transcript size, and the transcript is reloaded every turn. Verdicts stay
+   short; detail goes to artifacts on disk, which cost nothing to carry.
+
+Its accumulated context is an optimization, never a dependency.
+
+### 4.10 Storage
+
+The database *is* the coordination substrate, so its settings are part of the
+design, not an implementation detail:
+
+- `journal_mode = WAL` — concurrent readers (operator UI, watcher) alongside a
+  writer.
+- `busy_timeout = 5000` — workers, watcher, and manager all write.
+- `foreign_keys = ON`.
+- **`BEGIN IMMEDIATE` for every writing transaction.** Every rev-assigning path
+  reads (check the row's stage) then writes (set stage, bump the counter). Two
+  deferred transactions doing that concurrently must both upgrade their locks and
+  deadlock — and `busy_timeout` does not rescue an upgrade, which returns
+  `SQLITE_BUSY` immediately rather than retrying. This is the common path, not an
+  edge case.
+- Every rev-assigning write is a single transaction covering the counter bump and
+  the row write.
+- Watcher poll interval: 2s (a floor on reaction latency; the operator's own view
+  is not gated by it).
+- Database location: `.synapse/synapse.db`, per target repo.
+
+### 4.11 Plan approval
+
+Approval is a `QUESTION`, not its own verb and not a column. The manager writes
+the planning artifacts, asks a QUESTION with options (approve / revise / cancel),
+and stops. Dispatch is blocked by construction, because no subtask rows exist
+yet. The operator's `answer` assigns a rev, which wakes the manager, which
+materializes the plan's rows and their edges.
+
+No approval state is stored on `tasks`: the answered QUESTION is the record, and
+the existence of subtask rows is its observable consequence.
+
+---
+
+## 5. Commands
+
+Built in three tiers; each tier is independently demonstrable.
+
+### Tier 1 — the core worker loop
+- `synapse init --goal "<text>"` — create a run, its first REQUEST + task; print
+  the run id. Pure database write; starts nothing.
+- `synapse spawn <role> <subtask-id> [--model M] [--prompt-file F]` — launch a
+  one-shot worker (headless `claude -p --session-id`, run-and-exit); wraps the
+  child and guarantees a terminal write (§4.5).
+- `synapse task <role> "<title>" --task-id T [--depends-on 7,9]` — the manager
+  creates a subtask row (up front or on the fly) and, if ready, spawns it.
+- `synapse reply <subtask-id> "<result>" [--handoff <kind>:<file>]` — a worker's
+  last act: write its result to its row, stage → done; then it exits.
+  (Worker-only. The operator's answer verb is `synapse answer`, so there is no
+  id-space collision.)
+
+### Tier 2 — close the loop + operator visibility
+- `synapse watch --run R` — the background watcher (poll rev, cancel-cascade, pid
+  sweep, wake the manager). Attaches to an *existing* run, so a watcher that dies
+  is restarted without touching the run.
+- `synapse start --goal "<text>"` — `init` then `watch`; the operator's normal
+  entry point.
+- `synapse status [--run R] [--json]` — the one read verb: run → tasks →
+  subtasks, with deps and readiness. `--json` is the manager's machine read;
+  without it, the operator's human render. (The web UI is the same read.)
+- `synapse done` — close the run; gates on `task_progress` (§2.2, §4.6).
+
+### Tier 3 — the human conversation + planning
+- `synapse request "<goal>"` — operator sends a follow-up goal (REQUEST → task).
+- `synapse ask "<q>" --options a,b,c [--title T]` — manager asks a blocking
+  question.
+- `synapse answer <question-id> "<text>"` — operator answers (routes by `ref_id`).
+- `synapse say "<text>"` — plain note, either direction.
+- `synapse doc <spec|plan|testplan> <task-id> <file>` — write a planning artifact
+  to its canonical path, `.synapse/artifacts/task-<id>/<kind>.md`.
+
+---
+
+## 6. What is proven, and how (validation)
+
+Each behavior below is a checkable claim; details map to the validation plan.
+
+- A worker carries full context across a fresh headless `claude -p`, does a real
+  tool loop in one invocation, and exits. **(Validated first; the model depends
+  on it.)**
+- A subtask row is judge-complete on its own: stage + result + artifact + verdict,
+  with no field overwritten by a second worker.
+- Review and test are sibling rows: a coder row, its reviewer row, and its tester
+  row each carry their own result and verdict, linked by `depends_on`.
+- A row is not dispatched until its deps are `done`; readiness is recomputable
+  from the tables alone.
+- **A worker killed mid-flight becomes `failed`** — verified three
+  ways: a worker that stops without replying (hook), a worker `kill -9`'d
+  (wrapper), and a worker orphaned by killing the wrapper (sweep).
+- A transition landing *during* a manager turn is reacted to on the next poll
+  (the mid-turn-loss regression test).
+- N transitions during one manager turn produce one follow-up wake, not N.
+- At most one manager process exists at any time under concurrent transitions.
+- A follow-up REQUEST creates a new task; the manager plans and materializes
+  subtasks under it; a run can carry several tasks.
+- A NOTE does not create a task; a REQUEST does.
+- The manager's decisions survive a forced compaction: the next turn re-reads the
+  tables and dispatches correctly against rows it has no memory of.
+- The operator's view reflects a worker's result with no manager relay hop.
+- Illegal message shapes (QUESTION without options, REQUEST from the manager,
+  ANSWER without ref_id) are rejected.
+- A built-in role spawns with no flags; `--prompt-file` overrides without a
+  rebuild.
+- A failed dep cancel-cascades its dependents, and cancelled rows do not block
+  `synapse done`.
+- `synapse reply` against a row in any terminal stage (`done`, `cancelled`, or
+  `failed`) is rejected.
+- `synapse done` gates two-level on the derived view: run done ⇔ every task
+  terminal ⇔ every subtask terminal; a task with zero subtasks is not terminal.
+- The first wake creates the manager session and later wakes resume it; a turn
+  that fails before completing does not consume the first-turn path.
+- A killed watcher is restarted with `synapse watch --run R` and the run
+  continues, reacting to anything that landed while it was down.
+- Approval works with no approval state: the QUESTION is asked, no rows exist,
+  the `answer` wakes the manager, the rows appear.
+- A cancelled row's worker dies *with its tool subprocesses* — no orphan holds
+  the worktree.
+- An end-to-end run drives one goal start → plan → approve → code → review →
+  done, then a follow-up goal through the same team.
+
+---
+
+## 7. Explicit non-goals
+
+- No direct agent-to-agent message bus; agent work is row writes only.
+- No `agents` table — a worker is a subtask row, the manager is the run row.
+- No `roles` table / external role config; roles are built into the controller.
+- No multi-stage subtask rows; review and test are sibling rows.
+- No per-stage timestamp columns; `stage` is authoritative, `rev` drives the
+  watcher.
+- No run-level goal text — goals are first-class `tasks` rows.
+- No agent liveness tracking as state — only a guaranteed terminal write.
+- No Synapse-managed context compaction; rely on the built-in, kept safe by the
+  tables plus the stateless-turn contract.
+- No parallel workers in Tier 1.
+- No approval flag on `tasks`; the answered QUESTION is the record.
+- No second read verb; `synapse status --json` serves the manager.
+- No migration of any prior data; this is a new repository.
+
+---
+
+## 8. Open questions
+
+- **Re-do ergonomics.** After a bad review, is the fix a new coder row resuming
+  the original session (§4.8), or a fresh coder row reading the review artifact?
+  The first is cheaper in tokens; the second is cleaner and keeps workers truly
+  one-shot. Deferred until a real bad review exists to test against.
+- **Verdict vocabulary.** `verdict` is free text today. If the manager's ruling
+  ever needs to drive control flow mechanically, it needs a small enum.
+- **Manager context telemetry.** Surfacing context usage in the operator UI and a
+  manual "compact now" control. Not core.
+
+---
+
+## 9. Changes from rev 1
+
+| # | Change |
+|---|---|
+| 1 | Subtask rows are strictly 1:1 with workers. Reviewer/tester are sibling rows. `stage` shrinks from six values to `unassigned/assigned/done` + `failed`/`cancelled`. `needs_review`, `needs_test`, `--no-review`, `--test-required` all removed. |
+| 2 | Added `depends_on` as both dispatch gate and subject pointer, replacing the removed gate columns and making dispatch order recomputable from the tables. |
+| 3 | Added `failed` stage plus a three-layer guarantee that a worker's exit always produces a subtask transition (Stop hook, spawn wrapper, pid sweep). New column `worker_pid`. |
+| 4 | Replaced timestamp high-water-mark with a monotonic `rev` from `runs.rev_counter`; `manager_reacted_at` → `manager_reacted_rev`. Fixes mid-turn loss and same-second collisions, and collapses the watcher's two signals into one. |
+| 5 | `synapse reply` rejection scope widened from `cancelled`/`failed` (rev 2 §4.6 prose) to all three terminal stages including `done`, matching §6's "no field overwritten by a second worker" claim and the plan's `liar.sh` exit criterion. |
+| 5 | Stated the real watcher invariants (at-most-one manager, no unreacted transition) and made mutual exclusion structural: the watcher is the sole spawner of manager turns, so `synapse start` no longer spawns one directly. |
+| 6 | Message channel restructured: one verb per type (`request` / `ask` / `answer` / `say`), lifecycle tags dropped, `to_agent` dropped, `from_agent` → `author` (kept because NOTE is bidirectional). Operator `answer` no longer collides with worker `reply`. |
+| 7 | Added `worktree_path` and the inherit-from-first-dep rule; Tier 1 explicitly serializes. |
+| 8 | Workers spawn with `--session-id`, not `--resume`; `worker_session_id` documented as a non-unique process artifact. |
+| 9 | Added the stateless-turn contract to the manager's wake prompt, with the concrete post-compaction failure it prevents. |
+| 10 | `tasks.status` demoted to a declaration; terminality derived via the `task_progress` view, with the zero-subtask case defined. |
+| 11 | Cancellation given three named sources (including the dependency cascade the watcher performs mechanically), a process kill, and a reject rule for late writes. |
+| 12 | SQLite settings (WAL, busy_timeout, foreign keys, poll interval, transaction boundary) promoted into the spec. |
+
+### Changes from rev 2
+
+| # | Change |
+|---|---|
+| 13 | **Corrected: the manager is a persistent session, not a persistent process.** Rev 2's "stays warm" was wrong — every wake is a fresh process rehydrating the transcript. §4.9 rewritten: the stateless-turn contract is the mechanism, and manager verbosity becomes a real per-turn cost. |
+| 14 | Retired "board" as a term. Kept once in §1 as pattern attribution; §2.3's nickname dropped, "board transition" → "subtask transition", principle 1 → "the tables are the truth". It was used at two scopes and reads as Kanban to a fresh reader. |
+| 15 | `synapse board` and `synapse status` collapsed into one verb, `synapse status [--run R] [--json]`. They were the same read at two verbosities. |
+| 16 | Added §4.11: plan approval is a QUESTION, with no approval state stored on `tasks`. |
+| 17 | Cancellation kills the worker's **process group**, not just its pid, so tool subprocesses cannot orphan and hold a worktree. |
+| 18 | Added `BEGIN IMMEDIATE` to §4.10 — read-then-write is the common path for every rev-assigning write, and deferred transactions deadlock on upgrade where `busy_timeout` cannot help. |
+| 19 | Added §10: settled implementation decisions (runtime, paths, model defaults). |
+| 20 | Split `synapse start` into `synapse init` (rows only) and `synapse watch --run R` (process only), with `start` as the wrapper. `watch` now attaches to an existing run, which makes watcher crash recovery an ordinary command rather than a special path. |
+| 21 | Added `runs.manager_turns`. The first wake must `--session-id` (no session exists yet) and later wakes `--resume`; nothing previously recorded which turn it was. Doubles as a cheap proxy for transcript size, which §4.9 made a real budget. |
+| 22 | Added §4.5's per-role `--allowedTools` table and D7. Spike S0.1 (Phase 0) found the spec silent on what a worker may touch; Phase 4 needed an answer before `prompts/*.md` and `spawn`'s role wiring could be written. |
+| 23 | Completed §4.5 bullet 1 (Stop hook) with the internal ~10-forced-stop cap spike S0.3 found: past it, the CLI reports success with an empty result despite an active block. Flagged for a spec diff at Phase 0, applied now that the hook is actually being built (Phase 4). |
+| 24 | Corrected §4.5's per-role tool table and D7: added `Bash(printenv *)` as an implicit grant on every role. A real reviewer trial run in Phase 4 hit this immediately — reviewer's read-only `Bash` scope permitted `synapse ...` calls but nothing that could read `$SUBTASK_ID`/`$RUN_ID`/`$SYNAPSE_BIN` in the first place, so it correctly refused to guess its own identity and filed no reply. Row #22's original D7 diff was incomplete; this corrects it rather than adding a parallel decision. Superseded by #25 below, on the very next trial. |
+| 25 | Corrected §4.5/D7 again: `Bash(synapse *)` never matched a real invocation — Claude Code's allowlist matches literal command text and denies both `$VAR` expansion and a resolved absolute path. Replaced the "`$SYNAPSE_BIN` env var + `Bash(synapse *)`" design with literal-string prompt substitution (`{{SYNAPSE_BIN}}`/`{{SUBTASK_ID}}`/`{{RUN_ID}}`, filled in by `cmdSpawn` before invoking `claude -p`) plus a per-spawn `Bash(<resolved absolute path> *)` grant. Also added `Bash(git *)` to `reviewer`, matching what its prompt already told it to do. Both gaps were invisible to every fake/mock test in Phases 1–3 and surfaced only once a real model actually tried to act on its own prompt. |
+
+---
+
+## 10. Implementation decisions
+
+Settled; recorded here because the prompts and schema depend on them.
+
+| # | Decision |
+|---|---|
+| D1 | **TypeScript on Bun.** `bun:sqlite` is synchronous and ships JSON1 (needed for the `json_each` readiness query); `bun build --compile` gives one binary for workers and hooks to invoke; ~15ms cold start matters because the CLI runs on every worker turn end and every hook fire. |
+| D2 | **Per-repo state** at `.synapse/synapse.db`. Worktree paths stay relative; no cross-repo run collisions. |
+| D3 | **Artifacts** at `.synapse/artifacts/task-<id>/{spec,plan,testplan}.md`. |
+| D4 | **Approval is a QUESTION** (§4.11). |
+| D5 | **Per-role model defaults** in the controller, overridable with `--model`. Manager and reviewer get the stronger model. |
+| D6 | **One read verb**, `synapse status` (§5). |
+| D7 | **Per-role `--allowedTools` scope** (§4.5): `coder` gets `Write`/`Edit`/`Bash`; `reviewer` is read-only plus `Bash(git *)`; `tester` is read-only plus unscoped `Bash` to run validation commands; `doc-writer` gets `Write`/`Edit` scoped by prompt contract to `.synapse/artifacts/`. Every role additionally gets `Bash(<synapse-bin-path> *)` (path resolved per spawn) and `Bash(printenv *)`. Found underspecified at spike S0.1 (Phase 0); settled before Phase 4 prompts were written, then corrected twice more by real trial runs in Phase 4 — see §9 #24–25. |
