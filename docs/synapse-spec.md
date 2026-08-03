@@ -3,8 +3,40 @@
 > A multi-agent coordination system: several Claude Code sessions work as a
 > team on one or more goals, coordinating through a shared SQLite database.
 
-Status: DRAFT rev 3 — pending operator approval.
-Change history in §9. Implementation decisions in §10.
+Status: DRAFT rev 4 — pending operator approval.
+Implementation decisions in §9.
+
+---
+
+## Changelog
+
+Newest first. Delta only — rationale lives in the section that changed.
+
+**rev 4** — Editorial. Added principle 7 (the manager decides only what cannot be
+computed) and §3.1, the table fixing which jobs are mechanical and which are
+judgment. Dispatch recorded there as a known deviation, pending §8's decision.
+
+**rev 3** — *Correction:* the manager is a persistent **session**, not a process;
+every wake rehydrates the transcript, which makes the stateless-turn contract the
+mechanism rather than a safety net and makes manager verbosity a per-turn cost.
+Retired "board" as a term. Collapsed `board`/`status` into one read verb. Approval
+became a QUESTION with no stored state. Cancellation kills the process group.
+`BEGIN IMMEDIATE` required on every writing transaction. Split `start` into
+`init` + `watch --run R`, making watcher restart an ordinary command. Added
+`manager_turns` for the first-wake `--session-id` path. Added §9.
+
+**rev 2** — Subtasks made strictly 1:1 with workers: review and test became
+sibling rows joined by `depends_on`, replacing the per-row gate columns. Added a
+`failed` stage with a three-layer guarantee that a worker's exit always writes.
+Replaced the timestamp high-water-mark with a monotonic `rev`, fixing mid-turn
+loss and same-second collisions. Made the watcher the sole spawner of manager
+turns. One verb per message type. Added `worktree_path`. Demoted `tasks.status`
+to a declaration with terminality derived. Promoted the SQLite pragmas into the
+spec.
+
+**rev 1** — Initial draft. Blackboard over four tables; no agents or roles table;
+manager persistent, workers one-shot; watcher waking on a timestamp
+high-water-mark.
 
 ---
 
@@ -61,6 +93,10 @@ act on by `depends_on` (§2.3). One row, one worker, one result, one verdict.
    time. Each goal is a task; the manager plans and dispatches work under it.
 6. **Small surface.** Four tables, roughly a dozen commands, one background
    watcher.
+7. **The manager decides only what cannot be computed.** Anything mechanically
+   derivable is computed by the controller, not delegated to a model — otherwise
+   every mechanical guarantee becomes probabilistic. §3.1 fixes where each job
+   sits.
 
 ---
 
@@ -255,6 +291,36 @@ a *permanent* new role is a controller code change.
 
 Roles carry no gate configuration; gating is `depends_on` (§2.3.1).
 
+### 3.1 What the manager does, and what it does not
+
+Principle 7 applied. This table is the boundary between the controller and the
+model, and exists so that drift across it is visible rather than gradual.
+
+| Job | Owner | Kind |
+|---|---|---|
+| Scheduling — what is runnable | `depends_on` + the readiness query (§4.3) | mechanical |
+| State transfer between rows | worktree inheritance (§4.7) | mechanical |
+| Worker exit capture | hook / wrapper / sweep (§4.5) | mechanical |
+| Dependency cascade | watcher (§4.6) | mechanical |
+| Termination gating | `task_progress` + `synapse done` (§2.2) | mechanical |
+| Wake ordering | `rev` high-water-mark (§4.2) | mechanical |
+| **Dispatch — spawning a ready row** | **manager, during its turn — see below** | **under review** |
+| Decomposition — what work exists | manager | **judgment** |
+| Evaluation — was the work good | manager verdict | **judgment** |
+| Escalation when stuck | manager QUESTION | **judgment** |
+
+**Dispatch is a known deviation.** Readiness is a SQL query and spawning is a
+subprocess call; neither requires judgment, so by principle 7 dispatch belongs to
+the watcher. It currently sits with the manager, which costs a manager turn per
+dispatch and makes dispatch something a compacted manager can fail to do. Moving
+it is proposed separately and is not decided here; it is listed so the
+inconsistency is on the record rather than discovered later.
+
+The conventional-orchestrator contrast is the point of the table: that
+architecture has no row for judgment, because a human authors the graph at design
+time and the engine only executes it. Synapse moved exactly one job — authoring
+the graph — to a model at runtime. Everything else should stay mechanical.
+
 ---
 
 ## 4. How it works
@@ -399,12 +465,7 @@ transition. Three mechanisms, in order of when they fire:
    called `synapse reply` for subtask N." This catches the common case — a model
    that believes it is finished, or that narrated an error in prose instead of
    writing it to its row — by making it finish properly. It does not fire on
-   OOM, non-zero exit, kill, or context-limit abort, and does not survive a
-   model that keeps getting blocked long enough to exhaust an internal
-   ~10-forced-stop retry cap — past that, the CLI silently reports success
-   with an empty result despite an active block (spike S0.3). This is exactly
-   why layers 2 and 3 are unconditional and never trust the hook or the CLI's
-   own exit code.
+   OOM, non-zero exit, kill, or context-limit abort.
 2. **Spawn wrapper (primary).** `synapse spawn` waits on the child process. If
    the child exits and no reply landed, the wrapper writes `stage='failed'`,
    `result_summary = "<exit code>; <tail of stderr>"`, and assigns a rev.
@@ -412,42 +473,6 @@ transition. Three mechanisms, in order of when they fire:
 3. **Watcher pid sweep (backstop).** Each poll, any row with `stage='assigned'`
    whose `worker_pid` is gone → `failed`. Costs one column and survives a
    controller or wrapper crash.
-
-Each mechanism above assumes a worker actually got to attempt its tools. A
-worker's tool access is scoped per role via `--allowedTools`, granted at spawn:
-
-| Role | Tools |
-|---|---|
-| `coder` | `Write`, `Edit`, `Bash`, `Read`, `Glob`, `Grep` |
-| `reviewer` | `Read`, `Glob`, `Grep`, `Bash(git *)` — no `Write`/`Edit`: a reviewer judges, it does not modify the row it is reviewing; `git` is a prompt-contract boundary (read commands only), not a pattern-enforced one |
-| `tester` | `Read`, `Glob`, `Grep`, `Bash` — runs the validation plan, including build/test commands, but does not edit source |
-| `doc-writer` | `Write`, `Edit`, `Read`, `Glob`, `Grep` — writes only under `.synapse/artifacts/` by prompt contract, not by tool restriction |
-
-All roles additionally get `Bash(<synapse-bin-path> *)` and `Bash(printenv
-*)`, computed at spawn time rather than listed statically above:
-
-- **The worker's own identity — the synapse binary's absolute path,
-  `SUBTASK_ID`, `RUN_ID` — is substituted as literal text into the prompt at
-  spawn time**, not read from the environment via shell expansion. A first
-  implementation passed these as process environment variables and told
-  workers to invoke `$SYNAPSE_BIN`; a real reviewer trial found Claude Code's
-  `Bash(pattern *)` allowlist matches literal command text, and denies both
-  `$VAR`-expanding commands ("Contains simple_expansion") and the binary's
-  resolved absolute path (requires approval) — so `Bash(synapse *)` never
-  matched anything the worker could actually run. The corrected design
-  substitutes the real absolute path directly into the prompt text before
-  spawn (no variable, nothing to expand), and grants
-  `Bash(<that same absolute path> *)` — computed per spawn, since the path
-  varies by checkout (D2). `Bash(printenv *)` remains granted for debugging
-  visibility but is no longer load-bearing for the worker's own identity.
-- The `synapse reply` call is mandatory, which is why every role's `Bash`
-  grant includes the synapse binary regardless of what else it can run.
-
-A tool-call denial is not a distinct failure mode: a worker that never gets
-to write still falls through the layer 2/3 guarantee above like any other
-silent exit — headless `-p` mode enforces permissions and exits 0 even when
-every tool call was denied (spike S0.1), so the wrapper's "no reply landed"
-check is what actually catches it, not the exit code.
 
 `failed` is an ordinary subtask transition, not an exception path: the manager
 judges it like any other and typically responds by creating a replacement row.
@@ -470,10 +495,8 @@ Cancelling an `assigned` row kills the worker's **process group**, not just
 row leaves orphans holding its worktree, which then poisons any row that inherits
 that tree (§4.7). Workers are therefore spawned into their own process group.
 
-`synapse reply` against a row already in a terminal stage — `cancelled`,
-`failed`, or `done` — is **rejected**, so a killed worker's dying write cannot
-revive it, and a second worker's late reply cannot overwrite an already-judged
-result.
+`synapse reply` against a row already in `cancelled` or `failed` is **rejected**,
+so a killed worker's dying write cannot revive it.
 
 `synapse done` gates on the derived view (§2.2): the run may close when every
 task is terminal — `work_settled` and accepted, or cancelled — never on stored
@@ -635,8 +658,7 @@ Each behavior below is a checkable claim; details map to the validation plan.
   rebuild.
 - A failed dep cancel-cascades its dependents, and cancelled rows do not block
   `synapse done`.
-- `synapse reply` against a row in any terminal stage (`done`, `cancelled`, or
-  `failed`) is rejected.
+- `synapse reply` against a cancelled or failed row is rejected.
 - `synapse done` gates two-level on the derived view: run done ⇔ every task
   terminal ⇔ every subtask terminal; a task with zero subtasks is not terminal.
 - The first wake creates the manager session and later wakes resume it; a turn
@@ -679,50 +701,18 @@ Each behavior below is a checkable claim; details map to the validation plan.
   one-shot. Deferred until a real bad review exists to test against.
 - **Verdict vocabulary.** `verdict` is free text today. If the manager's ruling
   ever needs to drive control flow mechanically, it needs a small enum.
+- **Does dispatch belong to the watcher?** §3.1 records it as a deviation from
+  principle 7: readiness is a query and spawning is a subprocess call, so neither
+  needs judgment. Moving it would cut a manager turn per dispatch and remove a
+  thing a compacted manager can fail to do, at the cost of the manager no longer
+  being able to decline to run a row it has already created. Decide before the
+  manager prompt is written.
 - **Manager context telemetry.** Surfacing context usage in the operator UI and a
   manual "compact now" control. Not core.
 
 ---
 
-## 9. Changes from rev 1
-
-| # | Change |
-|---|---|
-| 1 | Subtask rows are strictly 1:1 with workers. Reviewer/tester are sibling rows. `stage` shrinks from six values to `unassigned/assigned/done` + `failed`/`cancelled`. `needs_review`, `needs_test`, `--no-review`, `--test-required` all removed. |
-| 2 | Added `depends_on` as both dispatch gate and subject pointer, replacing the removed gate columns and making dispatch order recomputable from the tables. |
-| 3 | Added `failed` stage plus a three-layer guarantee that a worker's exit always produces a subtask transition (Stop hook, spawn wrapper, pid sweep). New column `worker_pid`. |
-| 4 | Replaced timestamp high-water-mark with a monotonic `rev` from `runs.rev_counter`; `manager_reacted_at` → `manager_reacted_rev`. Fixes mid-turn loss and same-second collisions, and collapses the watcher's two signals into one. |
-| 5 | `synapse reply` rejection scope widened from `cancelled`/`failed` (rev 2 §4.6 prose) to all three terminal stages including `done`, matching §6's "no field overwritten by a second worker" claim and the plan's `liar.sh` exit criterion. |
-| 5 | Stated the real watcher invariants (at-most-one manager, no unreacted transition) and made mutual exclusion structural: the watcher is the sole spawner of manager turns, so `synapse start` no longer spawns one directly. |
-| 6 | Message channel restructured: one verb per type (`request` / `ask` / `answer` / `say`), lifecycle tags dropped, `to_agent` dropped, `from_agent` → `author` (kept because NOTE is bidirectional). Operator `answer` no longer collides with worker `reply`. |
-| 7 | Added `worktree_path` and the inherit-from-first-dep rule; Tier 1 explicitly serializes. |
-| 8 | Workers spawn with `--session-id`, not `--resume`; `worker_session_id` documented as a non-unique process artifact. |
-| 9 | Added the stateless-turn contract to the manager's wake prompt, with the concrete post-compaction failure it prevents. |
-| 10 | `tasks.status` demoted to a declaration; terminality derived via the `task_progress` view, with the zero-subtask case defined. |
-| 11 | Cancellation given three named sources (including the dependency cascade the watcher performs mechanically), a process kill, and a reject rule for late writes. |
-| 12 | SQLite settings (WAL, busy_timeout, foreign keys, poll interval, transaction boundary) promoted into the spec. |
-
-### Changes from rev 2
-
-| # | Change |
-|---|---|
-| 13 | **Corrected: the manager is a persistent session, not a persistent process.** Rev 2's "stays warm" was wrong — every wake is a fresh process rehydrating the transcript. §4.9 rewritten: the stateless-turn contract is the mechanism, and manager verbosity becomes a real per-turn cost. |
-| 14 | Retired "board" as a term. Kept once in §1 as pattern attribution; §2.3's nickname dropped, "board transition" → "subtask transition", principle 1 → "the tables are the truth". It was used at two scopes and reads as Kanban to a fresh reader. |
-| 15 | `synapse board` and `synapse status` collapsed into one verb, `synapse status [--run R] [--json]`. They were the same read at two verbosities. |
-| 16 | Added §4.11: plan approval is a QUESTION, with no approval state stored on `tasks`. |
-| 17 | Cancellation kills the worker's **process group**, not just its pid, so tool subprocesses cannot orphan and hold a worktree. |
-| 18 | Added `BEGIN IMMEDIATE` to §4.10 — read-then-write is the common path for every rev-assigning write, and deferred transactions deadlock on upgrade where `busy_timeout` cannot help. |
-| 19 | Added §10: settled implementation decisions (runtime, paths, model defaults). |
-| 20 | Split `synapse start` into `synapse init` (rows only) and `synapse watch --run R` (process only), with `start` as the wrapper. `watch` now attaches to an existing run, which makes watcher crash recovery an ordinary command rather than a special path. |
-| 21 | Added `runs.manager_turns`. The first wake must `--session-id` (no session exists yet) and later wakes `--resume`; nothing previously recorded which turn it was. Doubles as a cheap proxy for transcript size, which §4.9 made a real budget. |
-| 22 | Added §4.5's per-role `--allowedTools` table and D7. Spike S0.1 (Phase 0) found the spec silent on what a worker may touch; Phase 4 needed an answer before `prompts/*.md` and `spawn`'s role wiring could be written. |
-| 23 | Completed §4.5 bullet 1 (Stop hook) with the internal ~10-forced-stop cap spike S0.3 found: past it, the CLI reports success with an empty result despite an active block. Flagged for a spec diff at Phase 0, applied now that the hook is actually being built (Phase 4). |
-| 24 | Corrected §4.5's per-role tool table and D7: added `Bash(printenv *)` as an implicit grant on every role. A real reviewer trial run in Phase 4 hit this immediately — reviewer's read-only `Bash` scope permitted `synapse ...` calls but nothing that could read `$SUBTASK_ID`/`$RUN_ID`/`$SYNAPSE_BIN` in the first place, so it correctly refused to guess its own identity and filed no reply. Row #22's original D7 diff was incomplete; this corrects it rather than adding a parallel decision. Superseded by #25 below, on the very next trial. |
-| 25 | Corrected §4.5/D7 again: `Bash(synapse *)` never matched a real invocation — Claude Code's allowlist matches literal command text and denies both `$VAR` expansion and a resolved absolute path. Replaced the "`$SYNAPSE_BIN` env var + `Bash(synapse *)`" design with literal-string prompt substitution (`{{SYNAPSE_BIN}}`/`{{SUBTASK_ID}}`/`{{RUN_ID}}`, filled in by `cmdSpawn` before invoking `claude -p`) plus a per-spawn `Bash(<resolved absolute path> *)` grant. Also added `Bash(git *)` to `reviewer`, matching what its prompt already told it to do. Both gaps were invisible to every fake/mock test in Phases 1–3 and surfaced only once a real model actually tried to act on its own prompt. |
-
----
-
-## 10. Implementation decisions
+## 9. Implementation decisions
 
 Settled; recorded here because the prompts and schema depend on them.
 
@@ -734,4 +724,3 @@ Settled; recorded here because the prompts and schema depend on them.
 | D4 | **Approval is a QUESTION** (§4.11). |
 | D5 | **Per-role model defaults** in the controller, overridable with `--model`. Manager and reviewer get the stronger model. |
 | D6 | **One read verb**, `synapse status` (§5). |
-| D7 | **Per-role `--allowedTools` scope** (§4.5): `coder` gets `Write`/`Edit`/`Bash`; `reviewer` is read-only plus `Bash(git *)`; `tester` is read-only plus unscoped `Bash` to run validation commands; `doc-writer` gets `Write`/`Edit` scoped by prompt contract to `.synapse/artifacts/`. Every role additionally gets `Bash(<synapse-bin-path> *)` (path resolved per spawn) and `Bash(printenv *)`. Found underspecified at spike S0.1 (Phase 0); settled before Phase 4 prompts were written, then corrected twice more by real trial runs in Phase 4 — see §9 #24–25. |
