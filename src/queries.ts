@@ -1,4 +1,4 @@
-// spec §2.2, §2.3.1, §4.3, §5
+// spec §2.2, §2.3.1, §4.3, §4.4, §5
 //
 // Derived READS only. This file never writes. Readiness is a single SQL
 // query using json_each over depends_on — not rows pulled into TS and
@@ -86,6 +86,34 @@ export function runIsDone(db: Database, runId: number): boolean {
   const rows = taskProgressForRun(db, runId);
   if (rows.length === 0) return false;
   return rows.every((r) => r.status === "cancelled" || (r.work_settled === 1 && r.status === "done"));
+}
+
+// spec §4.4: count of rows currently assigned for this run — used by the
+// watcher to enforce --max-workers. Queried from the table, not watcher
+// memory, so a restarted watcher re-derives it (principle 1).
+export function assignedCount(db: Database, runId: number): number {
+  const row = db
+    .query("SELECT COUNT(*) AS n FROM subtasks WHERE run_id = ? AND stage = 'assigned'")
+    .get(runId) as { n: number };
+  return row.n;
+}
+
+// spec §4.4: for worktree-collision detection. Returns the id of a live
+// (stage=assigned) row whose worktree_path matches the given path, or null
+// if no such row exists. "Live" means assigned — a row that has committed
+// done but not yet exited is not counted (§4.10: the cap counts assigned
+// rows, so the overlap is possible and the graph rule handles it).
+export function liveWorkerOnWorktree(
+  db: Database,
+  runId: number,
+  worktreePath: string
+): number | null {
+  const row = db
+    .query(
+      "SELECT id FROM subtasks WHERE run_id = ? AND stage = 'assigned' AND worktree_path = ? LIMIT 1"
+    )
+    .get(runId, worktreePath) as { id: number } | null;
+  return row ? row.id : null;
 }
 
 export interface StatusView {

@@ -1,11 +1,21 @@
 // spec §2.3, §4.5, §4.6; CLAUDE.md hard constraint "workers spawn into their
 // own process group"
 //
-// The spawn wrapper: dispatch (stage -> assigned, no rev — a controller
-// write, not one the manager owes a reaction to) plus the guaranteed
-// terminal-write layer 2 of §4.5's three-layer exit signal. Unconditional:
-// if the child exits and no reply landed, this wrapper writes stage=failed
-// and assigns a rev, regardless of exit code.
+// Two entry points:
+//
+// claimSubtask() — synchronous half (spec §4.4 Q1 / phase4.5-prompt).
+//   Spawns the child and writes stage=assigned in one BEGIN IMMEDIATE, then
+//   registers an async supervision promise in inFlightSupervisions and
+//   returns immediately. The poll loop calls this so the concurrency cap is
+//   correct before the next candidate is considered.
+//
+// spawnSubtask() — awaited wrapper for the operator's manual `synapse spawn`
+//   and for tests. Calls the same internals but awaits the supervision
+//   promise before returning, giving callers a final stage.
+//
+// Accepted cost (§4.5): a watcher that dies with workers in flight loses
+// their supervision promises; those rows stay assigned until the layer-3
+// pid sweep notices the pid is gone (§4.5 layer 3, now load-bearing).
 
 import { Database } from "bun:sqlite";
 import { tx } from "./db";
@@ -19,7 +29,13 @@ export interface SpawnArgs {
   workerModel?: string;
 }
 
-export interface SpawnResult {
+export interface ClaimResult {
+  subtaskId: number;
+  pid: number;
+  sessionId: string;
+}
+
+export interface SuperviseResult {
   subtaskId: number;
   exitCode: number | null;
   signalCode: string | null;
@@ -28,14 +44,16 @@ export interface SpawnResult {
 
 const STDERR_TAIL_CHARS = 2000;
 
+// Tracks in-flight supervisions so shutdown can drain or kill them rather
+// than orphaning workers (§4.4).
+export const inFlightSupervisions: Set<Promise<SuperviseResult>> = new Set();
+
 function nowIso(): string {
   return new Date().toISOString();
 }
 
 // Dispatch write: stage unassigned -> assigned, records worker_session_id +
-// worker_pid + worker_model. Not a rev-assigning write (spec §4.2: dispatch
-// is a manager/controller act, not one the manager owes itself a reaction
-// to).
+// worker_pid + worker_model. Not a rev-assigning write (spec §4.2).
 function markAssigned(
   db: Database,
   subtaskId: number,
@@ -65,18 +83,17 @@ function currentStage(db: Database, subtaskId: number): string {
   const row = db.query("SELECT stage FROM subtasks WHERE id = ?").get(subtaskId) as
     | { stage: string }
     | null;
-  if (!row) throw new Error(`spawnSubtask: no subtask ${subtaskId}`);
+  if (!row) throw new Error(`currentStage: no subtask ${subtaskId}`);
   return row.stage;
 }
 
-// spec §4.5 layer 2. Spawns the worker command in its own process group
-// (CLAUDE.md: "workers spawn into their own process group" — cancellation
-// kills the group, not just worker_pid), waits for exit, and guarantees a
-// terminal write: if the child exited and the row is still non-terminal
-// (no synapse reply landed), writes stage=failed with the exit code and a
-// stderr tail, assigning a rev. If a reply already landed, the wrapper
-// does nothing further — the worker's own write stands.
-export async function spawnSubtask(db: Database, args: SpawnArgs): Promise<SpawnResult> {
+// Shared internals: spawn the child, write assigned, return the proc and
+// supervision promise. Used by both claimSubtask and spawnSubtask so neither
+// duplicates the spawn+write logic.
+function spawnAndClaim(
+  db: Database,
+  args: SpawnArgs
+): { claim: ClaimResult; supervisionPromise: Promise<SuperviseResult> } {
   const sessionId = crypto.randomUUID();
 
   const proc = Bun.spawn(args.command, {
@@ -87,24 +104,58 @@ export async function spawnSubtask(db: Database, args: SpawnArgs): Promise<Spawn
     stderr: "pipe",
   });
 
-  markAssigned(db, args.subtaskId, sessionId, proc.pid, args.workerModel ?? null);
-
-  const stderrPromise = new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-  const stderrText = await stderrPromise;
-
-  const stage = currentStage(db, args.subtaskId);
-  if (stage === "assigned") {
-    const signalPart = proc.signalCode ? ` (signal ${proc.signalCode})` : "";
-    const tail = stderrText.trim().slice(-STDERR_TAIL_CHARS);
-    const summary = `exit ${exitCode}${signalPart}; ${tail}`;
-    failSubtask(db, args.subtaskId, summary);
+  try {
+    markAssigned(db, args.subtaskId, sessionId, proc.pid, args.workerModel ?? null);
+  } catch (e) {
+    // §4.5: if the write fails, kill the child so no row is ever assigned
+    // with a NULL pid and no live supervision.
+    proc.kill(9);
+    throw e;
   }
 
-  return {
-    subtaskId: args.subtaskId,
-    exitCode,
-    signalCode: proc.signalCode ?? null,
-    finalStage: currentStage(db, args.subtaskId),
-  };
+  const stderrPromise = new Response(proc.stderr).text();
+
+  // spec §4.5 layer 2: if the child exits and no reply landed, write
+  // stage=failed. Unconditional — catches everything the stop hook misses.
+  const supervisionPromise: Promise<SuperviseResult> = (async () => {
+    const exitCode = await proc.exited;
+    const stderrText = await stderrPromise;
+
+    const stage = currentStage(db, args.subtaskId);
+    if (stage === "assigned") {
+      const signalPart = proc.signalCode ? ` (signal ${proc.signalCode})` : "";
+      const tail = stderrText.trim().slice(-STDERR_TAIL_CHARS);
+      const summary = `exit ${exitCode}${signalPart}; ${tail}`;
+      failSubtask(db, args.subtaskId, summary);
+    }
+
+    return {
+      subtaskId: args.subtaskId,
+      exitCode,
+      signalCode: proc.signalCode ?? null,
+      finalStage: currentStage(db, args.subtaskId),
+    };
+  })();
+
+  return { claim: { subtaskId: args.subtaskId, pid: proc.pid, sessionId }, supervisionPromise };
+}
+
+// Non-blocking dispatch entry point. Spawns the child, writes assigned
+// synchronously, registers the supervision promise in inFlightSupervisions,
+// and returns. The poll loop uses this so the concurrency cap is correct
+// before considering the next candidate.
+export function claimSubtask(db: Database, args: SpawnArgs): ClaimResult {
+  const { claim, supervisionPromise } = spawnAndClaim(db, args);
+  inFlightSupervisions.add(supervisionPromise);
+  supervisionPromise.finally(() => inFlightSupervisions.delete(supervisionPromise));
+  return claim;
+}
+
+// Awaited wrapper — for the operator's manual `synapse spawn` and for tests
+// that need the final stage. Registers in inFlightSupervisions then awaits.
+export async function spawnSubtask(db: Database, args: SpawnArgs): Promise<SuperviseResult> {
+  const { supervisionPromise } = spawnAndClaim(db, args);
+  inFlightSupervisions.add(supervisionPromise);
+  supervisionPromise.finally(() => inFlightSupervisions.delete(supervisionPromise));
+  return supervisionPromise;
 }
