@@ -611,3 +611,179 @@ describe("watcher — delivery semantics (spec §4.2, §6)", () => {
     expect(seenBatch.subtaskIds).toContain(s1);
   });
 });
+
+describe("watcher — health signals and remaining §6 claims (spec §4.2, §6 C3)", () => {
+  test("poll loop keeps working while a worker runs: sweep, cascade and manager wake all still occur", async () => {
+    const { cwd, db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+
+    // Deliver init REQUEST first.
+    await pollOnce(db, runId, async () => {});
+
+    // Simulate a live assigned worker (our own pid — isPidAlive returns true).
+    const longRunning = createSubtask(db, { runId, taskId, title: "long", assigneeRole: "coder", dependsOn: [] });
+    db.query("UPDATE subtasks SET stage='assigned', worker_pid=? WHERE id=?").run(process.pid, longRunning);
+
+    // Create a failed dep to trigger cascade.
+    const failedId = createSubtask(db, { runId, taskId, title: "failed", assigneeRole: "coder", dependsOn: [] });
+    failSubtask(db, failedId, "setup fail");
+    db.query("UPDATE subtasks SET delivered=1 WHERE id=?").run(failedId); // pre-deliver so it is not the wake target
+
+    const cascadeTarget = createSubtask(db, { runId, taskId, title: "cascade-me", assigneeRole: "coder", dependsOn: [failedId] });
+
+    // Create wake debt.
+    const wakeTarget = createSubtask(db, { runId, taskId, title: "wake", assigneeRole: "coder", dependsOn: [] });
+    replySubtask(db, wakeTarget, "done", null);
+
+    let wakes = 0;
+    const result = await pollOnce(db, runId, async () => { wakes++; });
+
+    // Long-running row still assigned — not killed.
+    const lr = db.query("SELECT stage FROM subtasks WHERE id=?").get(longRunning) as any;
+    expect(lr.stage).toBe("assigned");
+    // Cascade ran.
+    expect(result.cascadeCancelled).toContain(cascadeTarget);
+    // Wake ran.
+    expect(wakes).toBe(1);
+  });
+
+  test("watcher killed with worker in flight: row ends failed via layer-3 sweep, exit detail absent", async () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+    const subtaskId = createSubtask(db, { runId, taskId, title: "work", assigneeRole: "coder", dependsOn: [] });
+
+    // Simulate orphaned worker: assigned with a dead pid. Pid 2 is a kernel
+    // thread — process.kill(2, 0) throws ESRCH on macOS/Linux.
+    db.query("UPDATE subtasks SET stage='assigned', worker_pid=2, worker_session_id=? WHERE id=?")
+      .run(crypto.randomUUID(), subtaskId);
+
+    const { pidSweep } = await import("../src/watcher");
+    const swept = pidSweep(db, runId);
+    expect(swept).toContain(subtaskId);
+
+    const row = db.query("SELECT stage, result_summary FROM subtasks WHERE id=?").get(subtaskId) as any;
+    expect(row.stage).toBe("failed");
+    expect(row.result_summary).toContain("pid sweep"); // no exit code/stderr — layer-3 only
+  });
+
+  test("worker death and its dependents' cancellations land in the same poll, producing one wake", async () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+    const coderId = createSubtask(db, { runId, taskId, title: "code", assigneeRole: "coder", dependsOn: [] });
+    const reviewerId = createSubtask(db, { runId, taskId, title: "review", assigneeRole: "reviewer", dependsOn: [coderId] });
+
+    // Deliver init REQUEST so it is not the wake target.
+    await pollOnce(db, runId, async () => {});
+
+    // Simulate dead worker pid.
+    db.query("UPDATE subtasks SET stage='assigned', worker_pid=2 WHERE id=?").run(coderId);
+
+    let wakes = 0;
+    const result = await pollOnce(db, runId, async () => { wakes++; });
+
+    expect(result.swept).toContain(coderId);
+    expect(result.cascadeCancelled).toContain(reviewerId);
+    expect(wakes).toBe(1);
+
+    // Nothing new on second poll.
+    const second = await pollOnce(db, runId, async () => { wakes++; });
+    expect(second.wokeManager).toBe(false);
+    expect(wakes).toBe(1);
+  });
+
+  test("a turn killed mid-way delivers nothing; whole batch stays delivered=0 and is carried again", async () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+    await pollOnce(db, runId, async () => {}); // deliver init REQUEST
+
+    const subtaskIds = Array.from({ length: 5 }, () =>
+      createSubtask(db, { runId, taskId, title: "t", assigneeRole: "coder", dependsOn: [] })
+    );
+    for (const id of subtaskIds) replySubtask(db, id, "done", null);
+
+    let turnsRun = 0;
+    const crashingTurn: ManagerTurnFn = async ({ batch }) => {
+      turnsRun++;
+      db.query("UPDATE subtasks SET verdict = 'LGTM' WHERE id = ?").run(batch.subtaskIds[0]);
+      throw new Error("crash mid-turn");
+    };
+
+    await expect(pollOnce(db, runId, crashingTurn)).rejects.toThrow("crash mid-turn");
+    expect(turnsRun).toBe(1);
+
+    // Whole batch still undelivered.
+    const rows = db.query("SELECT delivered FROM subtasks WHERE run_id = ? AND stage = 'done'").all(runId) as any[];
+    expect(rows.every((r: any) => r.delivered === 0)).toBe(true);
+
+    // Next wake carries all 5.
+    let nextBatchSize = 0;
+    await pollOnce(db, runId, async ({ batch }) => { nextBatchSize = batch.subtaskIds.length; });
+    expect(nextBatchSize).toBe(5);
+  });
+
+  test("completed turn delivers all 5; health NOTE names the 2 unjudged rows", async () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+    await pollOnce(db, runId, async () => {}); // deliver init REQUEST
+
+    const subtaskIds = Array.from({ length: 5 }, () =>
+      createSubtask(db, { runId, taskId, title: "t", assigneeRole: "coder", dependsOn: [] })
+    );
+    for (const id of subtaskIds) replySubtask(db, id, "done", null);
+
+    const partialTurn: ManagerTurnFn = async ({ batch }) => {
+      for (const id of batch.subtaskIds.slice(0, 3)) {
+        db.query("UPDATE subtasks SET verdict = 'LGTM' WHERE id = ?").run(id);
+      }
+    };
+    await pollOnce(db, runId, partialTurn);
+
+    const allRows = db.query("SELECT id, delivered, verdict FROM subtasks WHERE run_id = ? AND stage = 'done'").all(runId) as any[];
+    expect(allRows.every((r: any) => r.delivered === 1)).toBe(true);
+
+    const skipped = allRows.filter((r: any) => r.verdict === null);
+    expect(skipped.length).toBe(2);
+
+    // Health NOTE names the skipped rows.
+    const healthNotes = db.query(
+      "SELECT body FROM messages WHERE run_id = ? AND type = 'NOTE' AND body LIKE 'health:%'"
+    ).all(runId) as any[];
+    expect(healthNotes.length).toBeGreaterThan(0);
+    for (const row of skipped) {
+      expect(healthNotes.some((n: any) => n.body.includes(String(row.id)))).toBe(true);
+    }
+
+    // No further debt.
+    let nextWake = false;
+    await pollOnce(db, runId, async () => { nextWake = true; });
+    expect(nextWake).toBe(false);
+  });
+
+  test("failSubtask is never born delivered; cancelSubtask is always born delivered=1 (§4.2 asymmetry)", () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+    const s1 = createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
+    const s2 = createSubtask(db, { runId, taskId, title: "b", assigneeRole: "coder", dependsOn: [] });
+
+    failSubtask(db, s1, "exit 1");
+    cancelSubtask(db, s2, "dependency failed");
+
+    const failed = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(s1) as any;
+    const cancelled = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(s2) as any;
+    expect(failed.delivered).toBe(0);   // failure is judgment
+    expect(cancelled.delivered).toBe(1); // cancel is mechanical
+  });
+
+  test("verdictSubtask does not touch delivered — manager has no bookkeeping verb (§4.2, §7)", () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+    const s1 = createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
+    replySubtask(db, s1, "done", null);
+
+    verdictSubtask(db, s1, "LGTM");
+
+    const row = db.query("SELECT verdict, delivered FROM subtasks WHERE id = ?").get(s1) as any;
+    expect(row.verdict).toBe("LGTM");
+    expect(row.delivered).toBe(0); // verdict must not touch delivered
+  });
+});

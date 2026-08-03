@@ -177,6 +177,23 @@ export function dispatchReady(
   return dispatched;
 }
 
+// spec §4.2 health check: advisory NOTE for rows that are terminal,
+// delivered=1, and verdict IS NULL. Written after deliverBatch so it
+// catches exactly the rows that were just delivered without a verdict.
+// Advisory only — does not gate or re-trigger anything.
+function writeSkippedRowNote(db: Database, runId: number): void {
+  const skipped = db
+    .query(
+      `SELECT id FROM subtasks
+       WHERE run_id = ? AND delivered = 1 AND verdict IS NULL
+         AND stage IN ('done', 'failed', 'cancelled')`
+    )
+    .all(runId) as Array<{ id: number }>;
+  if (skipped.length === 0) return;
+  const ids = skipped.map((r) => r.id).join(", ");
+  writeNote(db, runId, `health: subtasks delivered without verdict: ${ids}`);
+}
+
 function writeNote(db: Database, runId: number, body: string): void {
   tx(db, () => {
     db.query(
@@ -271,6 +288,11 @@ export async function pollOnce(
   // in one transaction (§4.2: one transaction, after the turn, never per row).
   markTurnComplete(db, runId);
   deliverBatch(db, debtBatch);
+
+  // spec §4.2 health check: rows that are terminal, delivered=1, and
+  // verdict IS NULL after delivery are probably ones the manager skimmed
+  // past. Write one advisory NOTE naming them. Does not gate or re-trigger.
+  writeSkippedRowNote(db, runId);
 
   return { swept, cascadeCancelled, dispatched, wokeManager: true, batch: debtBatch };
 }
