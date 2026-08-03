@@ -3,7 +3,7 @@
 > A multi-agent coordination system: several Claude Code sessions work as a
 > team on one or more goals, coordinating through a shared SQLite database.
 
-Status: DRAFT rev 5 — pending operator approval.
+Status: DRAFT rev 6 — pending operator approval.
 Implementation decisions in §9.
 
 ---
@@ -11,6 +11,26 @@ Implementation decisions in §9.
 ## Changelog
 
 Newest first. Delta only — rationale lives in the section that changed.
+
+**rev 6** — The manager stops being a series of `claude -p --resume` processes
+and becomes a **persistent tmux session**: one long-lived interactive Claude
+Code process in a named pane that never exits between turns (§4.9, D8). The
+watcher wakes it by sending the wake prompt into the pane rather than spawning
+a fresh process, which removes the per-turn transcript cold-start reload — the
+manager's accumulated context now lives in a resident process, not reloaded
+from disk each wake. Turn completion is no longer a process exit; the manager
+signals it with a new terminal verb, **`synapse turn-done`** (§5), which the
+watcher observes as a DB write — completion becomes a table fact like
+everything else (principle 1), and mutual exclusion stays structural because
+the watcher waits on that write, not on a process signal. `manager_turns`
+keeps its job of distinguishing the first wake (create the session, no pane
+yet) from later wakes (send into the existing pane). Compaction risk is
+unchanged — Claude Code compacts the same in-process context — so §4.9's
+standing instruction stays load-bearing. New benefit: the operator can attach
+to the pane and watch the manager reason live, which matters most at the
+Phase 7 trial gate. Cost, recorded in §4.9: turn-completion detection now
+rests on the manager reliably calling `turn-done`; a manager that finishes
+without it leaves the watcher waiting, so the wake carries a timeout backstop.
 
 **rev 5** — Dispatch moved from the manager to the watcher, settling §8's open
 question and clearing §3.1's recorded deviation. The watcher's poll is now an
@@ -169,15 +189,15 @@ is the run row) and no `roles` table (roles are built into the controller, §3).
 |---|---|---|
 | `id` | INTEGER PK | run id |
 | `status` | TEXT | `running` \| `done` \| `failed` |
-| `manager_session_id` | TEXT | the manager's Claude session UUID (the watcher resumes it); the run row *is* the manager's record |
+| `manager_session_id` | TEXT | the manager's tmux session/pane name (the watcher wakes it by sending into the pane, §4.9); the run row *is* the manager's record |
 | `manager_model` | TEXT | the manager's Claude model |
 | `manager_turns` | INTEGER | turns run, incremented after each; `0` means the session does not exist yet (§4.4) |
 | `created_at` | TEXT | ISO timestamp |
 | `ended_at` | TEXT | ISO timestamp, NULL until closed; the manager's "completed_at" is the run's |
 
 The run holds **no goal text** — goals live in `tasks`. The run is a standing
-team, not a single goal. The manager is 1:1 with the run (one persistent process
-spanning all its tasks), so it needs no row of its own.
+team, not a single goal. The manager is 1:1 with the run (one persistent tmux
+session spanning all its tasks), so it needs no row of its own.
 
 ### 2.2 `tasks` — a goal from the operator
 
@@ -433,13 +453,13 @@ the graph — to a model at runtime. Everything else should stay mechanical.
 operator: synapse start --goal "build X"      (= init, then watch)
   synapse init:
     → create runs row (status=running, manager_turns=0)
-    → generate manager_session_id (not yet used — no session exists)
+    → generate manager_session_id (names the tmux pane; no pane exists yet)
     → create the first REQUEST message + its tasks row, print the run id
   synapse watch --run <id>:
     → start the watcher
-    → (start does NOT spawn a manager turn directly — the watcher does, §4.4)
+    → (start does NOT wake the manager directly — the watcher does, §4.4)
 
-manager (persistent = the run row), woken by the watcher:
+manager (persistent tmux session = the run row), woken by the watcher:
   → FIRST ACT, ALWAYS: synapse status --run <id> --json  (§4.9)
   → new REQUEST? → plan: write spec / plan / testplan docs; ask operator to approve
   → on approval: materialize the plan's subtask rows up front
@@ -447,7 +467,8 @@ manager (persistent = the run row), woken by the watcher:
      then its tester, as sibling rows)
   → may also create rows ON THE FLY during execution
   → it does NOT spawn anything; creating a ready row is how work starts (§4.3)
-  → its turn ends; the process exits, the SESSION persists (§4.9)
+  → LAST ACT: synapse turn-done — the process stays resident in its pane,
+    the watcher stops waiting and proceeds (§4.9)
 
 worker (one-shot = a subtask row):
   → claude -p --session-id <uuid>: read its row + its subject's artifact, work
@@ -462,8 +483,9 @@ watcher (background, polling — four steps, in this order, §4.4):
   → 3. DISPATCH: every READY row (stage=unassigned, all deps done), up to the
                  concurrency cap → spawn a one-shot worker (§4.3)
   → 4. WAKE:     scan for outstanding debt (§4.2). Operator messages first;
-                 otherwise the lowest-id task with undelivered rows. One turn,
-                 scoped to that batch (claude -p --resume <manager_session_id>)
+                 otherwise the lowest-id task with undelivered rows. Send one
+                 wake into the manager's pane, scoped to that batch; block on
+                 the `synapse turn-done` write (with a timeout backstop, §4.9)
 
 manager (woken):
   → judge each row in its batch (write `verdict`), decide next
@@ -722,24 +744,36 @@ rows; do not ask a question at the scheduler.
 There is therefore exactly one lever on dispatch: **whether a row exists**. Every
 "why is this row not running?" has one place to look.
 
-**Manager turns.** The first wake **creates** the manager session (`claude -p --session-id
-<manager_session_id>`); every later wake **resumes** it (`--resume`). The watcher
-distinguishes them by `runs.manager_turns`, which is `0` until the first turn
-completes and is incremented after each. A turn that fails before completing
-leaves the counter alone, so the next wake correctly retries session creation
-rather than resuming a session that was never established.
+**Manager turns.** The first wake **creates** the manager session: the watcher
+starts a persistent interactive Claude Code process in a named tmux pane
+(§4.9, D8) and sends the wake prompt into it. Every later wake **sends the next
+wake prompt into the same pane** — the process never exits between turns. The
+watcher distinguishes create from send by `runs.manager_turns`, which is `0`
+until the first turn completes and is incremented after each. A turn that fails
+before completing leaves the counter alone, so the next wake correctly retries
+session creation rather than sending into a pane that was never established.
 
-The watcher is the **only** thing that ever starts a manager turn, and it is
+A manager turn **ends when the manager calls `synapse turn-done`** (§5), not
+when a process exits — the process is persistent. The watcher issues the wake,
+then waits for that DB write before proceeding (see "step 4 blocks" below). A
+turn that ends without calling `turn-done` is caught by a per-wake timeout: the
+watcher stops waiting, leaves `manager_turns` and `delivered` alone (the batch
+is carried again next wake, §4.2), and records a NOTE. Completion is thus a
+table fact, consistent with principle 1.
+
+The watcher is the **only** thing that ever wakes the manager, and it is
 single-threaded. Mutual exclusion is therefore structural, not enforced by a
-lock: at most one `claude -p --resume <manager_session_id>` process exists at
-any time. (Two concurrent resumes of one session id would fork the transcript —
-this is the invariant that prevents it.) This is why `synapse init` creates the
-run and first task but spawns nothing, and `synapse start` only hands off to the
-watcher.
+lock: the watcher sends one wake into the pane and blocks on the `turn-done`
+write before sending another, so at most one turn is ever in flight in the one
+pane. (Two overlapping wakes into a single interactive session would interleave
+into one confused turn — this is the invariant that prevents it.) This is why
+`synapse init` creates the run and first task but spawns nothing, and
+`synapse start` only hands off to the watcher.
 
 The invariants are:
 
-- **At most one manager process alive.** (Structural, above.)
+- **At most one manager turn in flight.** (Structural, above: one pane, one
+  wake at a time, watcher blocks on `turn-done`.)
 - **At most `cap` workers alive.** (Dispatch runs in the same single-threaded
   poll loop and counts from the tables.)
 - **No transition left undelivered.** (`delivered` is written only after a turn
@@ -769,12 +803,13 @@ asynchronously** (§4.5): the spawn and the row write happen inline, so the cap
 count is correct before the next candidate is considered, and the wait on the
 child runs outside the loop.
 
-A manager turn runs for seconds. Step 4 stays awaited, which buys two things
-worth more than the seconds it costs: mutual exclusion stays **structural** —
-`watchLoop` is the only caller and it is sequential, so a second
-`--resume` of one session cannot exist — rather than resting on a flag; and
-dispatch-before-wake keeps its meaning, since a row whose deps clear starts a
-full turn earlier than it otherwise would.
+A manager turn runs for seconds. Step 4 stays awaited: the watcher issues the
+wake into the pane and blocks on the `turn-done` write (or the timeout). This
+buys two things worth more than the seconds it costs: mutual exclusion stays
+**structural** — `watchLoop` is the only caller and it is sequential, so a
+second wake into the one pane cannot overlap the first — rather than resting on
+a flag; and dispatch-before-wake keeps its meaning, since a row whose deps
+clear starts a full turn earlier than it otherwise would.
 
 The watcher holds its in-flight supervisions so that shutdown can drain or kill
 them rather than orphaning workers.
@@ -891,35 +926,61 @@ so it retains the implementation context. Hence the warning in §2.3.2 that
 
 ### 4.9 The manager's context and compaction
 
-**The manager is a persistent *session*, not a persistent process.** Each wake is
-a fresh `claude -p --resume <manager_session_id>` process that rehydrates the
-transcript from disk and exits when the turn ends. Nothing stays resident.
+**The manager is a persistent *tmux session*: one long-lived interactive Claude
+Code process in a named pane that never exits between turns.** The watcher wakes
+it by sending the wake prompt into the pane and waits for the manager to signal
+completion with `synapse turn-done` (§5). Nothing about the transcript is
+reloaded from disk per wake — the accumulated context lives in the resident
+process.
+
+`runs.manager_session_id` names the tmux session/pane (derived from the run id,
+so it is stable across watcher restarts); `manager_turns` distinguishes the
+first wake (create the pane) from later wakes (send into it). A watcher that
+dies re-attaches to the existing pane on restart rather than starting a second
+manager — the pane, not a process the watcher holds, is the session's home.
 
 Two consequences follow, and neither is optional:
 
 1. **The stateless-turn contract is the mechanism, not a safety net.** As the
-   transcript fills, Claude Code's built-in auto-compaction summarizes it. The
-   failure this creates is concrete: a compacted manager's summary says "building
-   the auth module, coder work in progress" — coherent enough to act on, but
-   unaware that subtask 5 failed and 9 was cancelled — so it writes a verdict on
-   work it misremembers, or creates a replacement row for a row that already has
-   one. Since rev 5, *dispatch* is no longer among the things it can get wrong
-   (§4.3); that narrows the blast radius without closing it, because row creation
-   and judgment still run on whatever picture the manager holds when it wakes.
-   So the wake prompt opens with a standing instruction:
+   context fills, Claude Code's built-in auto-compaction summarizes it — the
+   tmux model does not avoid this, it compacts the same in-process context. The
+   failure this creates is concrete: a compacted manager's summary says
+   "building the auth module, coder work in progress" — coherent enough to act
+   on, but unaware that subtask 5 failed and 9 was cancelled — so it writes a
+   verdict on work it misremembers, or creates a replacement row for a row that
+   already has one. Since rev 5, *dispatch* is no longer among the things it can
+   get wrong (§4.3); that narrows the blast radius without closing it, because
+   row creation and judgment still run on whatever picture the manager holds
+   when it wakes. So the wake prompt opens with a standing instruction:
 
    > Before deciding anything, run `synapse status --run <id> --json`. Your
    > context may have been compacted; the tables are authoritative. Your work
    > this turn is the batch named in your prompt — judge each row with
    > `synapse verdict` where a ruling is warranted. **You will not be shown this
    > batch again**, so do not defer a row to a later turn; if you cannot judge
-   > it now, say so with `synapse ask`.
+   > it now, say so with `synapse ask`. When you are finished, call
+   > `synapse turn-done` — the watcher is waiting on it and will not wake you
+   > again until you do.
 
-2. **Manager verbosity is a real budget.** Per-turn latency and token cost scale
-   with transcript size, and the transcript is reloaded every turn. Verdicts stay
-   short; detail goes to artifacts on disk, which cost nothing to carry.
+2. **Manager verbosity is a real budget, though a different one than before.**
+   The transcript is no longer reloaded from disk each wake, so per-turn latency
+   no longer scales with transcript size the way `--resume` made it. But the
+   resident context window still fills, and a fuller window compacts sooner and
+   degrades judgment (consequence 1). Verdicts stay short; detail goes to
+   artifacts on disk, which cost nothing to carry.
 
 Its accumulated context is an optimization, never a dependency.
+
+**Turn completion is a table fact, with a timeout backstop.** The manager ends
+its turn by calling `synapse turn-done`; the watcher observes that DB write and
+proceeds. A manager that finishes without calling it would leave the watcher
+waiting forever, so the wake carries a timeout: on expiry the watcher stops
+waiting, leaves `manager_turns` and the batch's `delivered` flags alone (so the
+batch is carried again, §4.2), and records a NOTE naming the stalled turn. This
+is the one place the tmux model is weaker than a process that exits on its own —
+there, `proc.exited` was the completion signal and could not be forgotten. The
+timeout keeps a forgotten `turn-done` from wedging the run, at the cost of a
+wasted wake interval.
 
 ### 4.10 Storage
 
@@ -998,6 +1059,10 @@ Built in three tiers; each tier is independently demonstrable.
 - `synapse status [--run R] [--json]` — the one read verb: run → tasks →
   subtasks, with deps and readiness. `--json` is the manager's machine read;
   without it, the operator's human render. (The web UI is the same read.)
+- `synapse turn-done [--run R]` — the manager's last act each turn: signals the
+  turn is complete so the watcher stops waiting and proceeds (§4.4, §4.9).
+  Manager-only; writes no row state, only the completion signal the watcher
+  observes. It does **not** touch `delivered` — the watcher writes that (§4.2).
 - `synapse done` — close the run; gates on `task_progress` (§2.2, §4.6).
 
 ### Tier 3 — the human conversation + planning
@@ -1075,7 +1140,8 @@ Each behavior below is a checkable claim; details map to the validation plan.
   that produced it was mechanical.
 - The manager has no verb that writes `delivered`; `synapse verdict` leaves it
   untouched.
-- At most one manager process exists at any time under concurrent transitions.
+- At most one manager turn is in flight at any time under concurrent
+  transitions (one pane, watcher blocks on `turn-done` before waking again).
 - A follow-up REQUEST creates a new task; the manager plans and materializes
   subtasks under it; a run can carry several tasks.
 - A NOTE does not create a task; a REQUEST does.
@@ -1099,9 +1165,14 @@ Each behavior below is a checkable claim; details map to the validation plan.
   false, and `synapse done` still blocks.
 - A manager that creates a follow-up row during its turn keeps the task open; one
   that creates none closes it, with no verb called either way.
-- The first wake creates the manager session and later wakes resume it; a turn
-  that fails before completing does not consume the first-turn path.
-- A killed watcher is restarted with `synapse watch --run R` and the run
+- The first wake creates the manager's tmux pane and later wakes send into it;
+  a turn that fails before completing does not consume the first-turn path.
+- A manager turn ends on `synapse turn-done`; the watcher blocks on that write
+  and proceeds. A turn that never calls it is released by the timeout backstop,
+  which leaves `manager_turns` and the batch's `delivered` flags alone (the
+  batch is carried again) and records a NOTE.
+- A killed watcher restarts with `synapse watch --run R`, re-attaches to the
+  existing manager pane rather than starting a second manager, and the run
   continues, reacting to anything that landed while it was down.
 - Approval works with no approval state: the QUESTION is asked, no rows exist,
   the `answer` wakes the manager, the rows appear.
@@ -1173,3 +1244,4 @@ Settled; recorded here because the prompts and schema depend on them.
 | D4 | **Approval is a QUESTION** (§4.11). |
 | D5 | **Per-role model defaults** in the controller, overridable with `--model`. Manager and reviewer get the stronger model. |
 | D6 | **One read verb**, `synapse status` (§5). |
+| D8 | **Manager runs as a persistent tmux session** (§4.9). One long-lived interactive Claude Code process in a pane named from the run id; the watcher wakes it by sending the wake prompt into the pane and blocks on a `synapse turn-done` DB write (with a timeout backstop) rather than on a process exit. Chosen over repeated `claude -p --resume` to remove per-wake transcript reload and to make the manager's reasoning live-observable by the operator; the cost is that turn completion now depends on the manager calling `turn-done`, which the timeout contains. `manager_turns` still distinguishes create-pane from send-into-pane; `manager_session_id` names the pane and is stable across watcher restarts. |
