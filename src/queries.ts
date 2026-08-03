@@ -63,6 +63,7 @@ export interface TaskProgressRow {
   n_subtasks: number;
   n_terminal: number;
   work_settled: number; // sqlite boolean: 0 | 1
+  work_closed: number;  // sqlite boolean: 0 | 1; requires delivered=1 on all terminal rows
 }
 
 export function taskProgress(db: Database, taskId: number): TaskProgressRow {
@@ -79,13 +80,13 @@ export function taskProgressForRun(db: Database, runId: number): TaskProgressRow
     .all(runId) as TaskProgressRow[];
 }
 
-// spec §4.6, §2.2: a run may close when every task is terminal —
-// work_settled and tasks.status='done', or tasks.status='cancelled' —
-// never on stored status alone (except the explicit cancelled escape).
+// spec §4.6, §2.2: a run may close when every task is terminal.
+// Gates on work_closed (every subtask terminal AND delivered) or
+// tasks.status='cancelled'. A task with zero subtasks is not terminal.
 export function runIsDone(db: Database, runId: number): boolean {
   const rows = taskProgressForRun(db, runId);
   if (rows.length === 0) return false;
-  return rows.every((r) => r.status === "cancelled" || (r.work_settled === 1 && r.status === "done"));
+  return rows.every((r) => r.status === "cancelled" || r.work_closed === 1);
 }
 
 // spec §4.4: count of rows currently assigned for this run — used by the
@@ -100,9 +101,7 @@ export function assignedCount(db: Database, runId: number): number {
 
 // spec §4.4: for worktree-collision detection. Returns the id of a live
 // (stage=assigned) row whose worktree_path matches the given path, or null
-// if no such row exists. "Live" means assigned — a row that has committed
-// done but not yet exited is not counted (§4.10: the cap counts assigned
-// rows, so the overlap is possible and the graph rule handles it).
+// if no such row exists.
 export function liveWorkerOnWorktree(
   db: Database,
   runId: number,
@@ -114,6 +113,71 @@ export function liveWorkerOnWorktree(
     )
     .get(runId, worktreePath) as { id: number } | null;
   return row ? row.id : null;
+}
+
+export interface DebtBatch {
+  kind: "messages" | "task";
+  taskId: number | null;
+  // The subtask/message ids in the batch, for the watcher to deliver after
+  // the turn completes.
+  subtaskIds: number[];
+  messageIds: number[];
+}
+
+// spec §4.2 scan order: undelivered operator messages first (run-scoped,
+// because messages has no task_id and an ANSWER unblocks approval); then
+// the lowest-id task with undelivered subtask rows, all of them.
+// Returns null if there is no outstanding debt.
+export function nextDebtBatch(db: Database, runId: number): DebtBatch | null {
+  // 1. Undelivered operator messages?
+  const undeliveredMsgs = db
+    .query(
+      `SELECT id FROM messages
+       WHERE run_id = ? AND author = 'operator' AND delivered = 0
+       ORDER BY id`
+    )
+    .all(runId) as Array<{ id: number }>;
+
+  if (undeliveredMsgs.length > 0) {
+    return {
+      kind: "messages",
+      taskId: null,
+      subtaskIds: [],
+      messageIds: undeliveredMsgs.map((m) => m.id),
+    };
+  }
+
+  // 2. Lowest-id task with undelivered TERMINAL subtask rows (§4.2: only
+  // terminal stages create delivery obligations — done, failed, cancelled).
+  const taskRow = db
+    .query(
+      `SELECT DISTINCT s.task_id
+       FROM subtasks s
+       WHERE s.run_id = ? AND s.delivered = 0
+         AND s.stage IN ('done', 'failed', 'cancelled')
+       ORDER BY s.task_id
+       LIMIT 1`
+    )
+    .get(runId) as { task_id: number } | null;
+
+  if (!taskRow) return null;
+
+  const taskId = taskRow.task_id;
+  const subtasks = db
+    .query(
+      `SELECT id FROM subtasks
+       WHERE run_id = ? AND task_id = ? AND delivered = 0
+         AND stage IN ('done', 'failed', 'cancelled')
+       ORDER BY id`
+    )
+    .all(runId, taskId) as Array<{ id: number }>;
+
+  return {
+    kind: "task",
+    taskId,
+    subtaskIds: subtasks.map((s) => s.id),
+    messageIds: [],
+  };
 }
 
 export interface StatusView {

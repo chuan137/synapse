@@ -2,7 +2,7 @@
 //
 // Verb dispatch; only DB-touching verbs. Phase 3 adds watch/start
 // (process-side verbs Phase 1 deliberately left out). No real manager turn
-// function exists before Phase 4/5 — no real model calls before Phase 4
+// function exists before Phase 5 — no real model calls before Phase 4
 // (CLAUDE.md) — so cmdWatch's runManagerTurn is a placeholder that throws;
 // tests exercise watchLoop directly with the scripted policy-manager
 // instead of through this CLI verb.
@@ -13,6 +13,7 @@ import {
   initRun,
   createSubtask,
   replySubtask,
+  verdictSubtask,
   closeRun,
   resolveWorktreePath,
   SubtaskTerminalError,
@@ -157,8 +158,8 @@ export function cmdReply(db: Database, args: string[]): void {
   const handoff = flags["handoff"] ?? null;
   const artifactPath = handoff ? handoff.split(":").slice(1).join(":") || null : null;
   try {
-    const rev = replySubtask(db, subtaskId, result, artifactPath);
-    console.log(JSON.stringify({ subtaskId, rev }));
+    replySubtask(db, subtaskId, result, artifactPath);
+    console.log(JSON.stringify({ subtaskId }));
   } catch (e) {
     if (e instanceof SubtaskTerminalError) {
       console.error(e.message);
@@ -166,6 +167,17 @@ export function cmdReply(db: Database, args: string[]): void {
     }
     throw e;
   }
+}
+
+// spec §5 `synapse verdict`, §4.2: the manager's ruling on a terminal row.
+// Writes verdict only — does not touch delivered (§4.2, §7: no ack verb).
+export function cmdVerdict(db: Database, args: string[]): void {
+  const { positional } = parseFlags(args);
+  const [subtaskIdStr, ruling] = positional;
+  if (!subtaskIdStr || !ruling) throw new Error('verdict: usage: verdict <subtask-id> "<ruling>"');
+  const subtaskId = Number(subtaskIdStr);
+  verdictSubtask(db, subtaskId, ruling);
+  console.log(JSON.stringify({ subtaskId }));
 }
 
 // spec §4.5 layer 1 (Stop hook). Reads the Stop-hook JSON payload (S0.3
@@ -228,13 +240,12 @@ export function cmdDone(db: Database, args: string[]): void {
 }
 
 // spec §4.4, §4.9: real manager turns (`claude -p --session-id` /
-// `--resume`) are Phase 4/5 work — CLAUDE.md bars real model calls before
-// Phase 4. This placeholder keeps `synapse watch`/`start` present as CLI
-// verbs (plan Phase 3) without faking a real turn; watchLoop itself is
-// fully exercised by tests via the scripted policy-manager.
+// `--resume`) are Phase 5 work. This placeholder keeps `synapse watch`/
+// `start` present as CLI verbs without faking a real turn; watchLoop itself
+// is fully exercised by tests via the scripted policy-manager.
 const notYetImplementedManagerTurn: ManagerTurnFn = async () => {
   throw new Error(
-    "no real manager turn function is wired up yet (Phase 4/5); " +
+    "no real manager turn function is wired up yet (Phase 5); " +
       "use watchLoop/pollOnce directly with an injected ManagerTurnFn until then"
   );
 };
@@ -275,6 +286,8 @@ export function dispatch(db: Database, argv: string[]): void | Promise<void> {
       return cmdHookCheckStdin(db);
     case "reply":
       return cmdReply(db, rest);
+    case "verdict":
+      return cmdVerdict(db, rest);
     case "status":
       return cmdStatus(db, rest);
     case "done":

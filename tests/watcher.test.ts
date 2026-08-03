@@ -1,16 +1,16 @@
 // spec §4.2, §4.3, §4.4, §4.6, §6
 //
-// Phase 4.5 C1: dispatch moves to the watcher. pollOnce now runs four steps:
-// sweep, cascade, dispatch, wake. Tests that only exercise wake inject no
-// dispatchFn (dispatch silently skips). Tests that exercise dispatch inject
-// a fake dispatchFn.
+// Phase 4.5 C1+C2: dispatch moves to the watcher; rev replaced by per-row
+// delivered flag. pollOnce runs four steps: sweep, cascade, dispatch, wake.
+// The wake step selects a batch, runs the turn, delivers the batch only if
+// the turn completes.
 
 import { describe, test, expect, beforeAll } from "bun:test";
 import { mkdtempSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { getDb } from "../src/cli";
-import { createSubtask, initRun, replySubtask, failSubtask } from "../src/subtasks";
+import { createSubtask, initRun, replySubtask, failSubtask, cancelSubtask, verdictSubtask } from "../src/subtasks";
 import { runIsDone, taskProgress } from "../src/queries";
 import { pollOnce, watchLoop, type ManagerTurnFn, type DispatchFn } from "../src/watcher";
 import { spawnSubtask } from "../src/spawn";
@@ -42,14 +42,15 @@ function fakeDispatchFn(db: ReturnType<typeof getDb>, cwd: string, fakeName = "g
 }
 
 describe("watcher — mid-turn loss and coalescing (spec §4.2, §6)", () => {
-  test("a reply landing during the manager turn is reacted to on the NEXT poll, not lost", async () => {
+  test("a reply landing during the manager turn is still delivered on the NEXT poll, not lost", async () => {
     const { db } = freshRepoDb();
     const { runId, taskId } = initRun(db, "goal");
     const subtaskId = createSubtask(db, { runId, taskId, title: "t", assigneeRole: "coder", dependsOn: [] });
 
-    // First poll: manager turn itself writes a reply mid-turn, simulating a
-    // transition landing WHILE the turn is running. rev_seen was captured
-    // before the turn, so this reply must NOT be considered reacted-to.
+    // First poll: manager turn itself replies mid-turn, simulating a
+    // transition landing WHILE the turn is running. Because the batch was
+    // selected before the turn, this row was not in the batch and stays
+    // delivered=0 — not swallowed by this poll's deliverBatch call.
     let turnReplied = false;
     const turnFn: ManagerTurnFn = async () => {
       replySubtask(db, subtaskId, "landed mid-turn", null);
@@ -60,21 +61,20 @@ describe("watcher — mid-turn loss and coalescing (spec §4.2, §6)", () => {
     expect(turnReplied).toBe(true);
     expect(first.wokeManager).toBe(true);
 
-    const runAfterFirst = db.query("SELECT manager_reacted_rev FROM runs WHERE id = ?").get(runId) as any;
-    const subtaskRev = (db.query("SELECT rev FROM subtasks WHERE id = ?").get(subtaskId) as any).rev;
-    // The mid-turn reply's rev must be > what the first poll marked as reacted.
-    expect(subtaskRev).toBeGreaterThan(runAfterFirst.manager_reacted_rev);
+    // The mid-turn reply is still delivered=0 (not in the batch).
+    const subtaskRow = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(subtaskId) as any;
+    expect(subtaskRow.delivered).toBe(0);
 
-    // Second poll: must still wake (the mid-turn reply is now visible as
-    // unreacted), and after this poll reacted_rev catches up.
+    // Second poll: the mid-turn reply is now the debt; the manager wakes.
     let secondTurnCalls = 0;
     const noopTurn: ManagerTurnFn = async () => { secondTurnCalls++; };
     const second = await pollOnce(db, runId, noopTurn);
     expect(second.wokeManager).toBe(true);
     expect(secondTurnCalls).toBe(1);
 
-    const runAfterSecond = db.query("SELECT manager_reacted_rev FROM runs WHERE id = ?").get(runId) as any;
-    expect(runAfterSecond.manager_reacted_rev).toBeGreaterThanOrEqual(subtaskRev);
+    // After second poll the row is delivered.
+    const afterSecond = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(subtaskId) as any;
+    expect(afterSecond.delivered).toBe(1);
   });
 
   test("5 transitions during one turn produce exactly 1 follow-up wake, not 5", async () => {
@@ -95,6 +95,7 @@ describe("watcher — mid-turn loss and coalescing (spec §4.2, §6)", () => {
     expect(result.wokeManager).toBe(true);
     expect(followUpCalls).toBe(1);
 
+    // All five now delivered; a third poll finds no debt.
     let thirdCalls = 0;
     const thirdResult = await pollOnce(db, runId, async () => { thirdCalls++; });
     expect(thirdResult.wokeManager).toBe(false);
@@ -162,7 +163,7 @@ describe("watcher — first turn session vs resume (spec §4.4, §6)", () => {
     expect(afterSecond.manager_turns).toBe(2);
   });
 
-  test("a turn that throws before completing leaves manager_turns alone; next wake retries as first turn", async () => {
+  test("a turn that throws before completing leaves manager_turns alone and delivers nothing; next wake retries as first turn", async () => {
     const { db } = freshRepoDb();
     const { runId, taskId } = initRun(db, "goal");
     createSubtask(db, { runId, taskId, title: "t", assigneeRole: "coder", dependsOn: [] });
@@ -172,9 +173,11 @@ describe("watcher — first turn session vs resume (spec §4.4, §6)", () => {
     };
     await expect(pollOnce(db, runId, failingTurn)).rejects.toThrow("simulated turn failure");
 
-    const afterFailure = db.query("SELECT manager_turns, manager_reacted_rev FROM runs WHERE id = ?").get(runId) as any;
+    const afterFailure = db.query("SELECT manager_turns FROM runs WHERE id = ?").get(runId) as any;
     expect(afterFailure.manager_turns).toBe(0);
-    expect(afterFailure.manager_reacted_rev).toBe(0);
+    // The init REQUEST is still undelivered (turn threw before deliverBatch ran).
+    const msg = db.query("SELECT delivered FROM messages WHERE run_id = ?").get(runId) as any;
+    expect(msg.delivered).toBe(0);
 
     const seen: { isFirstTurn?: boolean } = {};
     const succeedingTurn: ManagerTurnFn = async (args) => { seen.isFirstTurn = args.isFirstTurn; };
@@ -223,8 +226,13 @@ describe("watcher — cascade (spec §4.6, §6)", () => {
     expect(reviewerRow.cancel_reason).toBe(`dependency ${coderId} failed`);
     expect(testerRow.stage).toBe("cancelled");
 
-    // All subtasks terminal — run is done (C2 will remove the task.status write)
-    db.query("UPDATE tasks SET status = 'done' WHERE id = ?").run(taskId);
+    // Cascade cancels are born delivered=1 (§4.2). The failed coder row is
+    // delivered=0 and needs a manager turn to be delivered. Run a second poll
+    // (which delivers the init REQUEST) and a third (which delivers the coder
+    // row); after that all subtasks are terminal+delivered → work_closed=1.
+    const noopTurn2: ManagerTurnFn = async () => {};
+    await pollOnce(db, runId, noopTurn2); // delivers init REQUEST
+    await pollOnce(db, runId, noopTurn2); // delivers the failed coder row
     expect(runIsDone(db, runId)).toBe(true);
   });
 });
@@ -236,26 +244,28 @@ describe("watcher — dispatch (spec §4.3, §4.4, §6)", () => {
     const { cwd, db } = freshRepoDb();
     const { runId, taskId } = initRun(db, "goal");
 
-    // The init REQUEST is the initial debt. React to it first so the next
-    // poll has no outstanding wake debt.
+    // React to the init REQUEST debt (delivers the message).
     let managerWakes = 0;
     const countingTurn: ManagerTurnFn = async () => { managerWakes++; };
     await pollOnce(db, runId, countingTurn);
     expect(managerWakes).toBe(1);
 
-    // Now create a ready subtask. No new rev-bearing write (subtask creation
-    // is a manager write, no rev), so no wake debt exists.
+    // Verify the REQUEST is now delivered and there is no outstanding debt.
+    const msg = db.query("SELECT delivered FROM messages WHERE run_id = ?").get(runId) as any;
+    expect(msg.delivered).toBe(1);
+
+    // Create a ready subtask. Subtask creation is a manager write — no
+    // delivery obligation — so there is no new debt.
     const subtaskId = createSubtask(db, { runId, taskId, title: "work", assigneeRole: "coder", dependsOn: [] });
 
-    // Run a poll with a fake dispatch. The row should be dispatched, the
-    // manager should NOT be woken.
+    // Poll: dispatch should fire, manager should NOT wake.
     let dispatched: number[] = [];
     const dispatchFn: DispatchFn = (id) => { dispatched.push(id); };
     const result = await pollOnce(db, runId, countingTurn, { dispatchFn });
 
     expect(dispatched).toContain(subtaskId);
     expect(result.wokeManager).toBe(false);
-    expect(managerWakes).toBe(1); // no new wake
+    expect(managerWakes).toBe(1); // unchanged
   });
 
   test("--max-workers 1: second ready row is not dispatched until the first is terminal", async () => {
@@ -431,4 +441,173 @@ describe("watcher — end to end with fakes only, zero model calls (spec §6, pl
       expect(row.stage).toBe("done");
     }
   }, 60000);
+});
+
+describe("watcher — delivery semantics (spec §4.2, §6)", () => {
+  test("a turn killed mid-way delivers nothing: whole batch stays delivered=0, next wake carries all of it", async () => {
+    // spec §6: "kill the manager turn after it writes one verdict; assert
+    // the whole batch is still delivered=0 and the next wake carries all of it."
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+
+    // Deliver the init REQUEST first so it is not in our test batch.
+    await pollOnce(db, runId, async () => {});
+
+    // Create 5 terminal subtasks (simulate replies directly).
+    const subtaskIds = Array.from({ length: 5 }, () =>
+      createSubtask(db, { runId, taskId, title: "t", assigneeRole: "coder", dependsOn: [] })
+    );
+    for (const id of subtaskIds) replySubtask(db, id, "done", null);
+
+    // Turn that throws mid-way — simulates a crash after writing one verdict.
+    let turnsRun = 0;
+    const crashingTurn: ManagerTurnFn = async ({ batch }) => {
+      turnsRun++;
+      // Write one verdict (manager write, does not touch delivered).
+      db.query("UPDATE subtasks SET verdict = 'LGTM' WHERE id = ?").run(batch.subtaskIds[0]);
+      throw new Error("crash mid-turn");
+    };
+
+    await expect(pollOnce(db, runId, crashingTurn)).rejects.toThrow("crash mid-turn");
+    expect(turnsRun).toBe(1);
+
+    // Whole batch still undelivered — deliverBatch never ran.
+    const rows = db.query("SELECT delivered FROM subtasks WHERE run_id = ? AND stage = 'done'")
+      .all(runId) as any[];
+    expect(rows.every((r) => r.delivered === 0)).toBe(true);
+
+    // Next wake carries all 5 rows again.
+    let nextBatchSize = 0;
+    const checkingTurn: ManagerTurnFn = async ({ batch }) => {
+      nextBatchSize = batch.subtaskIds.length;
+    };
+    await pollOnce(db, runId, checkingTurn);
+    expect(nextBatchSize).toBe(5);
+
+    // After the successful turn, all 5 are delivered.
+    const afterRows = db.query("SELECT delivered FROM subtasks WHERE run_id = ? AND stage = 'done'")
+      .all(runId) as any[];
+    expect(afterRows.every((r) => r.delivered === 1)).toBe(true);
+  });
+
+  test("a completed turn delivers all 5 rows even if only 3 were judged; health check identifies the skipped 2", async () => {
+    // spec §6: "judge 3 of 5; assert all five are delivered=1 and the next
+    // wake does not carry the other two."
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+
+    // Deliver init REQUEST.
+    await pollOnce(db, runId, async () => {});
+
+    const subtaskIds = Array.from({ length: 5 }, () =>
+      createSubtask(db, { runId, taskId, title: "t", assigneeRole: "coder", dependsOn: [] })
+    );
+    for (const id of subtaskIds) replySubtask(db, id, "done", null);
+
+    // Judge only the first 3.
+    const partialTurn: ManagerTurnFn = async ({ batch }) => {
+      for (const id of batch.subtaskIds.slice(0, 3)) {
+        db.query("UPDATE subtasks SET verdict = 'LGTM' WHERE id = ?").run(id);
+      }
+      // Leave the last 2 unjudged.
+    };
+
+    await pollOnce(db, runId, partialTurn);
+
+    // All 5 delivered — turn completed.
+    const allRows = db.query("SELECT id, delivered, verdict FROM subtasks WHERE run_id = ? AND stage = 'done'")
+      .all(runId) as any[];
+    expect(allRows.every((r) => r.delivered === 1)).toBe(true);
+
+    const judged = allRows.filter((r) => r.verdict !== null);
+    const skipped = allRows.filter((r) => r.verdict === null);
+    expect(judged.length).toBe(3);
+    expect(skipped.length).toBe(2);
+
+    // Next wake finds no debt (all delivered).
+    let nextWake = false;
+    await pollOnce(db, runId, async () => { nextWake = true; });
+    expect(nextWake).toBe(false);
+  });
+
+  test("failSubtask is never born delivered; cancelSubtask is always born delivered=1 (spec §4.2 asymmetry)", () => {
+    const db = freshRepoDb().db;
+    const { runId, taskId } = initRun(db, "goal");
+    const s1 = createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
+    const s2 = createSubtask(db, { runId, taskId, title: "b", assigneeRole: "coder", dependsOn: [] });
+
+    failSubtask(db, s1, "exit 1");
+    cancelSubtask(db, s2, "dependency failed");
+
+    const failed = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(s1) as any;
+    const cancelled = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(s2) as any;
+
+    expect(failed.delivered).toBe(0);   // failure is judgment — manager must react
+    expect(cancelled.delivered).toBe(1); // cancel is mechanical — born delivered
+  });
+
+  test("the manager has no verb that writes delivered: synapse verdict leaves it untouched", () => {
+    const db = freshRepoDb().db;
+    const { runId, taskId } = initRun(db, "goal");
+    const s1 = createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
+    replySubtask(db, s1, "done", null);
+
+    const before = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(s1) as any;
+    expect(before.delivered).toBe(0);
+
+    // verdictSubtask is the manager's only row write.
+    verdictSubtask(db, s1, "LGTM");
+
+    const after = db.query("SELECT delivered FROM subtasks WHERE id = ?").get(s1) as any;
+    expect(after.delivered).toBe(0); // verdict must not touch delivered
+  });
+
+  test("operator messages scanned ahead of task work: an ANSWER landing while a task has undelivered rows is carried first", async () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId } = initRun(db, "goal");
+
+    // First: deliver the init REQUEST so it is not noise.
+    await pollOnce(db, runId, async () => {});
+
+    // Create a terminal subtask with delivered=0 (task debt).
+    const s1 = createSubtask(db, { runId, taskId, title: "t", assigneeRole: "coder", dependsOn: [] });
+    replySubtask(db, s1, "done", null);
+
+    // Also insert an operator ANSWER (undelivered operator message debt).
+    db.query("INSERT INTO messages (run_id, author, type, body, delivered, created_at) VALUES (?,?,?,?,0,?)")
+      .run(runId, "operator", "ANSWER", "approved", new Date().toISOString());
+
+    // The next wake should carry the message batch, not the task batch.
+    let seenBatch: any = null;
+    await pollOnce(db, runId, async ({ batch }) => { seenBatch = batch; });
+
+    expect(seenBatch.kind).toBe("messages");
+    expect(seenBatch.subtaskIds.length).toBe(0);
+    expect(seenBatch.messageIds.length).toBeGreaterThan(0);
+  });
+
+  test("tasks taken in ascending id order; a task with no undelivered rows is skipped", async () => {
+    const { db } = freshRepoDb();
+    const { runId, taskId: task1 } = initRun(db, "goal 1");
+
+    // Deliver init REQUEST.
+    await pollOnce(db, runId, async () => {});
+
+    // task2
+    const task2Row = db.query(
+      "INSERT INTO tasks (run_id, text, status, created_at) VALUES (?, 'goal 2', 'open', datetime('now')) RETURNING id"
+    ).get(runId) as any;
+    const task2 = task2Row.id;
+
+    // task1 has one terminal+undelivered row; task2 has none.
+    const s1 = createSubtask(db, { runId, taskId: task1, title: "a", assigneeRole: "coder", dependsOn: [] });
+    replySubtask(db, s1, "done", null);
+
+    let seenBatch: any = null;
+    await pollOnce(db, runId, async ({ batch }) => { seenBatch = batch; });
+
+    expect(seenBatch.kind).toBe("task");
+    expect(seenBatch.taskId).toBe(task1); // lowest id with debt
+    expect(seenBatch.subtaskIds).toContain(s1);
+  });
 });

@@ -1,10 +1,15 @@
 // spec §4.10, §4.2; CLAUDE.md hard constraints
 //
 // Synchronous bun:sqlite. No ORM, no async DB layer. tx() wraps BEGIN
-// IMMEDIATE — never a deferred transaction — because every rev-assigning
-// path reads a row's stage then writes it, and two deferred transactions
-// doing that concurrently deadlock on lock upgrade (busy_timeout does not
-// rescue an upgrade).
+// IMMEDIATE — never a deferred transaction — because every write path that
+// reads a row's stage then writes it must hold the write lock for the whole
+// read-then-write sequence. Two deferred transactions doing that concurrently
+// deadlock on lock upgrade (busy_timeout does not rescue an upgrade).
+//
+// nextRev() is gone as of phase 4.5 C2: the rev counter and
+// manager_reacted_rev mark are replaced by per-row `delivered` flags.
+// BEGIN IMMEDIATE is still required: replySubtask reads stage then writes
+// it, so the read-then-write invariant is unchanged (S0.5 finding stands).
 
 import { Database } from "bun:sqlite";
 
@@ -31,14 +36,4 @@ export function tx<T>(db: Database, fn: () => T): T {
     db.exec("ROLLBACK");
     throw e;
   }
-}
-
-// Bumps and returns runs.rev_counter. Must be called inside the caller's
-// own tx() — never opens one of its own (spec §4.2).
-export function nextRev(db: Database, runId: number): number {
-  const row = db
-    .query("UPDATE runs SET rev_counter = rev_counter + 1 WHERE id = ? RETURNING rev_counter")
-    .get(runId) as { rev_counter: number } | null;
-  if (!row) throw new Error(`nextRev: no run ${runId}`);
-  return row.rev_counter;
 }

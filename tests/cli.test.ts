@@ -1,4 +1,4 @@
-// Exercises the Phase 1 CLI verbs (init, task, reply, status, done)
+// Exercises the Phase 1 CLI verbs (init, task, reply, verdict, status, done)
 // through dispatch(), not just the underlying library functions.
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -68,15 +68,9 @@ describe("cli dispatch", () => {
     logs = [];
 
     dispatch(db, [
-      "task",
-      "reviewer",
-      "review",
-      "--run",
-      String(runId),
-      "--task-id",
-      String(taskId),
-      "--depends-on",
-      String(coderId),
+      "task", "reviewer", "review",
+      "--run", String(runId), "--task-id", String(taskId),
+      "--depends-on", String(coderId),
     ]);
     const { subtaskId: reviewerId } = JSON.parse(logs[0]);
 
@@ -84,7 +78,7 @@ describe("cli dispatch", () => {
     expect(JSON.parse(row.depends_on)).toEqual([coderId]);
   });
 
-  test("reply marks a subtask done and assigns a rev", () => {
+  test("reply marks a subtask done (delivered=0 until watcher delivers)", () => {
     const db = freshCliDb();
     dispatch(db, ["init", "--goal", "g"]);
     const { runId, taskId } = JSON.parse(logs[0]);
@@ -95,11 +89,32 @@ describe("cli dispatch", () => {
 
     dispatch(db, ["reply", String(subtaskId), "implemented it"]);
     const out = JSON.parse(logs[0]);
-    expect(out.rev).toBe(2); // init's REQUEST took rev 1
+    expect(out.subtaskId).toBe(subtaskId);
 
-    const row = db.query("SELECT * FROM subtasks WHERE id = ?").get(subtaskId) as any;
+    const row = db.query("SELECT stage, result_summary, delivered FROM subtasks WHERE id = ?").get(subtaskId) as any;
     expect(row.stage).toBe("done");
     expect(row.result_summary).toBe("implemented it");
+    expect(row.delivered).toBe(0); // watcher delivers after the turn completes
+  });
+
+  test("verdict writes the ruling and does not touch delivered", () => {
+    const db = freshCliDb();
+    dispatch(db, ["init", "--goal", "g"]);
+    const { runId, taskId } = JSON.parse(logs[0]);
+    logs = [];
+    dispatch(db, ["task", "coder", "code", "--run", String(runId), "--task-id", String(taskId)]);
+    const { subtaskId } = JSON.parse(logs[0]);
+    logs = [];
+    dispatch(db, ["reply", String(subtaskId), "done"]);
+    logs = [];
+
+    dispatch(db, ["verdict", String(subtaskId), "LGTM"]);
+    const out = JSON.parse(logs[0]);
+    expect(out.subtaskId).toBe(subtaskId);
+
+    const row = db.query("SELECT verdict, delivered FROM subtasks WHERE id = ?").get(subtaskId) as any;
+    expect(row.verdict).toBe("LGTM");
+    expect(row.delivered).toBe(0); // verdict never touches delivered (§4.2, §7)
   });
 
   test("reply exits non-zero and logs an error against a terminal row", () => {
@@ -113,10 +128,7 @@ describe("cli dispatch", () => {
 
     const originalExit = process.exit;
     let exitCode: number | undefined;
-    process.exit = ((code?: number) => {
-      exitCode = code;
-      throw new Error("__exit__");
-    }) as typeof process.exit;
+    process.exit = ((code?: number) => { exitCode = code; throw new Error("__exit__"); }) as typeof process.exit;
     try {
       expect(() => dispatch(db, ["reply", String(subtaskId), "second (liar)"])).toThrow();
     } finally {
@@ -142,7 +154,7 @@ describe("cli dispatch", () => {
     expect(view.tasks[0].subtasks[0].ready).toBe(true);
   });
 
-  test("done blocks (exit 1) while non-terminal, then succeeds once settled and declared done", () => {
+  test("done blocks (exit 1) while non-terminal, succeeds once work_closed", () => {
     const db = freshCliDb();
     dispatch(db, ["init", "--goal", "g"]);
     const { runId, taskId } = JSON.parse(logs[0]);
@@ -152,10 +164,7 @@ describe("cli dispatch", () => {
 
     const originalExit = process.exit;
     let exitCode: number | undefined;
-    process.exit = ((code?: number) => {
-      exitCode = code;
-      throw new Error("__exit__");
-    }) as typeof process.exit;
+    process.exit = ((code?: number) => { exitCode = code; throw new Error("__exit__"); }) as typeof process.exit;
     try {
       expect(() => dispatch(db, ["done", "--run", String(runId)])).toThrow();
     } finally {
@@ -163,9 +172,11 @@ describe("cli dispatch", () => {
     }
     expect(exitCode).toBe(1);
 
+    // Reply and deliver (simulating what the watcher does after a completed turn).
     dispatch(db, ["reply", String(subtaskId), "done"]);
-    db.query("UPDATE tasks SET status = 'done' WHERE id = ?").run(taskId);
+    db.query("UPDATE subtasks SET delivered = 1 WHERE id = ?").run(subtaskId);
     logs = [];
+
     dispatch(db, ["done", "--run", String(runId)]);
     const out = JSON.parse(logs[0]);
     expect(out.status).toBe("done");

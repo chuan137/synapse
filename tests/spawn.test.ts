@@ -53,10 +53,10 @@ describe("spawn wrapper — three-way failure guarantee (spec §6)", () => {
     });
 
     expect(result.finalStage).toBe("done");
-    const row = db.query("SELECT stage, result_summary, rev FROM subtasks WHERE id = ?").get(subtaskId) as any;
+    const row = db.query("SELECT stage, result_summary, delivered FROM subtasks WHERE id = ?").get(subtaskId) as any;
     expect(row.stage).toBe("done");
     expect(row.result_summary).toBe("good.sh: did the work");
-    expect(row.rev).not.toBeNull();
+    expect(row.delivered).toBe(0); // delivered=0 until watcher delivers after turn
   });
 
   test("silent.sh: exits 0 without replying -> row ends failed, rev assigned", async () => {
@@ -71,10 +71,10 @@ describe("spawn wrapper — three-way failure guarantee (spec §6)", () => {
     });
 
     expect(result.finalStage).toBe("failed");
-    const row = db.query("SELECT stage, result_summary, rev FROM subtasks WHERE id = ?").get(subtaskId) as any;
+    const row = db.query("SELECT stage, result_summary, delivered FROM subtasks WHERE id = ?").get(subtaskId) as any;
     expect(row.stage).toBe("failed");
     expect(row.result_summary).toContain("exit 0");
-    expect(row.rev).not.toBeNull();
+    expect(row.delivered).toBe(0); // failed is never born delivered (§4.2)
   });
 
   test("crash.sh: exits 1 with stderr -> row ends failed, stderr tail captured", async () => {
@@ -144,10 +144,10 @@ describe("spawn wrapper — three-way failure guarantee (spec §6)", () => {
 
     pidSweep(db, runId);
 
-    const row = db.query("SELECT stage, result_summary, rev FROM subtasks WHERE id = ?").get(subtaskId) as any;
+    const row = db.query("SELECT stage, result_summary, delivered FROM subtasks WHERE id = ?").get(subtaskId) as any;
     expect(row.stage).toBe("failed");
     expect(row.result_summary).toContain("pid sweep");
-    expect(row.rev).not.toBeNull();
+    expect(row.delivered).toBe(0); // failed is never born delivered (§4.2)
   });
 });
 

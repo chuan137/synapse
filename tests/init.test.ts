@@ -1,12 +1,13 @@
-// spec §4.1, §6: "synapse init produces a run with manager_turns=0, a
+// spec §4.1, §4.2, §6: "synapse init produces a run with manager_turns=0, a
 // generated manager_session_id, one REQUEST, and one task linked by
-// source_message_id."
+// source_message_id." The REQUEST is operator-authored, so it is born
+// delivered=0 (the manager owes a reaction to it).
 
 import { describe, test, expect } from "bun:test";
 import { freshDb, freshRun } from "./helpers";
 
 describe("synapse init", () => {
-  test("a rev is assigned by worker/operator writes and not by manager writes — init's REQUEST is operator-authored and takes rev 1", () => {
+  test("produces a run with manager_turns=0, a generated manager_session_id, one operator REQUEST born delivered=0, and one task", () => {
     const db = freshDb();
     const { runId, managerSessionId, messageId, taskId } = freshRun(db, "build the widget");
 
@@ -15,14 +16,14 @@ describe("synapse init", () => {
     expect(run.manager_session_id).toBe(managerSessionId);
     expect(run.manager_session_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(run.status).toBe("running");
-    expect(run.rev_counter).toBe(1);
 
     const messages = db.query("SELECT * FROM messages WHERE run_id = ?").all(runId) as any[];
     expect(messages.length).toBe(1);
     expect(messages[0].id).toBe(messageId);
     expect(messages[0].type).toBe("REQUEST");
     expect(messages[0].author).toBe("operator");
-    expect(messages[0].rev).toBe(1);
+    // spec §4.2: operator messages are born delivered=0; the manager must react
+    expect(messages[0].delivered).toBe(0);
 
     const tasks = db.query("SELECT * FROM tasks WHERE run_id = ?").all(runId) as any[];
     expect(tasks.length).toBe(1);

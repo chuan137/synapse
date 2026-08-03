@@ -1,7 +1,9 @@
-// spec §2.2, §4.6, §6:
+// spec §2.2, §4.2, §4.6, §6:
 // - task_progress.work_settled is false for a zero-subtask task.
-// - synapse done blocks while any subtask is non-terminal; allows when
-//   all are terminal including cancelled.
+// - work_closed requires every subtask terminal AND delivered (§4.2).
+// - synapse done gates on work_closed or tasks.status='cancelled'.
+// - work_settled alone does not open the gate — the delivered clause is
+//   load-bearing: the manager must have seen the batch in a completed turn.
 
 import { describe, test, expect } from "bun:test";
 import { freshDb, freshRun } from "./helpers";
@@ -15,6 +17,7 @@ describe("task_progress and synapse done", () => {
     const progress = taskProgress(db, taskId);
     expect(progress.n_subtasks).toBe(0);
     expect(progress.work_settled).toBe(0);
+    expect(progress.work_closed).toBe(0);
   });
 
   test("done blocks while any subtask is non-terminal", () => {
@@ -26,11 +29,13 @@ describe("task_progress and synapse done", () => {
     expect(runIsDone(db, runId)).toBe(false);
 
     replySubtask(db, s1, "done", null);
-    // task status still 'open' (manager hasn't declared done) AND one subtask unterminal
-    expect(runIsDone(db, runId)).toBe(false);
+    expect(runIsDone(db, runId)).toBe(false); // s2 still non-terminal
   });
 
-  test("done allows when all subtasks are terminal including cancelled, and task.status is done", () => {
+  test("work_closed waits for delivery: work_settled true but done still blocks until delivered", () => {
+    // spec §6: "drive every subtask of a task terminal but let no manager
+    // turn run; assert work_settled is true, work_closed is false, and
+    // synapse done still blocks."
     const db = freshDb();
     const { runId, taskId } = freshRun(db);
     const s1 = createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
@@ -39,15 +44,34 @@ describe("task_progress and synapse done", () => {
 
     replySubtask(db, s1, "done", null);
     failSubtask(db, s2, "exit 1");
-    cancelSubtask(db, s3, "dependency failed");
+    cancelSubtask(db, s3, "dependency failed"); // born delivered=1
 
-    // work_settled true, but task.status still 'open' -> run not done yet
-    let progress = taskProgress(db, taskId);
+    const progress = taskProgress(db, taskId);
     expect(progress.work_settled).toBe(1);
+    // s1 (done, delivered=0) and s2 (failed, delivered=0) not yet delivered
+    expect(progress.work_closed).toBe(0);
     expect(runIsDone(db, runId)).toBe(false);
 
-    // manager declares the task done
-    db.query("UPDATE tasks SET status = 'done' WHERE id = ?").run(taskId);
+    // Simulate the watcher delivering s1 and s2 after a completed turn.
+    db.query("UPDATE subtasks SET delivered = 1 WHERE id IN (?, ?)").run(s1, s2);
+    expect(taskProgress(db, taskId).work_closed).toBe(1);
+    expect(runIsDone(db, runId)).toBe(true);
+  });
+
+  test("done allows when all subtasks are terminal and delivered (including cancelled)", () => {
+    const db = freshDb();
+    const { runId, taskId } = freshRun(db);
+    const s1 = createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
+    const s2 = createSubtask(db, { runId, taskId, title: "b", assigneeRole: "coder", dependsOn: [] });
+    const s3 = createSubtask(db, { runId, taskId, title: "c", assigneeRole: "coder", dependsOn: [] });
+
+    replySubtask(db, s1, "done", null);
+    failSubtask(db, s2, "exit 1");
+    cancelSubtask(db, s3, "dependency failed"); // born delivered=1
+
+    // Deliver the non-cancelled rows (simulating watcher post-turn delivery).
+    db.query("UPDATE subtasks SET delivered = 1 WHERE id IN (?, ?)").run(s1, s2);
+
     expect(runIsDone(db, runId)).toBe(true);
   });
 
@@ -55,7 +79,6 @@ describe("task_progress and synapse done", () => {
     const db = freshDb();
     const { runId, taskId } = freshRun(db);
     createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
-    // subtask still unassigned/non-terminal, but task itself is cancelled
     db.query("UPDATE tasks SET status = 'cancelled' WHERE id = ?").run(taskId);
     expect(runIsDone(db, runId)).toBe(true);
   });
@@ -65,7 +88,12 @@ describe("task_progress and synapse done", () => {
     const { runId, taskId } = freshRun(db);
     const s1 = createSubtask(db, { runId, taskId, title: "a", assigneeRole: "coder", dependsOn: [] });
     replySubtask(db, s1, "done", null);
-    db.query("UPDATE tasks SET status = 'done' WHERE id = ?").run(taskId);
+
+    // Not done yet — delivered=0.
+    expect(runIsDone(db, runId)).toBe(false);
+
+    // Deliver (simulating watcher).
+    db.query("UPDATE subtasks SET delivered = 1 WHERE id = ?").run(s1);
     expect(runIsDone(db, runId)).toBe(true);
 
     closeRun(db, runId);
@@ -74,7 +102,7 @@ describe("task_progress and synapse done", () => {
     expect(run.ended_at).not.toBeNull();
   });
 
-  test("a run with multiple tasks is not done until every task is terminal", () => {
+  test("a run with multiple tasks is not done until every task is work_closed", () => {
     const db = freshDb();
     const { runId, taskId: task1 } = freshRun(db, "goal 1");
     const task2Row = db
@@ -84,13 +112,13 @@ describe("task_progress and synapse done", () => {
 
     const s1 = createSubtask(db, { runId, taskId: task1, title: "a", assigneeRole: "coder", dependsOn: [] });
     replySubtask(db, s1, "done", null);
-    db.query("UPDATE tasks SET status = 'done' WHERE id = ?").run(task1);
+    db.query("UPDATE subtasks SET delivered = 1 WHERE id = ?").run(s1);
 
-    expect(runIsDone(db, runId)).toBe(false); // task2 has zero subtasks, not terminal
+    expect(runIsDone(db, runId)).toBe(false); // task2 has zero subtasks
 
     const s2 = createSubtask(db, { runId, taskId: task2, title: "b", assigneeRole: "coder", dependsOn: [] });
     replySubtask(db, s2, "done", null);
-    db.query("UPDATE tasks SET status = 'done' WHERE id = ?").run(task2);
+    db.query("UPDATE subtasks SET delivered = 1 WHERE id = ?").run(s2);
 
     expect(runIsDone(db, runId)).toBe(true);
   });

@@ -6,8 +6,6 @@ CREATE TABLE runs (
   status               TEXT NOT NULL DEFAULT 'running',   -- running | done | failed
   manager_session_id   TEXT NOT NULL,
   manager_model        TEXT,
-  rev_counter          INTEGER NOT NULL DEFAULT 0,
-  manager_reacted_rev  INTEGER NOT NULL DEFAULT 0,
   manager_turns        INTEGER NOT NULL DEFAULT 0,
   created_at           TEXT NOT NULL,
   ended_at             TEXT
@@ -17,7 +15,7 @@ CREATE TABLE tasks (
   id                 INTEGER PRIMARY KEY,
   run_id             INTEGER NOT NULL REFERENCES runs(id),
   text               TEXT NOT NULL,
-  status             TEXT NOT NULL DEFAULT 'open',   -- open | planning | running | done | cancelled
+  status             TEXT NOT NULL DEFAULT 'open',   -- open | cancelled only (spec §2.2)
   source_message_id  INTEGER REFERENCES messages(id),
   created_at         TEXT NOT NULL,
   done_at            TEXT
@@ -40,7 +38,7 @@ CREATE TABLE subtasks (
   verdict           TEXT,
   cancel_reason     TEXT,
   cancelled_at      TEXT,
-  rev               INTEGER,
+  delivered         INTEGER NOT NULL DEFAULT 0,   -- 0/1; written ONLY by the watcher after a completed turn (spec §4.2)
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL
 );
@@ -54,19 +52,26 @@ CREATE TABLE messages (
   body       TEXT NOT NULL,
   title      TEXT,
   options    TEXT,   -- JSON array; required on a QUESTION
-  rev        INTEGER,   -- assigned iff author='operator'; NULL otherwise (spec §4.2)
+  delivered  INTEGER NOT NULL DEFAULT 0,   -- 0/1; meaningful iff author='operator' (spec §4.2)
   created_at TEXT NOT NULL
 );
 
--- spec §2.2: tasks.status is a declaration, not ground truth. work_settled is
--- derived from subtasks and is false for a task with zero subtasks.
+-- spec §2.2: tasks.status holds only 'open' and 'cancelled' (rev 5).
+-- Completion is computed, never declared. work_settled is false for a
+-- zero-subtask task. work_closed adds the delivered condition (§4.2):
+-- every subtask must be terminal AND delivered before the task can close,
+-- ensuring the manager has been shown the results in a completed turn.
 CREATE VIEW task_progress AS
 SELECT t.id, t.run_id, t.status,
        COUNT(s.id)                                          AS n_subtasks,
        SUM(s.stage IN ('done','failed','cancelled'))        AS n_terminal,
        COUNT(s.id) > 0
          AND COUNT(s.id) = SUM(s.stage IN ('done','failed','cancelled'))
-                                                              AS work_settled
+                                                            AS work_settled,
+       COUNT(s.id) > 0
+         AND COUNT(s.id) = SUM(s.stage IN ('done','failed','cancelled'))
+         AND COUNT(s.id) = SUM(s.delivered = 1)
+                                                            AS work_closed
 FROM tasks t LEFT JOIN subtasks s ON s.task_id = t.id
 GROUP BY t.id;
 
